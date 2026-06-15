@@ -4,17 +4,13 @@ import { motion } from "framer-motion";
 import { Mail, Lock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useActionState } from "react";
+import { login } from "@/app/auth/actions";
 
 export default function LoginPage() {
-    const [isLoading, setIsLoading] = useState(false);
+    const [state, formAction, isPending] = useActionState(login, null);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsLoading(true);
-        // Simulate login delay
-        setTimeout(() => setIsLoading(false), 2000);
-    };
+
 
     return (
         <main className="min-h-screen w-full flex items-center justify-center bg-[#0a0a0a] text-[#ededed] relative overflow-hidden font-sans">
@@ -33,9 +29,9 @@ export default function LoginPage() {
                 <div className="mb-12 flex flex-col items-start relative">
                     <div className="relative h-24 w-40 -ml-2 z-10">
                         {/* Logo is already white */}
-                        <Image 
-                            src="/logo.png" 
-                            alt="Harvesters Logo" 
+                        <Image
+                            src="/logo.png"
+                            alt="Harvesters Logo"
                             fill
                             sizes="(max-width: 768px) 160px, 160px"
                             className="object-contain object-left opacity-90"
@@ -55,17 +51,23 @@ export default function LoginPage() {
                             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
                             <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                         </svg>
-                        <span className="text-sm font-medium tracking-wide text-white/80">Continue with Google</span>
+                        <span className="text-sm font-medium tracking-wide text-white/80">Continue with Google?</span>
                     </button>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-8 flex-1">
+                <form action={formAction} className="space-y-8 flex-1">
+                    {state?.error && (
+                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-[13px] p-3 rounded-lg text-center">
+                            {state.error}
+                        </div>
+                    )}
                     {/* Email */}
                     <div className="relative group">
                         <label className="text-[11px] font-medium uppercase tracking-wider text-white/50 block mb-2">Email Address</label>
                         <div className="flex items-center border-b border-white/10 group-focus-within:border-white/40 transition-colors pb-2">
                             <input
                                 type="email"
+                                name="email"
                                 required
                                 className="w-full bg-transparent text-white text-[15px] focus:outline-none placeholder:text-white/20 cursor-none"
                                 placeholder="you@harvesters.org"
@@ -80,6 +82,7 @@ export default function LoginPage() {
                         <div className="flex items-center border-b border-white/10 group-focus-within:border-white/40 transition-colors pb-2">
                             <input
                                 type="password"
+                                name="password"
                                 required
                                 className="w-full bg-transparent text-white text-[15px] focus:outline-none placeholder:text-white/20 tracking-widest cursor-none"
                                 placeholder="••••••••"
@@ -91,9 +94,9 @@ export default function LoginPage() {
                     {/* Checkbox & Forgot Password */}
                     <div className="flex items-center justify-between mt-8">
                         <div className="flex items-start gap-3">
-                            <input 
-                                type="checkbox" 
-                                id="remember" 
+                            <input
+                                type="checkbox"
+                                id="remember"
                                 className="mt-0.5 w-4 h-4 rounded border-white/20 bg-white/5 focus:ring-[#34A853] focus:ring-offset-background appearance-none checked:bg-[#34A853] checked:border-[#34A853] relative
                                 before:content-[''] before:absolute before:inset-0 before:bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIi8+PC9zdmc+')] before:bg-center before:bg-no-repeat before:bg-[length:12px_12px] before:opacity-0 checked:before:opacity-100 transition-all cursor-none"
                             />
@@ -101,7 +104,7 @@ export default function LoginPage() {
                                 Remember me
                             </label>
                         </div>
-                        
+
                         <Link href="#" className="text-[12px] text-white/40 hover:text-white transition-colors cursor-none">
                             Forgot Password?
                         </Link>
@@ -110,10 +113,10 @@ export default function LoginPage() {
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isPending}
                         className="w-full mt-6 bg-[#34A853] hover:bg-[#2e9347] text-white py-4 rounded-xl font-semibold tracking-wider text-[13px] uppercase transition-colors disabled:opacity-70 cursor-none"
                     >
-                        {isLoading ? "Authenticating..." : "Login"}
+                        {isPending ? "Authenticating..." : "Login"}
                     </button>
                 </form>
 

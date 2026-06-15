@@ -6,8 +6,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { 
     MapPin, WifiOff, Clock, Calendar, CheckCircle2, 
-    CircleDashed, LogOut, Menu, X, Users 
+    CircleDashed, LogOut, Menu, X, Users, CalendarDays 
 } from "lucide-react";
+import LeaveRequestModal from "@/components/LeaveRequestModal";
 
 // Mock data for personal history
 const personalHistory = [
@@ -29,6 +30,7 @@ export default function DashboardPage() {
     const [isOffline, setIsOffline] = useState(false);
     const [isWithinPerimeter, setIsWithinPerimeter] = useState(true);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
     
     // Timer state for demonstration
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -124,8 +126,18 @@ export default function DashboardPage() {
                 </div>
             </div>
 
-            {/* Logout */}
-            <div className="pt-6 mt-auto">
+            {/* Actions */}
+            <div className="pt-6 mt-auto space-y-2">
+                <button 
+                    onClick={() => {
+                        setIsLeaveModalOpen(true);
+                        setIsMobileMenuOpen(false);
+                    }}
+                    className="flex items-center gap-3 text-white/50 hover:text-[#34A853] transition-colors py-3 group cursor-none w-full"
+                >
+                    <CalendarDays className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                    <span className="text-[13px] font-semibold tracking-wider uppercase">Request Leave</span>
+                </button>
                 <Link href="/auth/login" className="flex items-center gap-3 text-white/50 hover:text-red-400 transition-colors py-3 group cursor-none">
                     <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                     <span className="text-[13px] font-semibold tracking-wider uppercase">Log Out</span>
@@ -285,7 +297,14 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2 mb-8">
                             <Users className="w-4 h-4 text-[#34A853]" />
                             <h3 className="text-[12px] font-bold text-white/80 uppercase tracking-[0.2em]">Live Feed</h3>
-                            <div className="w-1.5 h-1.5 rounded-full bg-[#34A853] animate-pulse ml-auto"></div>
+                            <div className="ml-auto flex items-center gap-3">
+                                {/* Dev Toggles */}
+                                <div className="flex gap-2">
+                                    <button onClick={() => setIsOffline(!isOffline)} className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/40 hover:text-white cursor-none transition-colors">Offline</button>
+                                    <button onClick={() => setIsWithinPerimeter(!isWithinPerimeter)} className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] text-white/40 hover:text-white cursor-none transition-colors">Zone</button>
+                                </div>
+                                <div className="w-1.5 h-1.5 rounded-full bg-[#34A853] animate-pulse"></div>
+                            </div>
                         </div>
 
                         <div className="space-y-6">
@@ -308,13 +327,12 @@ export default function DashboardPage() {
 
                 </div>
 
-                {/* Dev Toggles (For testing aesthetics) */}
-                <div className="absolute bottom-4 right-4 flex gap-2 z-50">
-                    <button onClick={() => setIsOffline(!isOffline)} className="px-3 py-1 bg-white/10 border border-white/20 rounded text-xs text-white/50 hover:text-white cursor-none transition-colors">Toggle Offline</button>
-                    <button onClick={() => setIsWithinPerimeter(!isWithinPerimeter)} className="px-3 py-1 bg-white/10 border border-white/20 rounded text-xs text-white/50 hover:text-white cursor-none transition-colors">Toggle Zone</button>
-                </div>
+
 
             </div>
+
+            {/* Leave Request Modal */}
+            <LeaveRequestModal isOpen={isLeaveModalOpen} onClose={() => setIsLeaveModalOpen(false)} />
         </main>
     );
 }
