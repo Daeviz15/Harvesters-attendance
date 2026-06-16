@@ -9,6 +9,7 @@ import {
     CircleDashed, LogOut, Menu, X, Users, CalendarDays 
 } from "lucide-react";
 import LeaveRequestModal from "@/components/LeaveRequestModal";
+import { logout } from "@/app/auth/actions";
 
 // Mock data for personal history
 const personalHistory = [
@@ -138,10 +139,10 @@ export default function DashboardPage() {
                     <CalendarDays className="w-5 h-5 group-hover:scale-110 transition-transform" />
                     <span className="text-[13px] font-semibold tracking-wider uppercase">Request Leave</span>
                 </button>
-                <Link href="/auth/login" className="flex items-center gap-3 text-white/50 hover:text-red-400 transition-colors py-3 group cursor-none">
+                <button onClick={() => logout()} className="flex items-center gap-3 text-white/50 hover:text-red-400 transition-colors py-3 group cursor-none w-full text-left">
                     <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
                     <span className="text-[13px] font-semibold tracking-wider uppercase">Log Out</span>
-                </Link>
+                </button>
             </div>
         </div>
     );

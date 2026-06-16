@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useActionState } from "react";
 import { login } from "@/app/auth/actions";
+import LoadingOverlay from "@/components/LoadingOverlay";
 
 export default function LoginPage() {
     const [state, formAction, isPending] = useActionState(login, null);
@@ -14,6 +15,7 @@ export default function LoginPage() {
 
     return (
         <main className="min-h-screen w-full flex items-center justify-center bg-[#0a0a0a] text-[#ededed] relative overflow-hidden font-sans">
+            <LoadingOverlay isOpen={isPending} />
             {/* Ambient Background Glow */}
             <div className="absolute inset-0 pointer-events-none opacity-20">
                 <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full mix-blend-screen filter blur-[120px]"></div>
@@ -116,7 +118,7 @@ export default function LoginPage() {
                         disabled={isPending}
                         className="w-full mt-6 bg-[#34A853] hover:bg-[#2e9347] text-white py-4 rounded-xl font-semibold tracking-wider text-[13px] uppercase transition-colors disabled:opacity-70 cursor-none"
                     >
-                        {isPending ? "Authenticating..." : "Login"}
+                        Login
                     </button>
                 </form>
 
