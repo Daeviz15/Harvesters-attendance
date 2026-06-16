@@ -33,24 +33,39 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (
-    !user &&
-    request.nextUrl.pathname.startsWith('/dashboard')
-  ) {
-    // no user, potentially respond by redirecting the user to the login page
+  const isOnboardingComplete = user?.user_metadata?.onboarding_complete === true;
+  const isAuthPage = request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/signup');
+  const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
+  const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding');
+
+  if (!user && (isDashboardPage || isOnboardingPage)) {
+    // no user, redirect to login page
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
   }
 
-  // Optional: Redirect authenticated users away from auth pages
-  if (
-    user && 
-    (request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/signup'))
-  ) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+  if (user) {
+    if (!isOnboardingComplete && !isOnboardingPage && !isAuthPage) {
+        // Enforce onboarding
+        const url = request.nextUrl.clone()
+        url.pathname = '/onboarding'
+        return NextResponse.redirect(url)
+    }
+
+    if (isOnboardingComplete && (isAuthPage || isOnboardingPage)) {
+        // Redirect authenticated users with complete onboarding away from auth and onboarding pages
+        const url = request.nextUrl.clone()
+        url.pathname = '/dashboard'
+        return NextResponse.redirect(url)
+    }
+
+    if (!isOnboardingComplete && isAuthPage) {
+        // Redirect to onboarding if not complete
+        const url = request.nextUrl.clone()
+        url.pathname = '/onboarding'
+        return NextResponse.redirect(url)
+    }
   }
 
   return supabaseResponse

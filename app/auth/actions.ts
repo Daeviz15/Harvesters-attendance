@@ -53,6 +53,32 @@ export async function signup(prevState: any, formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
+  redirect('/onboarding')
+}
+
+export async function completeOnboarding(prevState: any, formData: FormData) {
+  const department = formData.get('department') as string
+  const phone = formData.get('phone') as string
+
+  if (!department || !phone) {
+    return { error: 'Department and phone number are required' }
+  }
+
+  const supabase = await createClient()
+
+  const { error } = await supabase.auth.updateUser({
+    data: {
+      department,
+      phone,
+      onboarding_complete: true,
+    },
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  revalidatePath('/', 'layout')
   redirect('/dashboard')
 }
 
