@@ -26,6 +26,95 @@ const liveFeed = [
     { id: 104, name: "Emmanuel Okafor", role: "Protocol", time: "28 mins ago", initial: "EO" },
 ];
 
+interface SidebarContentProps {
+    setIsMobileMenuOpen: (open: boolean) => void;
+    setIsLeaveModalOpen: (open: boolean) => void;
+}
+
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen }: SidebarContentProps) => (
+    <div className="flex flex-col h-full w-full">
+        {/* Sidebar Header */}
+        <div className="flex items-center justify-between mb-12">
+            <div className="relative h-12 w-28 -ml-2">
+                <Image 
+                    src="/logo.png" 
+                    alt="Harvesters Logo" 
+                    fill
+                    sizes="112px"
+                    className="object-contain object-left opacity-90"
+                    priority
+                />
+            </div>
+            {/* Mobile Close Button */}
+            <button 
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="md:hidden p-2 text-white/50 hover:text-white"
+            >
+                <X className="w-5 h-5" />
+            </button>
+        </div>
+
+        {/* User Profile Mini */}
+        <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 mb-10">
+            <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853]">
+                DD
+            </div>
+            <div>
+                <p className="text-[15px] font-semibold text-white/90">David Doe</p>
+                <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium">Worker</p>
+            </div>
+        </div>
+
+        {/* Personal History */}
+        <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-6">
+                <h3 className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.2em]">Your History</h3>
+            </div>
+            
+            <div className="space-y-4 overflow-y-auto pr-2 no-scrollbar flex-1">
+                {personalHistory.map((activity) => (
+                    <div key={activity.id} className="w-full flex items-start gap-4 cursor-none group">
+                        <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-1 group-hover:bg-white/10 transition-colors">
+                            <Calendar className="w-3.5 h-3.5 text-white/40" />
+                        </div>
+                        <div className="flex-1 border-b border-white/5 pb-4">
+                            <div className="flex justify-between items-start mb-1">
+                                <p className="text-[14px] font-medium text-white/80">{activity.date}</p>
+                                {activity.status === "synced" ? (
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-[#34A853] mt-0.5" />
+                                ) : (
+                                    <CircleDashed className="w-3.5 h-3.5 text-orange-400 animate-spin-slow mt-0.5" />
+                                )}
+                            </div>
+                            <p className="text-[12px] text-white/40 font-mono">
+                                {activity.checkIn} — {activity.checkOut}
+                            </p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
+
+        {/* Actions */}
+        <div className="pt-6 mt-auto space-y-2">
+            <button 
+                onClick={() => {
+                    setIsLeaveModalOpen(true);
+                    setIsMobileMenuOpen(false);
+                }}
+                className="flex items-center gap-3 text-white/50 hover:text-[#34A853] transition-colors py-3 group cursor-none w-full"
+            >
+                <CalendarDays className="w-5 h-5 group-hover:scale-110 transition-transform" />
+                <span className="text-[13px] font-semibold tracking-wider uppercase">Request Leave</span>
+            </button>
+            <button onClick={() => logout()} className="flex items-center gap-3 text-white/50 hover:text-red-400 transition-colors py-3 group cursor-none w-full text-left">
+                <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                <span className="text-[13px] font-semibold tracking-wider uppercase">Log Out</span>
+            </button>
+        </div>
+    </div>
+);
+
 export default function DashboardPage() {
     const [isCheckedIn, setIsCheckedIn] = useState(false);
     const [isOffline, setIsOffline] = useState(false);
@@ -62,91 +151,6 @@ export default function DashboardPage() {
         setIsCheckedIn(!isCheckedIn);
     };
 
-    // Shared Sidebar Content
-    const SidebarContent = () => (
-        <div className="flex flex-col h-full w-full">
-            {/* Sidebar Header */}
-            <div className="flex items-center justify-between mb-12">
-                <div className="relative h-12 w-28 -ml-2">
-                    <Image 
-                        src="/logo.png" 
-                        alt="Harvesters Logo" 
-                        fill
-                        sizes="112px"
-                        className="object-contain object-left opacity-90"
-                        priority
-                    />
-                </div>
-                {/* Mobile Close Button */}
-                <button 
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="md:hidden p-2 text-white/50 hover:text-white"
-                >
-                    <X className="w-5 h-5" />
-                </button>
-            </div>
-
-            {/* User Profile Mini */}
-            <div className="flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 mb-10">
-                <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853]">
-                    DD
-                </div>
-                <div>
-                    <p className="text-[15px] font-semibold text-white/90">David Doe</p>
-                    <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium">Worker</p>
-                </div>
-            </div>
-
-            {/* Personal History */}
-            <div className="flex-1 flex flex-col min-h-0">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-[11px] font-semibold text-white/50 uppercase tracking-[0.2em]">Your History</h3>
-                </div>
-                
-                <div className="space-y-4 overflow-y-auto pr-2 no-scrollbar flex-1">
-                    {personalHistory.map((activity) => (
-                        <div key={activity.id} className="w-full flex items-start gap-4 cursor-none group">
-                            <div className="w-9 h-9 rounded-full bg-white/5 border border-white/10 flex items-center justify-center mt-1 group-hover:bg-white/10 transition-colors">
-                                <Calendar className="w-3.5 h-3.5 text-white/40" />
-                            </div>
-                            <div className="flex-1 border-b border-white/5 pb-4">
-                                <div className="flex justify-between items-start mb-1">
-                                    <p className="text-[14px] font-medium text-white/80">{activity.date}</p>
-                                    {activity.status === "synced" ? (
-                                        <CheckCircle2 className="w-3.5 h-3.5 text-[#34A853] mt-0.5" />
-                                    ) : (
-                                        <CircleDashed className="w-3.5 h-3.5 text-orange-400 animate-spin-slow mt-0.5" />
-                                    )}
-                                </div>
-                                <p className="text-[12px] text-white/40 font-mono">
-                                    {activity.checkIn} — {activity.checkOut}
-                                </p>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-6 mt-auto space-y-2">
-                <button 
-                    onClick={() => {
-                        setIsLeaveModalOpen(true);
-                        setIsMobileMenuOpen(false);
-                    }}
-                    className="flex items-center gap-3 text-white/50 hover:text-[#34A853] transition-colors py-3 group cursor-none w-full"
-                >
-                    <CalendarDays className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    <span className="text-[13px] font-semibold tracking-wider uppercase">Request Leave</span>
-                </button>
-                <button onClick={() => logout()} className="flex items-center gap-3 text-white/50 hover:text-red-400 transition-colors py-3 group cursor-none w-full text-left">
-                    <LogOut className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-                    <span className="text-[13px] font-semibold tracking-wider uppercase">Log Out</span>
-                </button>
-            </div>
-        </div>
-    );
-
     return (
         <main className="min-h-screen w-full bg-[#0a0a0a] text-[#ededed] relative overflow-hidden font-sans flex">
             {/* Ambient Background Glow */}
@@ -157,7 +161,7 @@ export default function DashboardPage() {
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-white/10 bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -178,7 +182,7 @@ export default function DashboardPage() {
                             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                             className="fixed inset-y-0 left-0 w-[280px] bg-[#0f0f0f] border-r border-white/10 p-6 flex flex-col z-50 md:hidden shadow-2xl"
                         >
-                            <SidebarContent />
+                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} />
                         </motion.aside>
                     </>
                 )}
