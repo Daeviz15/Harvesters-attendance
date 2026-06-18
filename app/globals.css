@@ -1,23 +1,35 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: 0 0% 100%;
+  --background: 0 0% 98%;
   --foreground: 0 0% 10%;
-  --primary: 0 0% 10%; /* Dark for light mode */
+  --primary: 0 0% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 0 0% 15%;
+  --border: 0 0% 90%;
+  --muted-foreground: 0 0% 45%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: 0 0% 5%;
-    --foreground: 0 0% 90%;
-    --primary: 0 0% 100%; /* White for dark mode */
-  }
+.dark {
+  --background: 0 0% 5%;
+  --foreground: 0 0% 90%;
+  --primary: 0 0% 100%;
+  --card: 0 0% 8%;
+  --card-foreground: 0 0% 80%;
+  --border: 0 0% 12%;
+  --muted-foreground: 0 0% 60%;
 }
 
 @theme inline {
   --color-background: hsl(var(--background));
   --color-foreground: hsl(var(--foreground));
   --color-primary: hsl(var(--primary));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-border: hsl(var(--border));
+  --color-muted-foreground: hsl(var(--muted-foreground));
   --font-sans: var(--font-outfit);
   --font-mono: var(--font-geist-mono);
 }
@@ -26,12 +38,7 @@ body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
-  cursor: none; /* Crucial for Custom Cursor */
-}
-
-/* Hide default cursor on interactive elements too */
-a, button, input, select, textarea {
-  cursor: none !important;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 /* Hide all scrollbars globally but keep functionality */

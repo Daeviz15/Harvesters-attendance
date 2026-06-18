@@ -64,12 +64,39 @@ export async function completeOnboarding(prevState: any, formData: FormData) {
     return { error: 'Department and phone number are required' }
   }
 
+  // Validate that phone contains exactly 10 digits
+  const phoneDigitsOnly = phone.replace(/\D/g, '')
+  if (phoneDigitsOnly.length !== 10) {
+    return { error: 'Phone number must be exactly 10 digits.' }
+  }
+
   const supabase = await createClient()
 
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: 'Unauthorized. Please log in again.' }
+  }
+
+  // 1. Update the profiles table (Production Database)
+  const { error: dbError } = await supabase
+    .from('profiles')
+    .update({
+      department,
+      phone: `+234${phoneDigitsOnly}`,
+      onboarding_complete: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', user.id)
+
+  if (dbError) {
+    console.error("Profile update error:", dbError)
+    return { error: 'Failed to save profile data.' }
+  }
+
+  // 2. Update user_metadata ONLY with the onboarding flag for blazing fast Edge Middleware checks
   const { error } = await supabase.auth.updateUser({
     data: {
-      department,
-      phone,
       onboarding_complete: true,
     },
   })

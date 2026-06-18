@@ -1,25 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CalendarDays, ChevronDown, Send, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
-
-type LeaveStatus = "pending" | "approved" | "rejected";
-
-interface LeaveRequest {
-    id: number;
-    type: string;
-    startDate: string;
-    endDate: string;
-    reason: string;
-    status: LeaveStatus;
-}
-
-// Mock existing leave requests
-const mockLeaveRequests: LeaveRequest[] = [
-    { id: 1, type: "Sick Leave", startDate: "Jun 20", endDate: "Jun 21", reason: "Feeling unwell", status: "approved" },
-    { id: 2, type: "Travel", startDate: "Jul 5", endDate: "Jul 12", reason: "Family trip to Abuja", status: "pending" },
-];
+import { submitLeaveRequest, fetchMyLeaveRequests } from "@/app/dashboard/actions";
+import type { LeaveRequest, LeaveStatus } from "@/lib/types";
 
 const leaveTypes = ["Sick Leave", "Personal", "Travel", "Family Emergency", "Other"];
 
@@ -37,23 +22,90 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
     const [reason, setReason] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSubmitted, setIsSubmitted] = useState(false);
+    const [showConfirmation, setShowConfirmation] = useState(false);
+    
+    // Server data state
+    const [history, setHistory] = useState<LeaveRequest[]>([]);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const fetchHistory = async () => {
+        setIsLoadingHistory(true);
+        try {
+            const data = await fetchMyLeaveRequests();
+            setHistory(data as LeaveRequest[]);
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen && activeTab === "history") {
+            fetchHistory();
+        }
+    }, [isOpen, activeTab]);
+
+    const calculateDuration = () => {
+        if (!startDate || !endDate) return 0;
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        setErrorMsg(null);
+        
+        // Logical date validation
+        if (new Date(startDate) < new Date(new Date().setHours(0, 0, 0, 0))) {
+            setErrorMsg("Start Date cannot be in the past.");
+            return;
+        }
+        
+        if (new Date(endDate) < new Date(startDate)) {
+            setErrorMsg("End Date cannot be earlier than Start Date.");
+            return;
+        }
+
+        setShowConfirmation(true);
+    };
+
+    const confirmSubmission = async () => {
         setIsSubmitting(true);
-        // Simulate submission
-        setTimeout(() => {
+        setErrorMsg(null);
+
+        const formData = new FormData();
+        formData.append("leaveType", leaveType);
+        formData.append("startDate", startDate);
+        formData.append("endDate", endDate);
+        formData.append("reason", reason);
+
+        try {
+            const result = await submitLeaveRequest(formData);
+            if (result.error) {
+                setErrorMsg(result.error);
+                setShowConfirmation(false);
+            } else {
+                setShowConfirmation(false);
+                setIsSubmitted(true);
+                setTimeout(() => {
+                    setIsSubmitted(false);
+                    setLeaveType("");
+                    setStartDate("");
+                    setEndDate("");
+                    setReason("");
+                    setActiveTab("history");
+                }, 2000);
+            }
+        } catch (err) {
+            setErrorMsg("An unexpected error occurred.");
+            setShowConfirmation(false);
+        } finally {
             setIsSubmitting(false);
-            setIsSubmitted(true);
-            setTimeout(() => {
-                setIsSubmitted(false);
-                setLeaveType("");
-                setStartDate("");
-                setEndDate("");
-                setReason("");
-                setActiveTab("history");
-            }, 2000);
-        }, 1500);
+        }
     };
 
     const getStatusBadge = (status: LeaveStatus) => {
@@ -167,8 +219,46 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                     <p className="text-[16px] font-semibold text-white/90">Request Submitted</p>
                                                     <p className="text-[13px] text-white/40 text-center">Your HOD will be notified and review your request.</p>
                                                 </motion.div>
+                                            ) : showConfirmation ? (
+                                                <motion.div
+                                                    initial={{ scale: 0.95, opacity: 0 }}
+                                                    animate={{ scale: 1, opacity: 1 }}
+                                                    className="flex flex-col items-center justify-center py-8 gap-4 px-4 text-center"
+                                                >
+                                                    <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center mb-2">
+                                                        <Clock className="w-8 h-8 text-orange-400" />
+                                                    </div>
+                                                    <h3 className="text-[18px] font-semibold text-white/90 tracking-tight">Confirm Request</h3>
+                                                    <p className="text-[14px] text-white/60 leading-relaxed max-w-[280px]">
+                                                        You are about to request <strong className="text-white font-medium">{leaveType}</strong> for <strong className="text-white font-medium">{calculateDuration()} day{calculateDuration() > 1 ? 's' : ''}</strong> from <span className="text-white">{startDate}</span> to <span className="text-white">{endDate}</span>.
+                                                    </p>
+                                                    
+                                                    <div className="flex w-full gap-3 mt-6">
+                                                        <button 
+                                                            type="button"
+                                                            onClick={() => setShowConfirmation(false)}
+                                                            disabled={isSubmitting}
+                                                            className="flex-1 py-3.5 rounded-xl border border-white/10 text-white/70 font-semibold tracking-wider text-[12px] uppercase hover:bg-white/5 transition-colors disabled:opacity-50"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={confirmSubmission}
+                                                            disabled={isSubmitting}
+                                                            className="flex-1 py-3.5 rounded-xl bg-[#34A853] hover:bg-[#2e9347] text-white font-semibold tracking-wider text-[12px] uppercase transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                                        >
+                                                            {isSubmitting ? <><Loader2 className="w-4 h-4 animate-spin"/> Submitting</> : 'Confirm'}
+                                                        </button>
+                                                    </div>
+                                                </motion.div>
                                             ) : (
                                                 <form onSubmit={handleSubmit} className="space-y-6">
+                                                    {errorMsg && (
+                                                        <div className="bg-red-500/10 border border-red-500/20 text-red-400 text-[13px] p-3 rounded-lg text-center">
+                                                            {errorMsg}
+                                                        </div>
+                                                    )}
                                                     {/* Leave Type Dropdown */}
                                                     <div className="relative">
                                                         <label className="text-[11px] font-medium uppercase tracking-wider text-white/50 block mb-2">Leave Type</label>
@@ -218,6 +308,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                             <input
                                                                 type="date"
                                                                 required
+                                                                min={new Date().toISOString().split('T')[0]}
                                                                 value={startDate}
                                                                 onChange={(e) => setStartDate(e.target.value)}
                                                                 className="w-full bg-transparent text-white text-[15px] focus:outline-none border-b border-white/10 focus:border-white/40 transition-colors pb-3 [color-scheme:dark]"
@@ -228,6 +319,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                             <input
                                                                 type="date"
                                                                 required
+                                                                min={startDate || new Date().toISOString().split('T')[0]}
                                                                 value={endDate}
                                                                 onChange={(e) => setEndDate(e.target.value)}
                                                                 className="w-full bg-transparent text-white text-[15px] focus:outline-none border-b border-white/10 focus:border-white/40 transition-colors pb-3 [color-scheme:dark]"
@@ -278,18 +370,23 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                             transition={{ duration: 0.2 }}
                                             className="space-y-4"
                                         >
-                                            {mockLeaveRequests.length === 0 ? (
+                                            {isLoadingHistory ? (
+                                                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                                                    <Loader2 className="w-8 h-8 animate-spin text-white/20" />
+                                                    <p className="text-[13px] text-white/40">Loading history...</p>
+                                                </div>
+                                            ) : history.length === 0 ? (
                                                 <div className="flex flex-col items-center justify-center py-12 gap-3">
                                                     <CalendarDays className="w-10 h-10 text-white/20" />
                                                     <p className="text-[14px] text-white/40">No leave requests yet</p>
                                                 </div>
                                             ) : (
-                                                mockLeaveRequests.map((req) => (
+                                                history.map((req) => (
                                                     <div key={req.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                                                         <div className="flex items-start justify-between mb-3">
                                                             <div>
-                                                                <p className="text-[14px] font-medium text-white/90">{req.type}</p>
-                                                                <p className="text-[12px] text-white/40 mt-0.5">{req.startDate} — {req.endDate}</p>
+                                                                <p className="text-[14px] font-medium text-white/90">{req.leave_type}</p>
+                                                                <p className="text-[12px] text-white/40 mt-0.5">{req.start_date} — {req.end_date}</p>
                                                             </div>
                                                             {getStatusBadge(req.status)}
                                                         </div>
