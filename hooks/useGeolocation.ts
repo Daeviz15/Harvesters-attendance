@@ -37,6 +37,11 @@ export function useGeolocation() {
                 const distance = calculateDistanceInMeters(latitude, longitude, TARGET_LAT, TARGET_LNG);
                 const isWithinPerimeter = distance <= MAX_DISTANCE_METERS;
 
+                // Debug logging — remove after testing
+                console.log(`[GEO DEBUG] Your GPS: ${latitude}, ${longitude}`);
+                console.log(`[GEO DEBUG] Target:   ${TARGET_LAT}, ${TARGET_LNG}`);
+                console.log(`[GEO DEBUG] Distance: ${distance.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Within: ${isWithinPerimeter}`);
+
                 setState({
                     lat: latitude,
                     lng: longitude,
