@@ -13,19 +13,27 @@ interface OnboardingClientProps {
 }
 
 const DEPARTMENTS = [
-    "Ushering", "Choir / Music", "Media / AV", "Protocol", 
-    "Children's Church", "Security", "Technical", "Hospitality", 
+    "Ushering", "Choir / Music", "Media / AV", "Protocol",
+    "Children's Church", "Security", "Technical", "Hospitality",
     "Sanitation", "Parking", "Prayer", "Follow-Up / Counseling"
 ];
 
 export default function OnboardingClient({ firstName }: OnboardingClientProps) {
     const [state, formAction, isPending] = useActionState(completeOnboarding, null);
-    const [selectedDept, setSelectedDept] = useState<string>("");
+    const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+
+    const toggleDepartment = (dept: string) => {
+        setSelectedDepts(prev =>
+            prev.includes(dept)
+                ? prev.filter(d => d !== dept)
+                : [...prev, dept]
+        );
+    };
 
     return (
         <main className="min-h-screen w-full flex items-center justify-center bg-background text-foreground relative overflow-hidden font-sans py-12 px-6 transition-colors duration-300">
             <LoadingOverlay isOpen={isPending} />
-            
+
             {/* Theme Toggle in Top Right */}
             <div className="absolute top-6 right-6 z-20">
                 <ThemeToggle />
@@ -70,30 +78,29 @@ export default function OnboardingClient({ firstName }: OnboardingClientProps) {
                     <div>
                         <div className="flex items-center gap-2 mb-6">
                             <Users className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Which department do you serve in?</label>
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Which department(s) do you serve in?</label>
                         </div>
-                        
+
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                             {DEPARTMENTS.map((dept) => (
                                 <button
                                     key={dept}
                                     type="button"
-                                    onClick={() => setSelectedDept(dept)}
-                                    className={`relative p-4 rounded-2xl border text-left transition-all duration-200 ${
-                                        selectedDept === dept 
-                                        ? "bg-[#34A853]/10 border-[#34A853]/40 text-[#34A853] dark:text-white font-semibold" 
-                                        : "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-600 dark:text-white/50 hover:bg-neutral-200/80 dark:hover:bg-white/10"
-                                    }`}
+                                    onClick={() => toggleDepartment(dept)}
+                                    className={`relative p-4 rounded-2xl border text-left transition-all duration-200 ${selectedDepts.includes(dept)
+                                            ? "bg-[#34A853]/10 border-[#34A853]/40 text-[#34A853] dark:text-white font-semibold"
+                                            : "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-600 dark:text-white/50 hover:bg-neutral-200/80 dark:hover:bg-white/10"
+                                        }`}
                                 >
                                     <span className="text-[13px] font-medium leading-snug block pr-6">{dept}</span>
-                                    {selectedDept === dept && (
+                                    {selectedDepts.includes(dept) && (
                                         <CheckCircle2 className="w-4 h-4 text-[#34A853] absolute top-4 right-3" />
                                     )}
                                 </button>
                             ))}
                         </div>
                         {/* Hidden input to pass the selected department to the server action */}
-                        <input type="hidden" name="department" value={selectedDept} required />
+                        <input type="hidden" name="department" value={selectedDepts.join(", ")} required={selectedDepts.length === 0 ? true : undefined} />
                     </div>
 
                     {/* Phone Number Input */}
@@ -122,18 +129,15 @@ export default function OnboardingClient({ firstName }: OnboardingClientProps) {
                     </div>
 
                     {/* Submit Button */}
-                    <div className="pt-6 border-t border-neutral-200 dark:border-white/10 flex justify-end">
-                        <button
-                            type="submit"
-                            disabled={isPending || !selectedDept}
-                            className="bg-[#34A853] hover:bg-[#2e9347] text-white px-8 py-4 rounded-full font-semibold tracking-wider text-[13px] uppercase transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-[#34A853]/20"
-                        >
-                            Complete Setup
-                        </button>
-                    </div>
+                    <button
+                        type="submit"
+                        disabled={isPending || selectedDepts.length === 0}
+                        className="w-full flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2e9347] disabled:opacity-40 disabled:hover:bg-[#34A853] text-white py-4 rounded-xl font-bold tracking-widest text-[14px] uppercase transition-all duration-300 shadow-lg hover:shadow-xl mt-8"
+                    >
+                        {isPending ? "Setting up..." : "Complete Setup"}
+                    </button>
                 </form>
             </motion.div>
         </main>
     );
 }
-

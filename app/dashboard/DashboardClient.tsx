@@ -525,7 +525,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                             >
                                 <MapPin className="w-3.5 h-3.5" />
                                 <span className="text-[12px] font-medium tracking-wide">
-                                    {geo.isLoading ? "Acquiring GPS Signal..." : geo.isWithinPerimeter ? "Detected at Ologolo, Lekki" : "Outside Perimeter"}
+                                    {geo.isLoading ? "Acquiring GPS Signal..." : geo.isWithinPerimeter ? "Detected at The Globe Church, Ologolo" : "Outside Perimeter"}
                                 </span>
                             </motion.div>
                         </div>
