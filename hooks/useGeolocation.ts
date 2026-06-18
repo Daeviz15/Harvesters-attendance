@@ -35,12 +35,19 @@ export function useGeolocation() {
                 
                 // Calculate distance on the client purely for UI responsiveness
                 const distance = calculateDistanceInMeters(latitude, longitude, TARGET_LAT, TARGET_LNG);
-                const isWithinPerimeter = distance <= MAX_DISTANCE_METERS;
+                
+                // Accuracy-aware geofencing (industry standard):
+                // If the GPS accuracy circle overlaps with the geofence circle, 
+                // the user is likely inside. We cap the max acceptable accuracy
+                // at 300m to prevent abuse from extremely inaccurate readings.
+                const MAX_ACCEPTABLE_ACCURACY = 300;
+                const effectiveAccuracy = Math.min(accuracy ?? 0, MAX_ACCEPTABLE_ACCURACY);
+                const isWithinPerimeter = (distance - effectiveAccuracy) <= MAX_DISTANCE_METERS;
 
                 // Debug logging — remove after testing
                 console.log(`[GEO DEBUG] Your GPS: ${latitude}, ${longitude}`);
                 console.log(`[GEO DEBUG] Target:   ${TARGET_LAT}, ${TARGET_LNG}`);
-                console.log(`[GEO DEBUG] Distance: ${distance.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Within: ${isWithinPerimeter}`);
+                console.log(`[GEO DEBUG] Distance: ${distance.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Effective: ${(distance - effectiveAccuracy).toFixed(1)}m | Within: ${isWithinPerimeter}`);
 
                 setState({
                     lat: latitude,

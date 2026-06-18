@@ -29,11 +29,17 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const { lat, lng } = parsed.data;
 
+    // Parse GPS accuracy (sent from the client's navigator.geolocation)
+    const accuracyStr = formData.get('accuracy');
+    const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0; // Cap at 300m to prevent abuse
+
     const distance = calculateDistanceInMeters(lat, lng, TARGET_LAT, TARGET_LNG);
 
-    // Server-Side Verification: Ensure they are actually within 100m
-    if (distance > MAX_DISTANCE_METERS) {
-        return { error: `Verification failed: You are ${Math.round(distance)} meters away. You must be within ${MAX_DISTANCE_METERS} meters.` };
+    // Accuracy-aware server-side verification (industry standard):
+    // If the user's GPS accuracy circle overlaps with the geofence, they are plausibly inside.
+    const effectiveDistance = distance - accuracy;
+    if (effectiveDistance > MAX_DISTANCE_METERS) {
+        return { error: `Verification failed: You are approximately ${Math.round(distance)} meters away. You must be within ${MAX_DISTANCE_METERS} meters.` };
     }
 
     const supabase = await createClient();
@@ -169,9 +175,13 @@ export async function autoCheckout(formData: FormData) {
             lat = parsed.data.lat;
             lng = parsed.data.lng;
 
+            // Parse GPS accuracy
+            const accuracyStr = formData.get('accuracy');
+            const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0;
+
             // Verify they are actually outside the boundary to record a valid audit trail
             const distance = calculateDistanceInMeters(lat, lng, TARGET_LAT, TARGET_LNG);
-            if (distance <= MAX_DISTANCE_METERS) {
+            if ((distance - accuracy) <= MAX_DISTANCE_METERS) {
                 return { error: 'Auto-checkout rejected: User is still inside the perimeter.' };
             }
         }

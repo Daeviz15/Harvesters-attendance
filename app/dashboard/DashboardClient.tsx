@@ -383,6 +383,9 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
         const formData = new FormData();
         formData.append("lat", geo.lat.toString());
         formData.append("lng", geo.lng.toString());
+        if (geo.accuracy !== null) {
+            formData.append("accuracy", geo.accuracy.toString());
+        }
 
         startTransition(async () => {
             const res = await verifyAndCheckIn(formData);
@@ -400,6 +403,9 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
         if (geo.lat !== null && geo.lng !== null) {
             formData.append("lat", geo.lat.toString());
             formData.append("lng", geo.lng.toString());
+            if (geo.accuracy !== null) {
+                formData.append("accuracy", geo.accuracy.toString());
+            }
         }
         
         startTransition(async () => {
