@@ -59,9 +59,10 @@ export async function signup(prevState: any, formData: FormData) {
 export async function completeOnboarding(prevState: any, formData: FormData) {
   const department = formData.get('department') as string
   const phone = formData.get('phone') as string
+  const avatarUrl = formData.get('avatarUrl') as string | null
 
-  if (!department || !phone) {
-    return { error: 'Department and phone number are required' }
+  if (!department || !phone || !avatarUrl) {
+    return { error: 'Department, phone number, and profile picture are required.' }
   }
 
   // Validate that phone contains exactly 10 digits
@@ -84,6 +85,7 @@ export async function completeOnboarding(prevState: any, formData: FormData) {
     .update({
       department,
       phone: `+234${phoneDigitsOnly}`,
+      avatar_url: avatarUrl || null,
       onboarding_complete: true,
       updated_at: new Date().toISOString()
     })

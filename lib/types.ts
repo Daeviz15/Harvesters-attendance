@@ -27,6 +27,7 @@ export interface LiveFeedEvent {
   department: string;
   event_type: 'Checked In' | 'Checked Out';
   created_at: string;
+  avatar_url?: string | null;
 }
 
 export type LeaveStatus = "pending" | "approved" | "rejected";

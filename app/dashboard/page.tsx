@@ -95,6 +95,7 @@ export default async function DashboardServerPage() {
             initialHistory={initialHistory}
             initialHasMore={initialHasMore}
             initialLiveFeed={initialLiveFeed}
+            avatarUrl={profile?.avatar_url || null}
         />
     );
 }

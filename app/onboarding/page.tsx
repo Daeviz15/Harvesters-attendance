@@ -26,5 +26,5 @@ export default async function OnboardingPage() {
         firstName = user.email.split('@')[0];
     }
 
-    return <OnboardingClient firstName={firstName} />;
+    return <OnboardingClient firstName={firstName} userId={user.id} />;
 }

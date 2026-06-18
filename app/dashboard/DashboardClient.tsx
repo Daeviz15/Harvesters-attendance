@@ -62,13 +62,14 @@ interface SidebarContentProps {
     fullName: string;
     initials: string;
     department: string;
+    avatarUrl?: string | null;
     history: AttendanceLog[];
     hasMore: boolean;
     isLoadingMore: boolean;
     onLoadMore: () => void;
 }
 
-const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, initials, department, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, initials, department, avatarUrl, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
@@ -89,13 +90,17 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, in
             </button>
         </div>
 
-        <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 mb-10">
-            <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853]">
-                {initials}
+        <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 mb-10 min-w-0">
+            <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853] shrink-0 relative overflow-hidden">
+                {avatarUrl ? (
+                    <Image src={avatarUrl} alt={fullName} fill className="object-cover" sizes="48px" />
+                ) : (
+                    initials
+                )}
             </div>
-            <div>
-                <p className="text-[15px] font-semibold text-neutral-800 dark:text-white/90">{fullName}</p>
-                <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium">{department}</p>
+            <div className="min-w-0 flex-1">
+                <p className="text-[15px] font-semibold text-neutral-800 dark:text-white/90 truncate" title={fullName}>{fullName}</p>
+                <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium truncate" title={department}>{department}</p>
             </div>
         </div>
 
@@ -175,6 +180,7 @@ interface DashboardClientProps {
     fullName: string;
     initials: string;
     department: string;
+    avatarUrl?: string | null;
     initialIsCheckedIn: boolean;
     checkInTime: string | null;
     serverTime: string;
@@ -185,7 +191,7 @@ interface DashboardClientProps {
 
 const GRACE_PERIOD_SECONDS = 180; // 3 minutes
 
-export default function DashboardClient({ userId, firstName, fullName, initials, department, initialIsCheckedIn, checkInTime, serverTime, initialHistory, initialHasMore, initialLiveFeed }: DashboardClientProps) {
+export default function DashboardClient({ userId, firstName, fullName, initials, department, avatarUrl, initialIsCheckedIn, checkInTime, serverTime, initialHistory, initialHasMore, initialLiveFeed }: DashboardClientProps) {
     const geo = useGeolocation();
     const [isPending, startTransition] = useTransition();
 
@@ -439,7 +445,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-neutral-200 dark:border-white/10 bg-neutral-100/40 dark:bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} fullName={fullName} initials={initials} department={department} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} fullName={fullName} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -460,7 +466,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                             className="fixed inset-y-0 left-0 w-[280px] bg-neutral-50 dark:bg-[#0f0f0f] border-r border-neutral-200 dark:border-white/10 p-6 flex flex-col z-50 md:hidden shadow-2xl"
                         >
-                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} fullName={fullName} initials={initials} department={department} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} fullName={fullName} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
                         </motion.aside>
                     </>
                 )}
@@ -627,8 +633,12 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                                 const init = `${feed.first_name[0]}${feed.last_name ? feed.last_name[0] : ''}`.toUpperCase();
                                 return (
                                 <div key={feed.id} className="flex items-start gap-4 group">
-                                    <div className="w-10 h-10 rounded-full bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 group-hover:bg-[#34A853]/10 group-hover:text-[#34A853] group-hover:border-[#34A853]/30 transition-colors">
-                                        {init}
+                                    <div className="w-10 h-10 rounded-full bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 group-hover:bg-[#34A853]/10 group-hover:text-[#34A853] group-hover:border-[#34A853]/30 transition-colors shrink-0 relative overflow-hidden">
+                                        {feed.avatar_url ? (
+                                            <Image src={feed.avatar_url} alt={feed.first_name} fill className="object-cover" sizes="40px" />
+                                        ) : (
+                                            init
+                                        )}
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex items-baseline justify-between mb-0.5">
