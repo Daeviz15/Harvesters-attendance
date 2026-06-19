@@ -38,7 +38,7 @@ export async function updateSession(request: NextRequest) {
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
   const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding');
-  const isPublicPage = request.nextUrl.pathname.startsWith('/privacy') || request.nextUrl.pathname.startsWith('/terms');
+  const isPublicPage = request.nextUrl.pathname === '/' || request.nextUrl.pathname.startsWith('/privacy') || request.nextUrl.pathname.startsWith('/terms');
 
   // Never interfere with the OAuth callback or public legal pages
   if (isAuthCallback || isPublicPage) {

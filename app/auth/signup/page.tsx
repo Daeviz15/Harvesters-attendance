@@ -147,7 +147,10 @@ export default function SignupPage() {
                             before:content-[''] before:absolute before:inset-0 before:bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIzIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjIwIDYgOSAxNyA0IDEyIi8+PC9zdmc+')] before:bg-center before:bg-no-repeat before:bg-[length:12px_12px] before:opacity-0 checked:before:opacity-100 transition-all cursor-pointer"
                         />
                         <label htmlFor="terms" className="text-[13px] text-neutral-600 dark:text-white/60 leading-tight cursor-pointer select-none">
-                            Yes, I Accept the <span className="text-neutral-800 dark:text-white hover:underline">Terms & Conditions</span>.
+                            Yes, I Accept the{" "}
+                            <Link href="/terms" target="_blank" className="text-[#34A853] font-semibold hover:underline">Terms of Service</Link>
+                            {" "}&{" "}
+                            <Link href="/privacy" target="_blank" className="text-[#34A853] font-semibold hover:underline">Privacy Policy</Link>.
                         </label>
                     </div>
 

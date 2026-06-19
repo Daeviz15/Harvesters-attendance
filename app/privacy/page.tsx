@@ -175,7 +175,7 @@ export default function PrivacyPolicyPage() {
                         </p>
                         <div className="mt-4 p-4 rounded-xl bg-neutral-100/80 dark:bg-white/5 border border-neutral-200 dark:border-white/10">
                             <p className="text-sm text-neutral-700 dark:text-white/70 mb-1">
-                                <strong>Email:</strong> daeviz17@gmail.com
+                                <strong>Email:</strong> feedback@harvestersng.org
                             </p>
                             <p className="text-sm text-neutral-700 dark:text-white/70">
                                 <strong>Organization:</strong> The Harvesters International Christian Centre
