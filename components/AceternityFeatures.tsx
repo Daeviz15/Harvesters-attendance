@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
-import { MapPin, Clock, Users, Shield, ArrowUpRight } from "lucide-react";
+import { MapPin, Clock, Users, Shield } from "lucide-react";
 
 const features = [
     { 
@@ -161,13 +161,6 @@ function TiltCard({ feature, idx }: { feature: typeof features[0], idx: number }
                 </p>
             </div>
 
-            {/* Card Content Bottom (CTA) */}
-            <div className="relative z-10 mt-8 flex items-center gap-3" style={{ transform: "translateZ(50px)" }}>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-12 ${feature.className.includes('bg-[#0a0a0a]') ? 'bg-white text-black' : 'bg-black text-white dark:bg-white dark:text-black'}`}>
-                    <ArrowUpRight className="w-5 h-5" />
-                </div>
-                <span className={`font-semibold text-sm ${feature.textClass}`}>Learn more</span>
-            </div>
         </motion.div>
     );
 }
