@@ -35,8 +35,15 @@ export async function updateSession(request: NextRequest) {
 
   const isOnboardingComplete = user?.user_metadata?.onboarding_complete === true;
   const isAuthPage = request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/signup');
+  const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
   const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
   const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding');
+  const isPublicPage = request.nextUrl.pathname.startsWith('/privacy') || request.nextUrl.pathname.startsWith('/terms');
+
+  // Never interfere with the OAuth callback or public legal pages
+  if (isAuthCallback || isPublicPage) {
+    return supabaseResponse;
+  }
 
   if (!user && (isDashboardPage || isOnboardingPage)) {
     // no user, redirect to login page
