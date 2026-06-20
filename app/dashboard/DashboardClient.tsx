@@ -4,15 +4,15 @@ import { useState, useEffect, useTransition, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
-import { 
-    MapPin, WifiOff, Clock, Calendar, CheckCircle2, 
+import {
+    MapPin, WifiOff, Clock, Calendar, CheckCircle2,
     CircleDashed, LogOut, Menu, X, Users, CalendarDays,
     AlertTriangle, Loader2, History
 } from "lucide-react";
 import LeaveRequestModal from "@/components/LeaveRequestModal";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import { logout } from "@/app/auth/actions";
-import { verifyAndCheckIn, autoCheckout, fetchAttendanceHistory } from "./actions";
+import { verifyAndCheckIn, fetchAttendanceHistory, checkSessionAlive } from "./actions";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import ThemeToggle from "@/components/ThemeToggle";
 import type { AttendanceLog, LiveFeedEvent } from "@/lib/types";
@@ -73,16 +73,16 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, in
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
-                <Image 
-                    src="/logo.png" 
-                    alt="Harvesters Logo" 
+                <Image
+                    src="/logo.png"
+                    alt="Harvesters Logo"
                     fill
                     sizes="112px"
                     className="object-contain object-left opacity-90 dark:invert-0 invert transition-all"
                     priority
                 />
             </div>
-            <button 
+            <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="md:hidden p-2 text-neutral-500 hover:text-neutral-800 dark:text-white/50 dark:hover:text-white"
             >
@@ -108,12 +108,12 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, in
             <div className="flex items-center justify-between mb-6">
                 <h3 className="text-[11px] font-semibold text-neutral-500 dark:text-white/50 uppercase tracking-[0.2em]">Your History</h3>
             </div>
-            
+
             <div className="space-y-4 overflow-y-auto pr-2 no-scrollbar flex-1">
                 {history.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 gap-3">
                         <History className="w-8 h-8 text-neutral-300 dark:text-white/15" />
-                        <p className="text-[13px] text-neutral-400 dark:text-white/30 text-center">No attendance records yet.<br/>Check in to get started.</p>
+                        <p className="text-[13px] text-neutral-400 dark:text-white/30 text-center">No attendance records yet.<br />Check in to get started.</p>
                     </div>
                 ) : (
                     <>
@@ -156,7 +156,7 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, in
         </div>
 
         <div className="pt-6 mt-auto space-y-2">
-            <button 
+            <button
                 onClick={() => {
                     setIsLeaveModalOpen(true);
                     setIsMobileMenuOpen(false);
@@ -187,19 +187,24 @@ interface DashboardClientProps {
     initialHistory: AttendanceLog[];
     initialHasMore: boolean;
     initialLiveFeed: LiveFeedEvent[];
+    initialBroadcastSession: { id: string, title: string } | null;
+    activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[];
 }
 
-const GRACE_PERIOD_SECONDS = 180; // 3 minutes
-
-export default function DashboardClient({ userId, firstName, fullName, initials, department, avatarUrl, initialIsCheckedIn, checkInTime, serverTime, initialHistory, initialHasMore, initialLiveFeed }: DashboardClientProps) {
-    const geo = useGeolocation();
+export default function DashboardClient({
+    userId, firstName, fullName, initials, department, avatarUrl,
+    initialIsCheckedIn, checkInTime, serverTime,
+    initialHistory, initialHasMore, initialLiveFeed, initialBroadcastSession, activeLocations
+}: DashboardClientProps) {
+    const geo = useGeolocation(activeLocations);
     const [isPending, startTransition] = useTransition();
 
     const [isCheckedIn, setIsCheckedIn] = useState(initialIsCheckedIn);
+    const [broadcastSession, setBroadcastSession] = useState<{ id: string, title: string } | null>(initialBroadcastSession);
     const [actionError, setActionError] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-    
+
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [gracePeriodRemaining, setGracePeriodRemaining] = useState<number | null>(null);
 
@@ -267,7 +272,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                 const newEvent = payload.new as LiveFeedEvent;
                 setLiveFeed(prev => [newEvent, ...prev].slice(0, 50)); // Keep max 50 items in memory
             })
-            // Listen to personal attendance logs (cross-device sync)
+            // Listen to personal attendance logs (cross-device sync & auto-checkout)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
@@ -279,10 +284,26 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                 } else if (payload.eventType === 'UPDATE') {
                     if (payload.new.status !== 'active') {
                         setIsCheckedIn(false);
-                        setGracePeriodRemaining(null);
                     }
                 }
                 refreshHistory();
+            })
+            // Listen to admin broadcast sessions (to unlock/lock check-in)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'attendance_sessions'
+            }, (payload) => {
+                if (payload.eventType === 'UPDATE' && payload.new.status === 'completed') {
+                    // Instantly drop the session from UI when admin ends it
+                    setBroadcastSession(null);
+                } else if (payload.eventType === 'INSERT' && payload.new.status === 'active') {
+                    // For new sessions, we need the event title, so a reload guarantees fresh joined data
+                    window.location.reload();
+                } else {
+                    // Fallback reload for safety
+                    window.location.reload();
+                }
             })
             .subscribe();
 
@@ -291,6 +312,42 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
         };
     }, [userId, refreshHistory]);
 
+    // Polling heartbeat: verify broadcast session is still alive every 60 seconds.
+    // This is the ultimate safety net — even if WebSockets fail, the UI will
+    // self-correct within 60 seconds. Only polls when the tab is visible to
+    // save battery and serverless invocations on backgrounded worker phones.
+    useEffect(() => {
+        if (!broadcastSession) return;
+
+        const poll = async () => {
+            if (document.visibilityState !== 'visible') return; // Skip if tab is backgrounded
+            try {
+                const isAlive = await checkSessionAlive(broadcastSession.id);
+                if (!isAlive) {
+                    setBroadcastSession(null);
+                }
+            } catch (e) {
+                // Network error — don't clear, just skip this tick
+                console.warn('[Heartbeat] Failed to verify session:', e);
+            }
+        };
+
+        const interval = setInterval(poll, 60_000); // 60 seconds
+
+        // Also poll immediately when the tab becomes visible again (e.g. worker
+        // switches back from another app). This catches sessions that ended
+        // while the phone was locked or the browser was in the background.
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') poll();
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibility);
+        };
+    }, [broadcastSession]);
+
     // Simulated Timer for active shift (with client-server clock drift correction)
     useEffect(() => {
         let interval: NodeJS.Timeout;
@@ -298,9 +355,9 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
             const clientNow = Date.now();
             const serverStart = new Date(serverTime).getTime();
             const drift = clientNow - serverStart;
-            
+
             const start = new Date(checkInTime).getTime();
-            
+
             const getElapsed = () => {
                 const adjustedNow = Date.now() - drift;
                 return Math.max(0, Math.floor((adjustedNow - start) / 1000));
@@ -317,55 +374,6 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
         return () => clearInterval(interval);
     }, [isCheckedIn, checkInTime, serverTime]);
 
-    // Robust Grace Period Timer Logic (Jitter Buffer Layer)
-    useEffect(() => {
-        const JITTER_BUFFER_SECONDS = 15; // Must be consistently outside for 15s to trigger warning
-        
-        const interval = setInterval(() => {
-            const currentGeo = geoRef.current;
-            
-            if (!isCheckedInRef.current) {
-                timeWentOutsideRef.current = null;
-                setGracePeriodRemaining(null);
-                return;
-            }
-
-            // Ignore readings while loading, or if the accuracy is horribly bad (GPS jitter)
-            if (currentGeo.isLoading || currentGeo.lat === null || (currentGeo.accuracy && currentGeo.accuracy > 150)) {
-                return; // Skip evaluation this tick
-            }
-
-            if (!currentGeo.isWithinPerimeter) {
-                if (timeWentOutsideRef.current === null) {
-                    // Start the jitter buffer clock
-                    timeWentOutsideRef.current = Date.now();
-                } else {
-                    const secondsOutside = Math.floor((Date.now() - timeWentOutsideRef.current) / 1000);
-                    
-                    if (secondsOutside >= JITTER_BUFFER_SECONDS) {
-                        // They have breached the jitter buffer. Start the grace period.
-                        const graceRemaining = GRACE_PERIOD_SECONDS - (secondsOutside - JITTER_BUFFER_SECONDS);
-                        
-                        if (graceRemaining > 0) {
-                            setGracePeriodRemaining(graceRemaining);
-                        } else {
-                            // Time's up!
-                            setGracePeriodRemaining(0);
-                            timeWentOutsideRef.current = null;
-                            handleAutoCheckout();
-                        }
-                    }
-                }
-            } else {
-                // They came back inside! Cancel everything.
-                timeWentOutsideRef.current = null;
-                setGracePeriodRemaining(null);
-            }
-        }, 1000);
-
-        return () => clearInterval(interval);
-    }, []); // Empty dependency array, relies on refs
-
     const formatTime = (totalSeconds: number) => {
         const h = Math.floor(totalSeconds / 3600);
         const m = Math.floor((totalSeconds % 3600) / 60);
@@ -377,6 +385,11 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
     const handleCheckIn = () => {
         setActionError(null);
 
+        if (!broadcastSession) {
+            setActionError("There is no active session to check into.");
+            return;
+        }
+
         if (geo.isLoading) {
             setActionError("Waiting for GPS coordinates to check in...");
             return;
@@ -387,6 +400,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
         }
 
         const formData = new FormData();
+        formData.append("sessionId", broadcastSession.id);
         formData.append("lat", geo.lat.toString());
         formData.append("lng", geo.lng.toString());
         if (geo.accuracy !== null) {
@@ -397,31 +411,13 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
             const res = await verifyAndCheckIn(formData);
             if (res.error) {
                 setActionError(res.error);
+                // If the server says the session is dead, immediately nuke the broadcast UI
+                if (res.error.includes('no longer active')) {
+                    setBroadcastSession(null);
+                }
             } else {
                 setIsCheckedIn(true);
                 refreshHistory();
-            }
-        });
-    };
-
-    const handleAutoCheckout = () => {
-        const formData = new FormData();
-        if (geo.lat !== null && geo.lng !== null) {
-            formData.append("lat", geo.lat.toString());
-            formData.append("lng", geo.lng.toString());
-            if (geo.accuracy !== null) {
-                formData.append("accuracy", geo.accuracy.toString());
-            }
-        }
-        
-        startTransition(async () => {
-            const res = await autoCheckout(formData);
-            if (!res.error) {
-                setIsCheckedIn(false);
-                setGracePeriodRemaining(null);
-                refreshHistory();
-            } else {
-                console.error("Auto checkout failed:", res.error);
             }
         });
     };
@@ -435,8 +431,8 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
 
     return (
         <main className="min-h-screen w-full bg-background text-foreground relative overflow-hidden font-sans flex transition-colors duration-300">
-            <LoadingOverlay isOpen={isPending} />
-            
+            <LoadingOverlay isOpen={isPending} text="Checking in..." />
+
             {/* Ambient Background Glow */}
             <div className="absolute inset-0 pointer-events-none opacity-20 z-0">
                 <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-primary/10 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[150px]"></div>
@@ -452,14 +448,14 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
             <AnimatePresence>
                 {isMobileMenuOpen && (
                     <>
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => setIsMobileMenuOpen(false)}
                             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
                         />
-                        <motion.aside 
+                        <motion.aside
                             initial={{ x: "-100%" }}
                             animate={{ x: 0 }}
                             exit={{ x: "-100%" }}
@@ -474,11 +470,11 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
 
             {/* Main Content */}
             <div className="flex-1 flex flex-col h-screen overflow-y-auto overflow-x-hidden relative z-10 scroll-smooth no-scrollbar">
-                
+
                 {/* Grace Period Warning Banner */}
                 <AnimatePresence>
                     {gracePeriodRemaining !== null && (
-                        <motion.div 
+                        <motion.div
                             initial={{ y: -50, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
                             exit={{ y: -50, opacity: 0 }}
@@ -499,7 +495,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
 
                 {/* Mobile Header */}
                 <div className="md:hidden flex items-center justify-between p-6">
-                    <button 
+                    <button
                         onClick={() => setIsMobileMenuOpen(true)}
                         className="p-2 -ml-2 text-neutral-600 hover:text-neutral-900 dark:text-white/70 dark:hover:text-white"
                     >
@@ -514,7 +510,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                 </div>
 
                 <div className="flex-1 w-full max-w-4xl mx-auto px-6 md:px-12 pt-4 md:pt-16 pb-12 flex flex-col lg:flex-row gap-16 lg:gap-12 xl:gap-24">
-                    
+
                     {/* Left Column: Action & Welcome */}
                     <div className="flex-1 flex flex-col">
                         <div className="mb-12">
@@ -524,28 +520,27 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
 
                         {/* Status Pill */}
                         <div className="flex justify-start mb-6">
-                            <motion.div 
+                            <motion.div
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
-                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-md transition-colors ${
-                                    geo.isLoading
-                                        ? "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-500 dark:text-white/50"
-                                        : geo.isWithinPerimeter 
-                                            ? "bg-[#34A853]/10 border-[#34A853]/20 text-[#34A853]" 
-                                            : "bg-red-500/10 border-red-500/20 text-red-500 dark:text-red-400"
-                                }`}
+                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-md transition-colors ${geo.isLoading
+                                    ? "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-500 dark:text-white/50"
+                                    : geo.isWithinPerimeter
+                                        ? "bg-[#34A853]/10 border-[#34A853]/20 text-[#34A853]"
+                                        : "bg-red-500/10 border-red-500/20 text-red-500 dark:text-red-400"
+                                    }`}
                             >
                                 <MapPin className="w-3.5 h-3.5" />
                                 <span className="text-[12px] font-medium tracking-wide">
-                                    {geo.isLoading ? "Acquiring GPS Signal..." : geo.isWithinPerimeter ? "Detected at The Globe Church, Ologolo" : "Outside Perimeter"}
+                                    {geo.isLoading ? "Acquiring GPS Signal..." : geo.isWithinPerimeter ? `Detected at ${geo.locationName}` : "Outside Perimeter"}
                                 </span>
                             </motion.div>
                         </div>
-                        
+
                         {/* Server Action Error Banner */}
                         <AnimatePresence>
                             {(actionError || geo.error) && (
-                                <motion.div 
+                                <motion.div
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
@@ -565,7 +560,7 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                                 {!isCheckedIn && geo.isWithinPerimeter && !geo.isLoading && (
                                     <div className="absolute inset-0 bg-[#34A853]/20 rounded-full animate-ping opacity-75 duration-1000"></div>
                                 )}
-                                
+
                                 {isCheckedIn ? (
                                     /* Active Session Status Display (non-interactive) */
                                     <div
@@ -579,17 +574,17 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                                             <Clock className="w-4 h-4" />
                                             <span className="text-base md:text-lg font-mono tracking-wider">{formatTime(elapsedSeconds)}</span>
                                         </div>
-                                        <span className="text-[11px] text-neutral-500 dark:text-white/35 tracking-wider uppercase mt-2">
-                                            Auto-checkout on exit
+                                        <span className="text-[11px] text-neutral-500 dark:text-white/35 tracking-wider uppercase mt-2 text-center px-4">
+                                            Waiting for Admin<br />to end session
                                         </span>
                                     </div>
                                 ) : (
                                     /* Check In Button */
                                     <button
                                         onClick={handleCheckIn}
-                                        disabled={isPending || geo.isLoading || !geo.isWithinPerimeter}
+                                        disabled={isPending || geo.isLoading || !geo.isWithinPerimeter || !broadcastSession}
                                         className={`relative w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-500 shadow-2xl
-                                            ${geo.isWithinPerimeter && !geo.isLoading
+                                            ${geo.isWithinPerimeter && !geo.isLoading && broadcastSession
                                                 ? "bg-[#34A853] hover:bg-[#2e9347] text-white shadow-[#34A853]/20"
                                                 : "bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 text-neutral-400 dark:text-white/30 cursor-not-allowed"
                                             }
@@ -605,11 +600,13 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                                                 Check In
                                             </span>
                                             <span className="text-[14px] font-medium opacity-80 tracking-wider uppercase mt-2 text-center px-4">
-                                                {geo.isLoading 
-                                                    ? "Locating..." 
-                                                    : geo.isWithinPerimeter 
-                                                        ? "Tap to record" 
-                                                        : `Distance: ${Math.round(geo.distance || 0)}m`}
+                                                {!broadcastSession
+                                                    ? "Waiting for Broadcast..."
+                                                    : geo.isLoading
+                                                        ? "Locating..."
+                                                        : geo.isWithinPerimeter
+                                                            ? `Tap to join ${broadcastSession.title}`
+                                                            : `Distance: ${Math.round(geo.distance || 0)}m`}
                                             </span>
                                         </motion.div>
                                     </button>
@@ -632,22 +629,22 @@ export default function DashboardClient({ userId, firstName, fullName, initials,
                             {liveFeed.map((feed) => {
                                 const init = `${feed.first_name[0]}${feed.last_name ? feed.last_name[0] : ''}`.toUpperCase();
                                 return (
-                                <div key={feed.id} className="flex items-start gap-4 group">
-                                    <div className="w-10 h-10 rounded-full bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 group-hover:bg-[#34A853]/10 group-hover:text-[#34A853] group-hover:border-[#34A853]/30 transition-colors shrink-0 relative overflow-hidden">
-                                        {feed.avatar_url ? (
-                                            <Image src={feed.avatar_url} alt={feed.first_name} fill className="object-cover" sizes="40px" />
-                                        ) : (
-                                            init
-                                        )}
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-baseline justify-between mb-0.5">
-                                            <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90">{feed.first_name} {feed.last_name}</p>
-                                            <span className="text-[11px] text-[#34A853] font-medium">{formatTimeAgo(feed.created_at)}</span>
+                                    <div key={feed.id} className="flex items-start gap-4 group">
+                                        <div className="w-10 h-10 rounded-full bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 group-hover:bg-[#34A853]/10 group-hover:text-[#34A853] group-hover:border-[#34A853]/30 transition-colors shrink-0 relative overflow-hidden">
+                                            {feed.avatar_url ? (
+                                                <Image src={feed.avatar_url} alt={feed.first_name} fill className="object-cover" sizes="40px" />
+                                            ) : (
+                                                init
+                                            )}
                                         </div>
-                                        <p className="text-[12px] text-neutral-500 dark:text-white/40">{feed.department} • {feed.event_type}</p>
+                                        <div className="flex-1">
+                                            <div className="flex items-baseline justify-between mb-0.5">
+                                                <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90">{feed.first_name} {feed.last_name}</p>
+                                                <span className="text-[11px] text-[#34A853] font-medium">{formatTimeAgo(feed.created_at)}</span>
+                                            </div>
+                                            <p className="text-[12px] text-neutral-500 dark:text-white/40">{feed.department} • {feed.event_type}</p>
+                                        </div>
                                     </div>
-                                </div>
                                 );
                             })}
                         </div>

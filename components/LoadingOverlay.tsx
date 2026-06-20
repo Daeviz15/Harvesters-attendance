@@ -5,9 +5,10 @@ import Image from "next/image";
 
 interface LoadingOverlayProps {
     isOpen: boolean;
+    text?: string;
 }
 
-export default function LoadingOverlay({ isOpen }: LoadingOverlayProps) {
+export default function LoadingOverlay({ isOpen, text = "Authenticating" }: LoadingOverlayProps) {
     return (
         <AnimatePresence>
             {isOpen && (
@@ -61,7 +62,7 @@ export default function LoadingOverlay({ isOpen }: LoadingOverlayProps) {
                         transition={{ delay: 0.2 }}
                         className="mt-6 text-[13px] font-medium tracking-[0.2em] uppercase text-white/50 relative z-10"
                     >
-                        Authenticating
+                        {text}
                     </motion.p>
                 </motion.div>
             )}

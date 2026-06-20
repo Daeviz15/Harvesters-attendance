@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server';
 import { calculateDistanceInMeters } from '@/lib/geolocation';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import { TARGET_LAT, TARGET_LNG, MAX_DISTANCE_METERS, HISTORY_PAGE_SIZE } from '@/lib/constants';
+import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog, AttendanceHistoryResponse } from '@/lib/types';
 
 // Strict Zod schema for ensuring valid coordinates
@@ -14,6 +14,11 @@ const locationSchema = z.object({
 });
 
 export async function verifyAndCheckIn(formData: FormData) {
+    const sessionId = formData.get('sessionId')?.toString();
+
+    if (!sessionId) {
+        return { error: 'No active session broadcast detected. Please wait for an Admin to start a session.' };
+    }
     const latStr = formData.get('lat');
     const lngStr = formData.get('lng');
 
@@ -33,16 +38,36 @@ export async function verifyAndCheckIn(formData: FormData) {
     const accuracyStr = formData.get('accuracy');
     const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0; // Cap at 300m to prevent abuse
 
-    const distance = calculateDistanceInMeters(lat, lng, TARGET_LAT, TARGET_LNG);
+    const supabase = await createClient();
 
-    // Accuracy-aware server-side verification (industry standard):
-    // If the user's GPS accuracy circle overlaps with the geofence, they are plausibly inside.
-    const effectiveDistance = distance - accuracy;
-    if (effectiveDistance > MAX_DISTANCE_METERS) {
-        return { error: `Verification failed: You are approximately ${Math.round(distance)} meters away. You must be within ${MAX_DISTANCE_METERS} meters.` };
+    // Fetch active locations
+    const { data: activeLocations, error: locError } = await supabase
+        .from('locations')
+        .select('latitude, longitude, radius, name')
+        .eq('is_active', true);
+
+    if (locError || !activeLocations || activeLocations.length === 0) {
+        return { error: 'No active locations found in the system. Check-in is currently disabled.' };
     }
 
-    const supabase = await createClient();
+    let isWithinAnyPerimeter = false;
+    let closestDistance = Infinity;
+
+    for (const loc of activeLocations) {
+        const distance = calculateDistanceInMeters(lat, lng, loc.latitude, loc.longitude);
+        if (distance < closestDistance) closestDistance = distance;
+        
+        const effectiveDistance = distance - accuracy;
+        if (effectiveDistance <= loc.radius) {
+            isWithinAnyPerimeter = true;
+            break;
+        }
+    }
+
+    if (!isWithinAnyPerimeter) {
+        return { error: `Verification failed: You are approximately ${Math.round(closestDistance)} meters away from the nearest branch.` };
+    }
+
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -58,30 +83,28 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const department = profile?.department || user.user_metadata?.department || 'Unknown';
 
-    // Check if there is an active session
+    // 1. Verify the session is still active
+    const { data: sessionData } = await supabase
+        .from('attendance_sessions')
+        .select('id, status')
+        .eq('id', sessionId)
+        .single();
+
+    if (!sessionData || sessionData.status !== 'active') {
+        return { error: 'This attendance session is no longer active.' };
+    }
+
+    // 2. Check if the user is already checked in to THIS session
     const { data: activeSession } = await supabase
         .from('attendance_logs')
-        .select('id, check_in_time')
+        .select('id')
         .eq('user_id', user.id)
+        .eq('session_id', sessionId)
         .eq('status', 'active')
         .maybeSingle();
 
     if (activeSession) {
-        const checkInTime = new Date(activeSession.check_in_time).getTime();
-        const hoursSinceCheckIn = (Date.now() - checkInTime) / (1000 * 60 * 60);
-
-        if (hoursSinceCheckIn > 12) {
-            // Stale check-in. Auto-checkout the old session to make way for the new one.
-            await supabase
-                .from('attendance_logs')
-                .update({
-                    check_out_time: new Date().toISOString(),
-                    status: 'auto_completed'
-                })
-                .eq('id', activeSession.id);
-        } else {
-            return { error: 'You are already checked in. You must check out before checking in again.' };
-        }
+        return { error: 'You are already checked in for this session.' };
     }
 
     // Insert the check-in record
@@ -89,6 +112,7 @@ export async function verifyAndCheckIn(formData: FormData) {
         .from('attendance_logs')
         .insert({
             user_id: user.id,
+            session_id: sessionId,
             department,
             check_in_lat: lat,
             check_in_lng: lng,
@@ -162,63 +186,7 @@ export async function manualCheckOut(formData: FormData) {
     return { success: true };
 }
 
-export async function autoCheckout(formData: FormData) {
-    const latStr = formData.get('lat');
-    const lngStr = formData.get('lng');
 
-    let lat: number | null = null;
-    let lng: number | null = null;
-
-    if (latStr !== null && latStr !== '' && lngStr !== null && lngStr !== '') {
-        const parsed = locationSchema.safeParse({ lat: latStr, lng: lngStr });
-        if (parsed.success) {
-            lat = parsed.data.lat;
-            lng = parsed.data.lng;
-
-            // Parse GPS accuracy
-            const accuracyStr = formData.get('accuracy');
-            const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0;
-
-            // Verify they are actually outside the boundary to record a valid audit trail
-            const distance = calculateDistanceInMeters(lat, lng, TARGET_LAT, TARGET_LNG);
-            if ((distance - accuracy) <= MAX_DISTANCE_METERS) {
-                return { error: 'Auto-checkout rejected: User is still inside the perimeter.' };
-            }
-        }
-    }
-
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-        return { error: 'Unauthorized request.' };
-    }
-
-    // Auto-checkout happens when they leave the zone, so we mark it specifically as auto_completed
-    const { data, error: dbError } = await supabase
-        .from('attendance_logs')
-        .update({
-            check_out_time: new Date().toISOString(),
-            check_out_lat: lat,
-            check_out_lng: lng,
-            status: 'auto_completed'
-        })
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .select();
-
-    if (dbError) {
-        console.error("Supabase auto-checkout error:", dbError);
-        return { error: 'Database error while auto checking out.' };
-    }
-
-    if (!data || data.length === 0) {
-        return { error: 'No active check-in found to auto-checkout.' };
-    }
-
-    revalidatePath('/dashboard');
-    return { success: true };
-}
 
 /**
  * Cursor-based paginated fetch for attendance history.
@@ -355,4 +323,20 @@ export async function fetchMyLeaveRequests() {
     }
 
     return data;
+}
+
+/**
+ * Lightweight heartbeat check: verifies if a broadcast session is still active.
+ * Used as a polling fallback in case Supabase Realtime misses an update.
+ */
+export async function checkSessionAlive(sessionId: string): Promise<boolean> {
+    const supabase = await createClient();
+    const { data } = await supabase
+        .from('attendance_sessions')
+        .select('id')
+        .eq('id', sessionId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+    return !!data;
 }

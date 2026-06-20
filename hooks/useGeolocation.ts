@@ -1,23 +1,24 @@
 import { useState, useEffect } from 'react';
 import { calculateDistanceInMeters } from '@/lib/geolocation';
-import { TARGET_LAT, TARGET_LNG, MAX_DISTANCE_METERS } from '@/lib/constants';
 
 interface GeolocationState {
     lat: number | null;
     lng: number | null;
     accuracy: number | null;
     isWithinPerimeter: boolean;
+    locationName: string | null;
     distance: number | null;
     error: string | null;
     isLoading: boolean;
 }
 
-export function useGeolocation() {
+export function useGeolocation(activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[] = []) {
     const [state, setState] = useState<GeolocationState>({
         lat: null,
         lng: null,
         accuracy: null,
         isWithinPerimeter: false,
+        locationName: null,
         distance: null,
         error: null,
         isLoading: true,
@@ -33,28 +34,39 @@ export function useGeolocation() {
             (position) => {
                 const { latitude, longitude, accuracy } = position.coords;
                 
-                // Calculate distance on the client purely for UI responsiveness
-                const distance = calculateDistanceInMeters(latitude, longitude, TARGET_LAT, TARGET_LNG);
+                // Find the closest location and check if we are within ANY perimeter
+                let minDistance = Infinity;
+                let isWithinPerimeter = false;
+                let locationName: string | null = null;
                 
-                // Accuracy-aware geofencing (industry standard):
-                // If the GPS accuracy circle overlaps with the geofence circle, 
-                // the user is likely inside. We cap the max acceptable accuracy
-                // at 300m to prevent abuse from extremely inaccurate readings.
                 const MAX_ACCEPTABLE_ACCURACY = 300;
                 const effectiveAccuracy = Math.min(accuracy ?? 0, MAX_ACCEPTABLE_ACCURACY);
-                const isWithinPerimeter = (distance - effectiveAccuracy) <= MAX_DISTANCE_METERS;
+
+                if (activeLocations && activeLocations.length > 0) {
+                    for (const loc of activeLocations) {
+                        const distance = calculateDistanceInMeters(latitude, longitude, loc.latitude, loc.longitude);
+                        if (distance < minDistance) minDistance = distance;
+                        if ((distance - effectiveAccuracy) <= loc.radius) {
+                            isWithinPerimeter = true;
+                            locationName = loc.name;
+                        }
+                    }
+                }
+
+                // If no active locations are found, distance remains null
+                const finalDistance = minDistance === Infinity ? null : minDistance;
 
                 // Debug logging — remove after testing
                 console.log(`[GEO DEBUG] Your GPS: ${latitude}, ${longitude}`);
-                console.log(`[GEO DEBUG] Target:   ${TARGET_LAT}, ${TARGET_LNG}`);
-                console.log(`[GEO DEBUG] Distance: ${distance.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Effective: ${(distance - effectiveAccuracy).toFixed(1)}m | Within: ${isWithinPerimeter}`);
+                console.log(`[GEO DEBUG] Distance: ${finalDistance?.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Within: ${isWithinPerimeter}`);
 
                 setState({
                     lat: latitude,
                     lng: longitude,
                     accuracy,
                     isWithinPerimeter,
-                    distance,
+                    locationName,
+                    distance: finalDistance,
                     error: null,
                     isLoading: false,
                 });
@@ -103,7 +115,7 @@ export function useGeolocation() {
         );
 
         return () => navigator.geolocation.clearWatch(watchId);
-    }, []);
+    }, [JSON.stringify(activeLocations)]);
 
     return state;
 }

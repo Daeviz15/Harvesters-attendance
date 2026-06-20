@@ -55,6 +55,20 @@ export default async function DashboardServerPage() {
         .eq('status', 'active')
         .maybeSingle();
 
+    // Fetch the global active broadcast session
+    const { data: activeBroadcastSession } = await supabase
+        .from('attendance_sessions')
+        .select('id, event:events(title)')
+        .eq('status', 'active')
+        .maybeSingle();
+
+    const formattedBroadcast = activeBroadcastSession ? {
+        id: activeBroadcastSession.id,
+        title: Array.isArray(activeBroadcastSession.event)
+            ? activeBroadcastSession.event[0].title
+            : (activeBroadcastSession.event as any)?.title || 'Live Session'
+    } : null;
+
     // Fetch initial attendance history (server-side, zero client latency)
     const { data: historyData } = await supabase
         .from('attendance_logs')
@@ -82,8 +96,14 @@ export default async function DashboardServerPage() {
 
     const initialLiveFeed: LiveFeedEvent[] = initialLiveFeedData || [];
 
+    // Fetch active locations for geofencing
+    const { data: activeLocations } = await supabase
+        .from('locations')
+        .select('id, name, latitude, longitude, radius')
+        .eq('is_active', true);
+
     return (
-        <DashboardClient 
+        <DashboardClient
             userId={user.id}
             firstName={firstName}
             fullName={fullName}
@@ -96,6 +116,8 @@ export default async function DashboardServerPage() {
             initialHasMore={initialHasMore}
             initialLiveFeed={initialLiveFeed}
             avatarUrl={profile?.avatar_url || null}
+            initialBroadcastSession={formattedBroadcast}
+            activeLocations={activeLocations || []}
         />
     );
 }
