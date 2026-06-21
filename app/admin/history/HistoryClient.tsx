@@ -99,7 +99,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                     </div>
                     <input
                         type="text"
-                        placeholder="Search by worker name..."
+                        placeholder="Search by username..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
@@ -116,7 +116,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-neutral-50/50 dark:bg-white/[0.02] border-b border-neutral-200 dark:border-white/10 text-[12px] font-semibold text-neutral-500 dark:text-white/40 uppercase tracking-wider">
-                                <th className="px-6 py-4">Worker & Session</th>
+                                <th className="px-6 py-4">Username & Session</th>
                                 <th className="px-6 py-4">Status</th>
                                 <th className="px-6 py-4">Date</th>
                                 <th className="px-6 py-4 text-right">Time Log</th>
@@ -145,7 +145,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                                                     </div>
                                                     <div>
                                                         <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90 group-hover:text-[#34A853] transition-colors">
-                                                            {log.worker_name}
+                                                            @{log.worker_name}
                                                         </p>
                                                         <div className="flex items-center gap-2 mt-0.5 text-[12px] text-neutral-500 dark:text-white/50">
                                                             <span>{log.department}</span>

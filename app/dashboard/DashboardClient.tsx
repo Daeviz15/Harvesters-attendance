@@ -59,7 +59,7 @@ function formatTime12h(isoString: string): string {
 interface SidebarContentProps {
     setIsMobileMenuOpen: (open: boolean) => void;
     setIsLeaveModalOpen: (open: boolean) => void;
-    fullName: string;
+    username: string;
     initials: string;
     department: string;
     avatarUrl?: string | null;
@@ -69,7 +69,7 @@ interface SidebarContentProps {
     onLoadMore: () => void;
 }
 
-const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, initials, department, avatarUrl, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, initials, department, avatarUrl, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
@@ -93,13 +93,13 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, in
         <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 mb-10 min-w-0">
             <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853] shrink-0 relative overflow-hidden">
                 {avatarUrl ? (
-                    <Image src={avatarUrl} alt={fullName} fill className="object-cover" sizes="48px" />
+                    <Image src={avatarUrl} alt={username} fill className="object-cover" sizes="48px" />
                 ) : (
                     initials
                 )}
             </div>
             <div className="min-w-0 flex-1">
-                <p className="text-[15px] font-semibold text-neutral-800 dark:text-white/90 truncate" title={fullName}>{fullName}</p>
+                <p className="text-[15px] font-semibold text-neutral-800 dark:text-white/90 truncate" title={username}>{username}</p>
                 <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium truncate" title={department}>{department}</p>
             </div>
         </div>
@@ -176,8 +176,7 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, fullName, in
 
 interface DashboardClientProps {
     userId: string;
-    firstName: string;
-    fullName: string;
+    username: string;
     initials: string;
     department: string;
     avatarUrl?: string | null;
@@ -192,7 +191,7 @@ interface DashboardClientProps {
 }
 
 export default function DashboardClient({
-    userId, firstName, fullName, initials, department, avatarUrl,
+    userId, username, initials, department, avatarUrl,
     initialIsCheckedIn, checkInTime, serverTime,
     initialHistory, initialHasMore, initialLiveFeed, initialBroadcastSession, activeLocations
 }: DashboardClientProps) {
@@ -441,7 +440,7 @@ export default function DashboardClient({
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-neutral-200 dark:border-white/10 bg-neutral-100/40 dark:bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} fullName={fullName} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -462,7 +461,7 @@ export default function DashboardClient({
                             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                             className="fixed inset-y-0 left-0 w-[280px] bg-neutral-50 dark:bg-[#0f0f0f] border-r border-neutral-200 dark:border-white/10 p-6 flex flex-col z-50 md:hidden shadow-2xl"
                         >
-                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} fullName={fullName} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
                         </motion.aside>
                     </>
                 )}
@@ -514,7 +513,7 @@ export default function DashboardClient({
                     {/* Left Column: Action & Welcome */}
                     <div className="flex-1 flex flex-col">
                         <div className="mb-12">
-                            <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-2">{getGreeting()}, {firstName}.</h1>
+                            <h1 className="text-[28px] md:text-[34px] font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-2 leading-tight">{getGreeting()}, {username}!</h1>
                             <p className="text-[15px] text-neutral-500 dark:text-white/50">Ready to serve today? Mark your attendance below.</p>
                         </div>
 

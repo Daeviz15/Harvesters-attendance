@@ -92,16 +92,16 @@ export default function SignupPage() {
                             {state.error}
                         </div>
                     )}
-                    {/* Your Name */}
+                    {/* Username */}
                     <div className="relative group">
-                        <label className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 dark:text-white/50 block mb-2">Your Name</label>
+                        <label className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 dark:text-white/50 block mb-2">Username</label>
                         <div className="flex items-center border-b border-neutral-300 dark:border-white/10 group-focus-within:border-neutral-500 dark:group-focus-within:border-white/40 transition-colors pb-2">
                             <input
                                 type="text"
-                                name="name"
+                                name="username"
                                 required
                                 className="w-full bg-transparent text-neutral-800 dark:text-white text-[15px] focus:outline-none placeholder:text-neutral-400 dark:placeholder:text-white/20"
-                                placeholder="David Doe"
+                                placeholder="e.g. johndoe123"
                             />
                             <User className="w-5 h-5 text-neutral-400 dark:text-white/30 ml-3" />
                         </div>

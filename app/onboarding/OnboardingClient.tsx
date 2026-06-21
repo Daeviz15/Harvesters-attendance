@@ -10,7 +10,7 @@ import LoadingOverlay from "@/components/LoadingOverlay";
 import ThemeToggle from "@/components/ThemeToggle";
 
 interface OnboardingClientProps {
-    firstName: string;
+    initialUsername: string;
     userId: string;
 }
 
@@ -20,8 +20,9 @@ const DEPARTMENTS = [
     "Sanitation", "Parking", "Prayer", "Follow-Up / Counseling"
 ];
 
-export default function OnboardingClient({ firstName, userId }: OnboardingClientProps) {
+export default function OnboardingClient({ initialUsername, userId }: OnboardingClientProps) {
     const [state, formAction, isPending] = useActionState(completeOnboarding, null);
+    const [username, setUsername] = useState(initialUsername);
     const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -107,7 +108,7 @@ export default function OnboardingClient({ firstName, userId }: OnboardingClient
                             priority
                         />
                     </div>
-                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-3">Welcome, {firstName}!</h1>
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-3">Welcome!</h1>
                     <p className="text-[15px] text-neutral-500 dark:text-white/50 max-w-md">Let's get your profile set up so you can start checking in for your service shifts.</p>
                 </div>
 
@@ -117,6 +118,29 @@ export default function OnboardingClient({ firstName, userId }: OnboardingClient
                             {state.error}
                         </div>
                     )}
+
+                    {/* Username Input */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-4">
+                            <Users className="w-5 h-5 text-[#34A853]" />
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Choose a Username</label>
+                        </div>
+                        <div className="relative group max-w-md">
+                            <div className="flex items-center border-b border-neutral-300 dark:border-white/10 group-focus-within:border-[#34A853]/50 transition-colors pb-3">
+                                <span className="text-neutral-500 dark:text-white/40 text-[15px] mr-2">@</span>
+                                <input
+                                    type="text"
+                                    name="username"
+                                    required
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                                    className="w-full bg-transparent text-neutral-800 dark:text-white text-[16px] focus:outline-none placeholder:text-neutral-400 dark:placeholder:text-white/20 tracking-wide"
+                                    placeholder="coolworker"
+                                />
+                            </div>
+                            <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">Letters, numbers, and underscores only.</p>
+                        </div>
+                    </div>
 
                     {/* Profile Picture Upload */}
                     <div>
@@ -210,10 +234,9 @@ export default function OnboardingClient({ firstName, userId }: OnboardingClient
                         </div>
                     </div>
 
-                    {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={isPending || selectedDepts.length === 0 || isUploading || !avatarUrl}
+                        disabled={isPending || selectedDepts.length === 0 || isUploading || !avatarUrl || !username}
                         className="w-full flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2e9347] disabled:opacity-40 disabled:hover:bg-[#34A853] text-white py-4 rounded-xl font-bold tracking-widest text-[14px] uppercase transition-all duration-300 shadow-lg hover:shadow-xl mt-8"
                     >
                         {isPending ? "Setting up..." : "Complete Setup"}

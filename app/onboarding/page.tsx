@@ -17,14 +17,13 @@ export default async function OnboardingPage() {
         redirect('/dashboard');
     }
 
-    // Parse first name
-    let firstName = "User";
+    // Parse initial username
+    let initialUsername = "";
     if (user.user_metadata?.name) {
-        const fullName = user.user_metadata.name as string;
-        firstName = fullName.trim().split(' ')[0];
+        initialUsername = user.user_metadata.name as string;
     } else if (user.email) {
-        firstName = user.email.split('@')[0];
+        initialUsername = user.email.split('@')[0];
     }
 
-    return <OnboardingClient firstName={firstName} userId={user.id} />;
+    return <OnboardingClient initialUsername={initialUsername} userId={user.id} />;
 }

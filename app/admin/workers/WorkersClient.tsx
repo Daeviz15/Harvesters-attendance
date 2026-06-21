@@ -99,7 +99,7 @@ export default function WorkersClient({ workers, currentPage, totalPages, totalC
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-neutral-50/50 dark:bg-white/[0.02] border-b border-neutral-200 dark:border-white/10 text-[12px] font-semibold text-neutral-500 dark:text-white/40 uppercase tracking-wider">
-                                <th className="px-6 py-4">Worker</th>
+                                <th className="px-6 py-4">Username</th>
                                 <th className="px-6 py-4">Department</th>
                                 <th className="px-6 py-4">Role</th>
                                 <th className="px-6 py-4">Registered On</th>
@@ -128,7 +128,7 @@ export default function WorkersClient({ workers, currentPage, totalPages, totalC
                                                     </div>
                                                     <div>
                                                         <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90 group-hover:text-[#34A853] transition-colors">
-                                                            {worker.first_name} {worker.last_name}
+                                                            @{worker.first_name}
                                                         </p>
                                                     </div>
                                                 </div>

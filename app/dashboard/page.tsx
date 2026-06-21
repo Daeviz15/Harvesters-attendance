@@ -20,30 +20,21 @@ export default async function DashboardServerPage() {
         .single();
 
     // Default values
-    let firstName = "User";
-    let fullName = "User";
+    let username = "User";
     let initials = "U";
     let department = "Worker";
 
     if (profile) {
-        // Use true database profile data
-        firstName = profile.first_name || "User";
-        const lastName = profile.last_name || "";
-        fullName = `${firstName} ${lastName}`.trim();
+        // Use true database profile data (where first_name now stores the username)
+        username = profile.first_name || "User";
         department = profile.department || "Worker";
-
-        if (firstName && lastName) {
-            initials = `${firstName[0]}${lastName[0]}`.toUpperCase();
-        } else if (firstName) {
-            initials = `${firstName[0]}${firstName[1] || ''}`.toUpperCase();
-        }
+        initials = username.substring(0, 2).toUpperCase();
     } else {
         // Fallback for legacy test accounts created before the trigger existed
         if (user.user_metadata?.department) department = user.user_metadata.department;
         if (user.email) {
-            firstName = user.email.split('@')[0];
-            fullName = firstName;
-            initials = firstName.substring(0, 2).toUpperCase();
+            username = user.email.split('@')[0];
+            initials = username.substring(0, 2).toUpperCase();
         }
     }
 
@@ -105,8 +96,7 @@ export default async function DashboardServerPage() {
     return (
         <DashboardClient
             userId={user.id}
-            firstName={firstName}
-            fullName={fullName}
+            username={username}
             initials={initials}
             department={department}
             initialIsCheckedIn={!!activeSession}

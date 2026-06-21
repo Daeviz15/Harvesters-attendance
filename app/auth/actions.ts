@@ -30,7 +30,7 @@ export async function login(prevState: any, formData: FormData) {
 export async function signup(prevState: any, formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
-  const name = formData.get('name') as string
+  const username = formData.get('username') as string
 
   if (!email || !password) {
     return { error: 'Email and password are required' }
@@ -43,7 +43,7 @@ export async function signup(prevState: any, formData: FormData) {
     password,
     options: {
       data: {
-        name: name || '',
+        name: username || '',
       },
     },
   })
@@ -60,9 +60,10 @@ export async function completeOnboarding(prevState: any, formData: FormData) {
   const department = formData.get('department') as string
   const phone = formData.get('phone') as string
   const avatarUrl = formData.get('avatarUrl') as string | null
+  const username = formData.get('username') as string
 
-  if (!department || !phone || !avatarUrl) {
-    return { error: 'Department, phone number, and profile picture are required.' }
+  if (!department || !phone || !avatarUrl || !username) {
+    return { error: 'Username, department, phone number, and profile picture are required.' }
   }
 
   // Validate that phone contains exactly 10 digits
@@ -83,6 +84,8 @@ export async function completeOnboarding(prevState: any, formData: FormData) {
   const { error: dbError } = await supabase
     .from('profiles')
     .update({
+      first_name: username,
+      last_name: "", // Clear out any real last name captured by Google
       department,
       phone: `+234${phoneDigitsOnly}`,
       avatar_url: avatarUrl || null,
