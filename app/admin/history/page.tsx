@@ -6,11 +6,20 @@ export const metadata = {
     title: "Global Attendance History | Admin Portal",
 };
 
+const HISTORY_PAGE_SIZE = 20;
+
+type HistoryProfile = {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    avatar_url: string | null;
+};
+
 export default async function HistoryPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
     const searchParams = await props.searchParams;
-    const page = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
+    const parsedPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
+    const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const search = typeof searchParams.search === 'string' ? searchParams.search : '';
-    const pageSize = 20;
 
     const supabase = await createClient();
 
@@ -54,8 +63,8 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
         }
     }
 
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
+    const from = (page - 1) * HISTORY_PAGE_SIZE;
+    const to = from + HISTORY_PAGE_SIZE - 1;
 
     const { data: logs, count, error } = await query
         .order('check_in_time', { ascending: false })
@@ -66,7 +75,7 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
     }
 
     // 3. Fetch the profile details for the fetched logs
-    let profilesMap: Record<string, any> = {};
+    let profilesMap: Record<string, HistoryProfile> = {};
     if (logs && logs.length > 0) {
         const userIdsToFetch = Array.from(new Set(logs.map(log => log.user_id)));
         const { data: profilesData } = await supabase
@@ -78,11 +87,11 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
             profilesMap = profilesData.reduce((acc, p) => {
                 acc[p.id] = p;
                 return acc;
-            }, {} as Record<string, any>);
+            }, {} as Record<string, HistoryProfile>);
         }
     }
 
-    const totalPages = count ? Math.ceil(count / pageSize) : 1;
+    const totalPages = count ? Math.ceil(count / HISTORY_PAGE_SIZE) : 1;
 
     // Transform data safely for the client
     const formattedLogs = (logs || []).map(log => {
@@ -109,6 +118,7 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
             totalPages={totalPages} 
             totalCount={count || 0}
             initialSearch={search}
+            pageSize={HISTORY_PAGE_SIZE}
         />
     );
 }

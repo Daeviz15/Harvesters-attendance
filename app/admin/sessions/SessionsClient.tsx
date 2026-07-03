@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Activity, Calendar, Play, Square, Users, Clock, Loader2, AlertTriangle, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Activity, Calendar, Play, Square, Clock, Loader2, AlertTriangle, X } from "lucide-react";
 import { beginSession, endSession } from "./actions";
 import { createClient } from "@/utils/supabase/client";
 
@@ -10,14 +11,80 @@ type EventType = {
     id: string;
     title: string;
     description: string | null;
+    recurrence_day: string | null;
+    recurrence_month: number | null;
+    recurrence_month_day: number | null;
+    schedule_frequency: "once" | "daily" | "weekly" | "monthly" | "yearly" | null;
+    start_date: string | null;
+    start_time: string | null;
+    end_time: string | null;
 };
 
 type ActiveSessionType = {
     id: string;
     event_id: string;
     start_time: string;
+    scheduled_start_at: string | null;
+    scheduled_end_at: string | null;
+    started_by_mode: "manual" | "auto" | null;
+    ended_by_mode: "manual" | "auto" | null;
     event: { title: string };
 };
+
+const frequencyLabels = {
+    once: "One-time",
+    daily: "Daily",
+    weekly: "Weekly",
+    monthly: "Monthly",
+    yearly: "Yearly",
+};
+
+const monthLabels = [
+    "",
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+function formatEventTime(value: string | null) {
+    if (!value) return "09:00";
+    const [hours, minutes] = value.slice(0, 5).split(":").map(Number);
+    const date = new Date();
+    date.setHours(hours, minutes, 0, 0);
+    return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function formatSessionDateTime(value: string | null) {
+    if (!value) return null;
+    return new Date(value).toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    });
+}
+
+function getEventSchedule(event: EventType) {
+    const frequency = event.schedule_frequency || (event.recurrence_day ? "weekly" : "once");
+    const label = frequencyLabels[frequency];
+    const time = `${formatEventTime(event.start_time)} - ${formatEventTime(event.end_time || "11:00")}`;
+
+    if (frequency === "weekly" && event.recurrence_day) return `${label} on ${event.recurrence_day} at ${time}`;
+    if (frequency === "monthly" && event.recurrence_month_day) return `${label} on day ${event.recurrence_month_day} at ${time}`;
+    if (frequency === "yearly" && event.recurrence_month && event.recurrence_month_day) {
+        return `${label} on ${monthLabels[event.recurrence_month]} ${event.recurrence_month_day} at ${time}`;
+    }
+    return `${label} at ${time}`;
+}
 
 export default function SessionsClient({ 
     events, 
@@ -26,11 +93,26 @@ export default function SessionsClient({
     events: EventType[], 
     activeSessions: ActiveSessionType[] 
 }) {
-    const supabase = createClient();
-    const [activeSessions, setActiveSessions] = useState<ActiveSessionType[]>(initialActiveSessions);
+    const router = useRouter();
+    const supabase = useMemo(() => createClient(), []);
+    const activeSessions = initialActiveSessions;
     const [isSubmitting, setIsSubmitting] = useState<string | null>(null); // Stores eventId or sessionId being processed
     const [sessionToEnd, setSessionToEnd] = useState<string | null>(null);
     const [liveCounts, setLiveCounts] = useState<Record<string, number>>({}); // sessionId -> count
+    const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const refreshSessions = useCallback(() => {
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = setTimeout(() => {
+            router.refresh();
+        }, 150);
+    }, [router]);
+
+    useEffect(() => {
+        return () => {
+            if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+        };
+    }, []);
 
     // Fetch initial live counts for all active sessions
     useEffect(() => {
@@ -93,6 +175,27 @@ export default function SessionsClient({
         };
     }, [activeSessions, supabase]);
 
+    // Subscribe to session lifecycle changes created by admins or the database scheduler.
+    useEffect(() => {
+        const channel = supabase.channel('admin-session-lifecycle')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'attendance_sessions'
+                },
+                () => {
+                    refreshSessions();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [refreshSessions, supabase]);
+
 
     const handleBeginSession = async (eventId: string) => {
         setIsSubmitting(eventId);
@@ -101,7 +204,8 @@ export default function SessionsClient({
             alert(result.error);
             setIsSubmitting(null);
         } else {
-            window.location.reload();
+            setIsSubmitting(null);
+            refreshSessions();
         }
     };
 
@@ -119,7 +223,9 @@ export default function SessionsClient({
             setIsSubmitting(null);
             setSessionToEnd(null);
         } else {
-            window.location.reload();
+            setIsSubmitting(null);
+            setSessionToEnd(null);
+            refreshSessions();
         }
     };
 
@@ -167,6 +273,9 @@ export default function SessionsClient({
                                             <span className="px-2 py-0.5 rounded-full bg-red-500/10 text-red-600 dark:text-red-400 text-xs font-bold uppercase tracking-wide">
                                                 Broadcasting
                                             </span>
+                                            <span className="px-2 py-0.5 rounded-full bg-[#34A853]/10 text-[#34A853] text-xs font-bold uppercase tracking-wide">
+                                                {session.started_by_mode === "auto" ? "Auto-started" : "Manual"}
+                                            </span>
                                             <span className="text-neutral-400 text-xs flex items-center gap-1">
                                                 <Clock className="w-3 h-3" /> {getDuration(session.start_time)}
                                             </span>
@@ -174,6 +283,11 @@ export default function SessionsClient({
                                         <h3 className="font-bold text-xl text-neutral-900 dark:text-white">
                                             {session.event.title}
                                         </h3>
+                                        {session.scheduled_end_at && (
+                                            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+                                                Auto closes {formatSessionDateTime(session.scheduled_end_at)}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -238,6 +352,9 @@ export default function SessionsClient({
                                         <h3 className="font-semibold text-neutral-900 dark:text-white line-clamp-1">
                                             {event.title}
                                         </h3>
+                                        <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                                            {getEventSchedule(event)}
+                                        </p>
                                     </div>
                                     
                                     <button

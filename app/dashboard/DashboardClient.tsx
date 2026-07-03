@@ -3,11 +3,11 @@
 import { useState, useEffect, useTransition, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-    MapPin, WifiOff, Clock, Calendar, CheckCircle2,
+    MapPin, Clock, Calendar, CheckCircle2,
     CircleDashed, LogOut, Menu, X, Users, CalendarDays,
-    AlertTriangle, Loader2, History
+    AlertTriangle, Loader2, History, Crown
 } from "lucide-react";
 import LeaveRequestModal from "@/components/LeaveRequestModal";
 import LoadingOverlay from "@/components/LoadingOverlay";
@@ -63,13 +63,14 @@ interface SidebarContentProps {
     initials: string;
     department: string;
     avatarUrl?: string | null;
+    headDepartmentName: string | null;
     history: AttendanceLog[];
     hasMore: boolean;
     isLoadingMore: boolean;
     onLoadMore: () => void;
 }
 
-const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, initials, department, avatarUrl, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, initials, department, avatarUrl, headDepartmentName, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
@@ -101,6 +102,12 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, in
             <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-semibold text-neutral-800 dark:text-white/90 truncate" title={username}>{username}</p>
                 <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium truncate" title={department}>{department}</p>
+                {headDepartmentName && (
+                    <div className="mt-1 inline-flex max-w-full items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                        <Crown className="w-3 h-3 shrink-0" />
+                        <span className="truncate" title={`${headDepartmentName} Head`}>Department Head</span>
+                    </div>
+                )}
             </div>
         </div>
 
@@ -188,13 +195,15 @@ interface DashboardClientProps {
     initialLiveFeed: LiveFeedEvent[];
     initialBroadcastSession: { id: string, title: string } | null;
     activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[];
+    headDepartmentName: string | null;
 }
 
 export default function DashboardClient({
     userId, username, initials, department, avatarUrl,
     initialIsCheckedIn, checkInTime, serverTime,
-    initialHistory, initialHasMore, initialLiveFeed, initialBroadcastSession, activeLocations
+    initialHistory, initialHasMore, initialLiveFeed, initialBroadcastSession, activeLocations, headDepartmentName
 }: DashboardClientProps) {
+    const router = useRouter();
     const geo = useGeolocation(activeLocations);
     const [isPending, startTransition] = useTransition();
 
@@ -205,7 +214,7 @@ export default function DashboardClient({
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
 
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
-    const [gracePeriodRemaining, setGracePeriodRemaining] = useState<number | null>(null);
+    const [gracePeriodRemaining] = useState<number | null>(null);
 
     // Attendance history state (cursor-based pagination)
     const [history, setHistory] = useState<AttendanceLog[]>(initialHistory);
@@ -217,12 +226,25 @@ export default function DashboardClient({
 
     // Refs for timer logic to avoid constant interval recreation
     const geoRef = useRef(geo);
-    const timeWentOutsideRef = useRef<number | null>(null);
     const isCheckedInRef = useRef(isCheckedIn);
+    const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Keep refs synced with state
     useEffect(() => { geoRef.current = geo; }, [geo]);
     useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
+
+    const refreshDashboard = useCallback(() => {
+        if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = setTimeout(() => {
+            router.refresh();
+        }, 150);
+    }, [router]);
+
+    useEffect(() => {
+        return () => {
+            if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+        };
+    }, []);
 
     /**
      * Loads the next page of attendance history using cursor-based pagination.
@@ -293,23 +315,17 @@ export default function DashboardClient({
                 schema: 'public',
                 table: 'attendance_sessions'
             }, (payload) => {
-                if (payload.eventType === 'UPDATE' && payload.new.status === 'completed') {
-                    // Instantly drop the session from UI when admin ends it
+                if (payload.eventType === 'UPDATE' && payload.new.status !== 'active') {
                     setBroadcastSession(null);
-                } else if (payload.eventType === 'INSERT' && payload.new.status === 'active') {
-                    // For new sessions, we need the event title, so a reload guarantees fresh joined data
-                    window.location.reload();
-                } else {
-                    // Fallback reload for safety
-                    window.location.reload();
                 }
+                refreshDashboard();
             })
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [userId, refreshHistory]);
+    }, [userId, refreshHistory, refreshDashboard]);
 
     // Polling heartbeat: verify broadcast session is still alive every 60 seconds.
     // This is the ultimate safety net — even if WebSockets fail, the UI will
@@ -350,6 +366,7 @@ export default function DashboardClient({
     // Simulated Timer for active shift (with client-server clock drift correction)
     useEffect(() => {
         let interval: NodeJS.Timeout;
+        let initialTimer: ReturnType<typeof setTimeout> | undefined;
         if (isCheckedIn && checkInTime) {
             const clientNow = Date.now();
             const serverStart = new Date(serverTime).getTime();
@@ -362,15 +379,18 @@ export default function DashboardClient({
                 return Math.max(0, Math.floor((adjustedNow - start) / 1000));
             };
 
-            setElapsedSeconds(getElapsed());
+            initialTimer = setTimeout(() => setElapsedSeconds(getElapsed()), 0);
 
             interval = setInterval(() => {
                 setElapsedSeconds(getElapsed());
             }, 1000);
         } else {
-            setElapsedSeconds(0);
+            initialTimer = setTimeout(() => setElapsedSeconds(0), 0);
         }
-        return () => clearInterval(interval);
+        return () => {
+            if (initialTimer) clearTimeout(initialTimer);
+            clearInterval(interval);
+        };
     }, [isCheckedIn, checkInTime, serverTime]);
 
     const formatTime = (totalSeconds: number) => {
@@ -440,7 +460,7 @@ export default function DashboardClient({
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-neutral-200 dark:border-white/10 bg-neutral-100/40 dark:bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -461,7 +481,7 @@ export default function DashboardClient({
                             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                             className="fixed inset-y-0 left-0 w-[280px] bg-neutral-50 dark:bg-[#0f0f0f] border-r border-neutral-200 dark:border-white/10 p-6 flex flex-col z-50 md:hidden shadow-2xl"
                         >
-                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
                         </motion.aside>
                     </>
                 )}

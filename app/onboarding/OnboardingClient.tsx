@@ -12,18 +12,17 @@ import ThemeToggle from "@/components/ThemeToggle";
 interface OnboardingClientProps {
     initialUsername: string;
     userId: string;
+    departments: {
+        id: string;
+        name: string;
+        description: string | null;
+    }[];
 }
 
-const DEPARTMENTS = [
-    "Ushering", "Choir / Music", "Media / AV", "Protocol",
-    "Children's Church", "Security", "Technical", "Hospitality",
-    "Sanitation", "Parking", "Prayer", "Follow-Up / Counseling"
-];
-
-export default function OnboardingClient({ initialUsername, userId }: OnboardingClientProps) {
+export default function OnboardingClient({ initialUsername, userId, departments }: OnboardingClientProps) {
     const [state, formAction, isPending] = useActionState(completeOnboarding, null);
     const [username, setUsername] = useState(initialUsername);
-    const [selectedDepts, setSelectedDepts] = useState<string[]>([]);
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
@@ -48,7 +47,7 @@ export default function OnboardingClient({ initialUsername, userId }: Onboarding
             const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
             const filePath = `${userId}/${fileName}`;
 
-            const { data, error } = await supabase.storage
+            const { error } = await supabase.storage
                 .from('avatars')
                 .upload(filePath, file, { upsert: true });
 
@@ -59,20 +58,12 @@ export default function OnboardingClient({ initialUsername, userId }: Onboarding
                 .getPublicUrl(filePath);
 
             setAvatarUrl(publicUrlData.publicUrl);
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('Error uploading image:', error);
-            setUploadError(error.message || "Failed to upload image. Please try again.");
+            setUploadError(error instanceof Error ? error.message : "Failed to upload image. Please try again.");
         } finally {
             setIsUploading(false);
         }
-    };
-
-    const toggleDepartment = (dept: string) => {
-        setSelectedDepts(prev =>
-            prev.includes(dept)
-                ? prev.filter(d => d !== dept)
-                : [...prev, dept]
-        );
     };
 
     return (
@@ -109,7 +100,7 @@ export default function OnboardingClient({ initialUsername, userId }: Onboarding
                         />
                     </div>
                     <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-3">Welcome!</h1>
-                    <p className="text-[15px] text-neutral-500 dark:text-white/50 max-w-md">Let's get your profile set up so you can start checking in for your service shifts.</p>
+                    <p className="text-[15px] text-neutral-500 dark:text-white/50 max-w-md">Let&apos;s get your profile set up so you can start checking in for your service shifts.</p>
                 </div>
 
                 <form action={formAction} className="space-y-10">
@@ -184,29 +175,44 @@ export default function OnboardingClient({ initialUsername, userId }: Onboarding
                     <div>
                         <div className="flex items-center gap-2 mb-6">
                             <Users className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Which department(s) do you serve in?</label>
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Which department do you primarily serve in?</label>
                         </div>
 
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                            {DEPARTMENTS.map((dept) => (
-                                <button
-                                    key={dept}
-                                    type="button"
-                                    onClick={() => toggleDepartment(dept)}
-                                    className={`relative p-4 rounded-2xl border text-left transition-all duration-200 ${selectedDepts.includes(dept)
-                                            ? "bg-[#34A853]/10 border-[#34A853]/40 text-[#34A853] dark:text-white font-semibold"
-                                            : "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-600 dark:text-white/50 hover:bg-neutral-200/80 dark:hover:bg-white/10"
-                                        }`}
-                                >
-                                    <span className="text-[13px] font-medium leading-snug block pr-6">{dept}</span>
-                                    {selectedDepts.includes(dept) && (
-                                        <CheckCircle2 className="w-4 h-4 text-[#34A853] absolute top-4 right-3" />
-                                    )}
-                                </button>
-                            ))}
-                        </div>
-                        {/* Hidden input to pass the selected department to the server action */}
-                        <input type="hidden" name="department" value={selectedDepts.join(", ")} required={selectedDepts.length === 0 ? true : undefined} />
+                        {departments.length === 0 ? (
+                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-[13px] text-amber-700 dark:text-amber-300">
+                                No active departments are available yet. Please contact an administrator to add departments before completing onboarding.
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                {departments.map((department) => {
+                                    const isSelected = selectedDepartmentId === department.id;
+
+                                    return (
+                                        <button
+                                            key={department.id}
+                                            type="button"
+                                            aria-pressed={isSelected}
+                                            onClick={() => setSelectedDepartmentId(department.id)}
+                                            className={`relative min-h-20 p-4 rounded-2xl border text-left transition-all duration-200 ${isSelected
+                                                    ? "bg-[#34A853]/10 border-[#34A853]/40 text-[#34A853] dark:text-white font-semibold"
+                                                    : "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-600 dark:text-white/50 hover:bg-neutral-200/80 dark:hover:bg-white/10"
+                                                }`}
+                                        >
+                                            <span className="text-[13px] font-medium leading-snug block pr-6">{department.name}</span>
+                                            {department.description && (
+                                                <span className="mt-1 text-[11px] leading-snug block text-neutral-500 dark:text-white/40 pr-6">
+                                                    {department.description}
+                                                </span>
+                                            )}
+                                            {isSelected && (
+                                                <CheckCircle2 className="w-4 h-4 text-[#34A853] absolute top-4 right-3" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        <input type="hidden" name="departmentId" value={selectedDepartmentId} required />
                     </div>
 
                     {/* Phone Number Input */}
@@ -236,7 +242,7 @@ export default function OnboardingClient({ initialUsername, userId }: Onboarding
 
                     <button
                         type="submit"
-                        disabled={isPending || selectedDepts.length === 0 || isUploading || !avatarUrl || !username}
+                        disabled={isPending || !selectedDepartmentId || isUploading || !avatarUrl || !username}
                         className="w-full flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2e9347] disabled:opacity-40 disabled:hover:bg-[#34A853] text-white py-4 rounded-xl font-bold tracking-widest text-[14px] uppercase transition-all duration-300 shadow-lg hover:shadow-xl mt-8"
                     >
                         {isPending ? "Setting up..." : "Complete Setup"}

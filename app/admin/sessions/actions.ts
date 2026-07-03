@@ -3,6 +3,10 @@
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
 
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "An unexpected error occurred.";
+}
+
 // Helper to securely verify admin role
 async function verifyAdminServer() {
     const supabase = await createClient();
@@ -26,31 +30,17 @@ async function verifyAdminServer() {
 export async function beginSession(eventId: string) {
     try {
         const { supabase, user } = await verifyAdminServer();
-        
-        // Check if there is already an active session for this event
-        const { data: existingSession } = await supabase
-            .from('attendance_sessions')
-            .select('id')
-            .eq('event_id', eventId)
-            .eq('status', 'active')
-            .maybeSingle();
 
-        if (existingSession) {
-            return { error: "An active session already exists for this event." };
-        }
-
-        // Insert new active session
-        const { error } = await supabase
-            .from('attendance_sessions')
-            .insert([{ 
-                event_id: eventId,
-                created_by: user.id,
-                status: 'active'
-            }]);
+        const { error } = await supabase.rpc('start_attendance_session', {
+            event_uuid: eventId,
+            actor_uuid: user.id,
+        });
 
         if (error) {
             console.error("Begin Session Error:", error);
-            // The unique constraint will block concurrent creation attempts
+            if (error.code === '42883') {
+                return { error: "Session automation migration is missing. Run supabase_session_automation_migration.sql first." };
+            }
             if (error.code === '23505') {
                 return { error: "An active session already exists for this event." };
             }
@@ -59,9 +49,10 @@ export async function beginSession(eventId: string) {
 
         revalidatePath("/admin/sessions");
         revalidatePath("/admin");
+        revalidatePath("/dashboard");
         return { success: true };
-    } catch (e: any) {
-        return { error: e.message || "An unexpected error occurred." };
+    } catch (e: unknown) {
+        return { error: getErrorMessage(e) };
     }
 }
 
@@ -69,21 +60,23 @@ export async function endSession(sessionId: string) {
     try {
         const { supabase } = await verifyAdminServer();
         
-        // Call the secure RPC function to end the session and auto-checkout users
-        // The RPC uses SECURITY DEFINER but internally checks is_admin(), making it 100% secure.
         const { error } = await supabase.rpc('end_attendance_session', {
-            session_uuid: sessionId
+            session_uuid: sessionId,
         });
 
         if (error) {
             console.error("End Session Error:", error);
+            if (error.code === '42883') {
+                return { error: "Session automation migration is missing. Run supabase_session_automation_migration.sql first." };
+            }
             return { error: "Failed to end session. It may have already ended." };
         }
 
         revalidatePath("/admin/sessions");
         revalidatePath("/admin");
+        revalidatePath("/dashboard");
         return { success: true };
-    } catch (e: any) {
-        return { error: e.message || "An unexpected error occurred." };
+    } catch (e: unknown) {
+        return { error: getErrorMessage(e) };
     }
 }

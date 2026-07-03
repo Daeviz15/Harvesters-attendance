@@ -4,6 +4,13 @@ import DashboardClient from './DashboardClient';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog, LiveFeedEvent } from '@/lib/types';
 
+type BroadcastEventJoin = { title: string } | { title: string }[] | null;
+
+function getBroadcastTitle(event: BroadcastEventJoin) {
+    if (Array.isArray(event)) return event[0]?.title || 'Live Session';
+    return event?.title || 'Live Session';
+}
+
 export default async function DashboardServerPage() {
     const supabase = await createClient();
     const { data: { user }, error } = await supabase.auth.getUser();
@@ -55,9 +62,7 @@ export default async function DashboardServerPage() {
 
     const formattedBroadcast = activeBroadcastSession ? {
         id: activeBroadcastSession.id,
-        title: Array.isArray(activeBroadcastSession.event)
-            ? activeBroadcastSession.event[0].title
-            : (activeBroadcastSession.event as any)?.title || 'Live Session'
+        title: getBroadcastTitle(activeBroadcastSession.event)
     } : null;
 
     // Fetch initial attendance history (server-side, zero client latency)
@@ -93,8 +98,15 @@ export default async function DashboardServerPage() {
         .select('id, name, latitude, longitude, radius')
         .eq('is_active', true);
 
+    const { data: headedDepartment } = await supabase
+        .from('departments')
+        .select('name')
+        .eq('head_user_id', user.id)
+        .maybeSingle();
+
     return (
         <DashboardClient
+            key={`${formattedBroadcast?.id ?? 'no-broadcast'}:${activeSession?.id ?? 'not-checked-in'}:${activeSession?.check_in_time ?? 'no-check-in-time'}`}
             userId={user.id}
             username={username}
             initials={initials}
@@ -108,6 +120,7 @@ export default async function DashboardServerPage() {
             avatarUrl={profile?.avatar_url || null}
             initialBroadcastSession={formattedBroadcast}
             activeLocations={activeLocations || []}
+            headDepartmentName={headedDepartment?.name || null}
         />
     );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, Loader2, ChevronLeft, ChevronRight, Clock, MapPin, CalendarDays, CheckCircle2, CircleDashed } from "lucide-react";
+import { Search, Loader2, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, CircleDashed } from "lucide-react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 
@@ -23,9 +23,10 @@ interface HistoryClientProps {
     totalPages: number;
     totalCount: number;
     initialSearch: string;
+    pageSize: number;
 }
 
-export default function HistoryClient({ logs, currentPage, totalPages, totalCount, initialSearch }: HistoryClientProps) {
+export default function HistoryClient({ logs, currentPage, totalPages, totalCount, initialSearch, pageSize }: HistoryClientProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -55,7 +56,8 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
 
     // Reset searching state when data arrives
     useEffect(() => {
-        setIsSearching(false);
+        const timer = setTimeout(() => setIsSearching(false), 0);
+        return () => clearTimeout(timer);
     }, [logs]);
 
     const handlePageChange = (newPage: number) => {
@@ -64,6 +66,9 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
         params.set('page', newPage.toString());
         router.push(`${pathname}?${params.toString()}`);
     };
+
+    const pageStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+    const pageEnd = Math.min(currentPage * pageSize, totalCount);
 
     const formatTime = (isoString: string) => {
         return new Date(isoString).toLocaleTimeString('en-US', {
@@ -199,10 +204,13 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                 </div>
 
                 {/* Pagination Controls */}
-                {totalPages > 1 && (
-                    <div className="flex items-center justify-between px-6 py-4 border-t border-neutral-200 dark:border-white/10 bg-neutral-50/50 dark:bg-white/[0.02]">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-6 py-4 border-t border-neutral-200 dark:border-white/10 bg-neutral-50/50 dark:bg-white/[0.02]">
+                    <p className="text-[13px] text-neutral-500 dark:text-white/50">
+                        Showing <span className="font-semibold text-neutral-700 dark:text-white/80">{pageStart}</span>-<span className="font-semibold text-neutral-700 dark:text-white/80">{pageEnd}</span> of <span className="font-semibold text-neutral-700 dark:text-white/80">{totalCount}</span>
+                    </p>
+                    <div className="flex items-center gap-3">
                         <p className="text-[13px] text-neutral-500 dark:text-white/50">
-                            Showing page <span className="font-semibold text-neutral-700 dark:text-white/80">{currentPage}</span> of <span className="font-semibold text-neutral-700 dark:text-white/80">{totalPages}</span>
+                            Page <span className="font-semibold text-neutral-700 dark:text-white/80">{currentPage}</span> of <span className="font-semibold text-neutral-700 dark:text-white/80">{totalPages}</span>
                         </p>
                         <div className="flex items-center gap-2">
                             <button
@@ -221,7 +229,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                             </button>
                         </div>
                     </div>
-                )}
+                </div>
             </motion.div>
         </div>
     );

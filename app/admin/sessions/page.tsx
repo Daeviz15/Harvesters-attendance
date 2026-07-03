@@ -6,6 +6,17 @@ export const metadata = {
     title: "Session Controller | Admin Portal",
 };
 
+type ActiveSession = {
+    id: string;
+    event_id: string;
+    start_time: string;
+    scheduled_start_at: string | null;
+    scheduled_end_at: string | null;
+    started_by_mode: "manual" | "auto" | null;
+    ended_by_mode: "manual" | "auto" | null;
+    event: { title: string };
+};
+
 export default async function AdminSessionsPage() {
     const supabase = await createClient();
 
@@ -43,6 +54,10 @@ export default async function AdminSessionsPage() {
             id, 
             event_id, 
             start_time,
+            scheduled_start_at,
+            scheduled_end_at,
+            started_by_mode,
+            ended_by_mode,
             event:events (
                 title
             )
@@ -54,7 +69,7 @@ export default async function AdminSessionsPage() {
     }
 
     // Transform nested event relation
-    const formattedSessions = (activeSessions || []).map(session => ({
+    const formattedSessions: ActiveSession[] = (activeSessions || []).map(session => ({
         ...session,
         event: Array.isArray(session.event) ? session.event[0] : session.event,
     }));
@@ -62,7 +77,7 @@ export default async function AdminSessionsPage() {
     return (
         <SessionsClient 
             events={events || []} 
-            activeSessions={formattedSessions as any} 
+            activeSessions={formattedSessions} 
         />
     );
 }

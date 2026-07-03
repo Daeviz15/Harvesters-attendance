@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin } from "lucide-react";
+import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -15,42 +15,19 @@ const navLinks = [
     { name: "Events", href: "/admin/events", icon: Calendar },
     { name: "Live Session", href: "/admin/sessions", icon: Activity },
     { name: "Workers", href: "/admin/workers", icon: Users },
+    { name: "Departments", href: "/admin/departments", icon: Building2 },
     { name: "History", href: "/admin/history", icon: History },
     { name: "Locations", href: "/admin/locations", icon: MapPin },
 ];
 
-export default function AdminNavigation({
-    initial
+function AdminSidebarContent({
+    pathname,
+    onSignOut,
 }: {
-    initial: string;
+    pathname: string;
+    onSignOut: () => void;
 }) {
-    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-    const pathname = usePathname();
-    const router = useRouter();
-    const supabase = createClient();
-
-    // Close mobile menu when route changes
-    useEffect(() => {
-        setIsMobileMenuOpen(false);
-    }, [pathname]);
-
-    // Lock body scroll when mobile menu is open
-    useEffect(() => {
-        if (isMobileMenuOpen) {
-            document.body.style.overflow = "hidden";
-        } else {
-            document.body.style.overflow = "";
-        }
-        return () => { document.body.style.overflow = ""; };
-    }, [isMobileMenuOpen]);
-
-    const handleSignOut = async () => {
-        await supabase.auth.signOut();
-        router.push("/auth/login");
-        router.refresh();
-    };
-
-    const SidebarContent = () => (
+    return (
         <>
             {/* Logo */}
             <div className="h-20 flex items-center gap-3 px-6 border-b border-neutral-200 dark:border-white/10 shrink-0">
@@ -101,7 +78,7 @@ export default function AdminNavigation({
             {/* Logout Button */}
             <div className="p-4 border-t border-neutral-200 dark:border-white/10 shrink-0">
                 <button
-                    onClick={handleSignOut}
+                    onClick={onSignOut}
                     className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-medium"
                 >
                     <LogOut className="w-5 h-5" />
@@ -110,12 +87,45 @@ export default function AdminNavigation({
             </div>
         </>
     );
+}
+
+export default function AdminNavigation({
+    initial
+}: {
+    initial: string;
+}) {
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const pathname = usePathname();
+    const router = useRouter();
+    const supabase = createClient();
+
+    // Close mobile menu when route changes
+    useEffect(() => {
+        const timer = setTimeout(() => setIsMobileMenuOpen(false), 0);
+        return () => clearTimeout(timer);
+    }, [pathname]);
+
+    // Lock body scroll when mobile menu is open
+    useEffect(() => {
+        if (isMobileMenuOpen) {
+            document.body.style.overflow = "hidden";
+        } else {
+            document.body.style.overflow = "";
+        }
+        return () => { document.body.style.overflow = ""; };
+    }, [isMobileMenuOpen]);
+
+    const handleSignOut = async () => {
+        await supabase.auth.signOut();
+        router.push("/auth/login");
+        router.refresh();
+    };
 
     return (
         <>
             {/* DESKTOP SIDEBAR */}
             <aside className="fixed inset-y-0 left-0 w-64 bg-background border-r border-neutral-200 dark:border-white/10 hidden md:flex flex-col z-50">
-                <SidebarContent />
+                <AdminSidebarContent pathname={pathname} onSignOut={handleSignOut} />
             </aside>
 
             {/* MOBILE HEADER */}
@@ -173,7 +183,7 @@ export default function AdminNavigation({
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <SidebarContent />
+                            <AdminSidebarContent pathname={pathname} onSignOut={handleSignOut} />
                         </motion.aside>
                     </>
                 )}

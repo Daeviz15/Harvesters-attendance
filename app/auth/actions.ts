@@ -3,8 +3,18 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import { z } from 'zod'
 
-export async function login(prevState: any, formData: FormData) {
+type ActionState = { error?: string } | null
+
+const onboardingSchema = z.object({
+  departmentId: z.uuid(),
+  phone: z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits.'),
+  avatarUrl: z.url(),
+  username: z.string().trim().min(2).max(32).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores.'),
+})
+
+export async function login(_prevState: ActionState, formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
 
@@ -27,7 +37,7 @@ export async function login(prevState: any, formData: FormData) {
   redirect('/dashboard')
 }
 
-export async function signup(prevState: any, formData: FormData) {
+export async function signup(_prevState: ActionState, formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
   const username = formData.get('username') as string
@@ -56,21 +66,21 @@ export async function signup(prevState: any, formData: FormData) {
   redirect('/onboarding')
 }
 
-export async function completeOnboarding(prevState: any, formData: FormData) {
-  const department = formData.get('department') as string
-  const phone = formData.get('phone') as string
-  const avatarUrl = formData.get('avatarUrl') as string | null
-  const username = formData.get('username') as string
+export async function completeOnboarding(_prevState: ActionState, formData: FormData) {
+  const rawData = {
+    departmentId: formData.get('departmentId'),
+    phone: ((formData.get('phone') as string | null) || '').replace(/\D/g, ''),
+    avatarUrl: formData.get('avatarUrl'),
+    username: formData.get('username'),
+  }
 
-  if (!department || !phone || !avatarUrl || !username) {
+  const validatedFields = onboardingSchema.safeParse(rawData)
+
+  if (!validatedFields.success) {
     return { error: 'Username, department, phone number, and profile picture are required.' }
   }
 
-  // Validate that phone contains exactly 10 digits
-  const phoneDigitsOnly = phone.replace(/\D/g, '')
-  if (phoneDigitsOnly.length !== 10) {
-    return { error: 'Phone number must be exactly 10 digits.' }
-  }
+  const { departmentId, phone, avatarUrl, username } = validatedFields.data
 
   const supabase = await createClient()
 
@@ -80,14 +90,26 @@ export async function completeOnboarding(prevState: any, formData: FormData) {
     return { error: 'Unauthorized. Please log in again.' }
   }
 
+  const { data: department, error: departmentError } = await supabase
+    .from('departments')
+    .select('id, name')
+    .eq('id', departmentId)
+    .eq('is_active', true)
+    .single()
+
+  if (departmentError || !department) {
+    return { error: 'Please select an active department.' }
+  }
+
   // 1. Update the profiles table (Production Database)
   const { error: dbError } = await supabase
     .from('profiles')
     .update({
       first_name: username,
       last_name: "", // Clear out any real last name captured by Google
-      department,
-      phone: `+234${phoneDigitsOnly}`,
+      department_id: department.id,
+      department: department.name,
+      phone: `+234${phone}`,
       avatar_url: avatarUrl || null,
       onboarding_complete: true,
       updated_at: new Date().toISOString()

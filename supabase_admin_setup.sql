@@ -18,8 +18,65 @@ CREATE TABLE events (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
+    recurrence_day TEXT,
+    schedule_frequency TEXT NOT NULL DEFAULT 'weekly' CHECK (schedule_frequency IN ('once', 'daily', 'weekly', 'monthly', 'yearly')),
+    start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    start_time TIME WITHOUT TIME ZONE NOT NULL DEFAULT '09:00',
+    end_time TIME WITHOUT TIME ZONE NOT NULL DEFAULT '11:00',
+    timezone TEXT NOT NULL DEFAULT 'Africa/Lagos',
+    recurrence_month INTEGER,
+    recurrence_month_day INTEGER,
+    recurrence_rule TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL
 );
+
+ALTER TABLE events
+ADD COLUMN IF NOT EXISTS recurrence_day TEXT,
+ADD COLUMN IF NOT EXISTS schedule_frequency TEXT NOT NULL DEFAULT 'weekly',
+ADD COLUMN IF NOT EXISTS start_date DATE NOT NULL DEFAULT CURRENT_DATE,
+ADD COLUMN IF NOT EXISTS start_time TIME WITHOUT TIME ZONE NOT NULL DEFAULT '09:00',
+ADD COLUMN IF NOT EXISTS end_time TIME WITHOUT TIME ZONE NOT NULL DEFAULT '11:00',
+ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Africa/Lagos',
+ADD COLUMN IF NOT EXISTS recurrence_month INTEGER,
+ADD COLUMN IF NOT EXISTS recurrence_month_day INTEGER,
+ADD COLUMN IF NOT EXISTS recurrence_rule TEXT,
+ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() NOT NULL;
+
+ALTER TABLE events
+DROP CONSTRAINT IF EXISTS events_schedule_frequency_check;
+
+ALTER TABLE events
+ADD CONSTRAINT events_schedule_frequency_check
+CHECK (schedule_frequency IN ('once', 'daily', 'weekly', 'monthly', 'yearly'));
+
+UPDATE events
+SET end_time = (COALESCE(start_time, TIME '09:00') + INTERVAL '2 hours')::TIME
+WHERE end_time IS NULL OR end_time <= start_time;
+
+ALTER TABLE events
+DROP CONSTRAINT IF EXISTS events_valid_time_range_check;
+
+ALTER TABLE events
+ADD CONSTRAINT events_valid_time_range_check
+CHECK (end_time > start_time);
+
+ALTER TABLE events
+DROP CONSTRAINT IF EXISTS events_recurrence_month_check;
+
+ALTER TABLE events
+ADD CONSTRAINT events_recurrence_month_check
+CHECK (recurrence_month IS NULL OR recurrence_month BETWEEN 1 AND 12);
+
+ALTER TABLE events
+DROP CONSTRAINT IF EXISTS events_recurrence_month_day_check;
+
+ALTER TABLE events
+ADD CONSTRAINT events_recurrence_month_day_check
+CHECK (recurrence_month_day IS NULL OR recurrence_month_day BETWEEN 1 AND 31);
+
+CREATE INDEX IF NOT EXISTS idx_events_schedule
+ON events (schedule_frequency, start_date, start_time, end_time);
 
 -- Enable RLS for Events
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;

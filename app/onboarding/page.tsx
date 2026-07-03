@@ -25,5 +25,21 @@ export default async function OnboardingPage() {
         initialUsername = user.email.split('@')[0];
     }
 
-    return <OnboardingClient initialUsername={initialUsername} userId={user.id} />;
+    const { data: departments, error: departmentsError } = await supabase
+        .from('departments')
+        .select('id, name, description')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
+    if (departmentsError) {
+        console.error('Failed to fetch departments:', departmentsError);
+    }
+
+    return (
+        <OnboardingClient
+            initialUsername={initialUsername}
+            userId={user.id}
+            departments={departments || []}
+        />
+    );
 }
