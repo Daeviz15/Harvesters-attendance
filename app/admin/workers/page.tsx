@@ -60,8 +60,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
 
     const headByWorkerId = new Map(
         departmentOptions
-            .filter((dept) => dept.head_user_id)
-            .map((dept) => [dept.head_user_id as string, { id: dept.id, name: dept.name }])
+            .filter((dept: any) => dept.head_user_id)
+            .map((dept: any) => [dept.head_user_id as string, { id: dept.id, name: dept.name }])
     );
 
     const formattedWorkers = (workers || []).map((worker) => {
