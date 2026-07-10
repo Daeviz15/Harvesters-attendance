@@ -27,7 +27,7 @@ export default async function OnboardingPage() {
 
     const { data: departments, error: departmentsError } = await supabase
         .from('departments')
-        .select('id, name, description')
+        .select('id, name, description, team')
         .eq('is_active', true)
         .order('name', { ascending: true });
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { AlertCircle, Building2, Edit2, Loader2, Plus, Power, PowerOff, Trash2, X } from "lucide-react";
+import { AlertCircle, Building2, Edit2, Loader2, Plus, Power, PowerOff, Search, Trash2, X, Filter } from "lucide-react";
 import { createDepartment, deleteDepartment, setDepartmentActive, updateDepartment } from "./actions";
 import type { DepartmentRow } from "./page";
 
@@ -15,6 +15,8 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [busyDepartmentId, setBusyDepartmentId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [teamFilter, setTeamFilter] = useState<string>("All");
 
     const openCreateModal = () => {
         setEditingDepartment(null);
@@ -83,6 +85,16 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
 
     const activeCount = initialDepartments.filter((department) => department.is_active).length;
 
+    const availableTeams = new Set(initialDepartments.map(d => d.team).filter(Boolean));
+    const allTeams = ["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"]
+        .filter(team => availableTeams.has(team));
+
+    const filteredDepartments = initialDepartments.filter((dept) => {
+        const matchesSearch = dept.name.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesTeam = teamFilter === "All" || dept.team === teamFilter;
+        return matchesSearch && matchesTeam;
+    });
+
     return (
         <div className="w-full max-w-6xl mx-auto space-y-8">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -125,7 +137,33 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                 </div>
             )}
 
-            {initialDepartments.length === 0 ? (
+            <div className="flex flex-col sm:flex-row gap-4">
+                <div className="relative flex-1">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                    <input
+                        type="text"
+                        placeholder="Search departments..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-11 pr-4 py-3 bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all"
+                    />
+                </div>
+                <div className="relative w-full sm:w-64 shrink-0">
+                    <Filter className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+                    <select
+                        value={teamFilter}
+                        onChange={(e) => setTeamFilter(e.target.value)}
+                        className="w-full pl-11 pr-10 py-3 bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all cursor-pointer"
+                    >
+                        <option value="All">All Teams</option>
+                        {allTeams.map(team => (
+                            <option key={team} value={team}>{team}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {filteredDepartments.length === 0 ? (
                 <div className="bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl p-12 text-center flex flex-col items-center justify-center">
                     <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-white/5 flex items-center justify-center text-neutral-400 mb-4">
                         <Building2 className="w-8 h-8" />
@@ -140,7 +178,7 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-                    {initialDepartments.map((department) => (
+                    {filteredDepartments.map((department) => (
                         <div
                             key={department.id}
                             className={`rounded-2xl border bg-white dark:bg-[#0f0f0f] p-5 transition-colors ${
@@ -159,6 +197,7 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                                     <div className="min-w-0">
                                         <h3 className="font-semibold text-neutral-900 dark:text-white break-words">{department.name}</h3>
                                         <p className="text-xs text-neutral-500 dark:text-white/40 mt-1">
+                                            {department.team ? <span className="font-medium text-[#34A853] mr-1">{department.team} &bull;</span> : null}
                                             {department.worker_count} assigned worker{department.worker_count === 1 ? "" : "s"}
                                         </p>
                                     </div>
@@ -266,6 +305,24 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                                         placeholder="e.g. Hospitality"
                                         className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all"
                                     />
+                                </div>
+
+                                <div className="space-y-1.5">
+                                    <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Team</label>
+                                    <select
+                                        name="team"
+                                        required
+                                        defaultValue={editingDepartment?.team || ""}
+                                        className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all cursor-pointer"
+                                    >
+                                        <option value="" disabled>Select a Team</option>
+                                        <option value="PROGRAMS">PROGRAMS</option>
+                                        <option value="MINISTRY">MINISTRY</option>
+                                        <option value="MATURITY">MATURITY</option>
+                                        <option value="MEMBERSHIP">MEMBERSHIP</option>
+                                        <option value="MISSIONS">MISSIONS</option>
+                                        <option value="NEXT GEN">NEXT GEN</option>
+                                    </select>
                                 </div>
 
                                 <div className="space-y-1.5">

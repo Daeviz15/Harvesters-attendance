@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import DashboardClient from './DashboardClient';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
-import type { AttendanceLog, LiveFeedEvent } from '@/lib/types';
+import type { AttendanceLog } from '@/lib/types'; // LiveFeedEvent import commented out: Live Feed disabled per team request
 
 type BroadcastEventJoin = { title: string } | { title: string }[] | null;
 
@@ -30,11 +30,13 @@ export default async function DashboardServerPage() {
     let username = "User";
     let initials = "U";
     let department = "Worker";
+    let team: string | null = null;
 
     if (profile) {
         // Use true database profile data (where first_name now stores the username)
         username = profile.first_name || "User";
         department = profile.department || "Worker";
+        team = profile.team || null;
         initials = username.substring(0, 2).toUpperCase();
     } else {
         // Fallback for legacy test accounts created before the trigger existed
@@ -83,14 +85,13 @@ export default async function DashboardServerPage() {
             check_out_time: row.check_out_time,
             status: row.status,
         }));
-    // Fetch initial Live Feed (latest 10 events globally)
-    const { data: initialLiveFeedData } = await supabase
-        .from('live_feed_events')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-    const initialLiveFeed: LiveFeedEvent[] = initialLiveFeedData || [];
+    // COMMENTED OUT: Live Feed disabled per team request
+    // const { data: initialLiveFeedData } = await supabase
+    //     .from('live_feed_events')
+    //     .select('*')
+    //     .order('created_at', { ascending: false })
+    //     .limit(10);
+    // const initialLiveFeed: LiveFeedEvent[] = initialLiveFeedData || [];
 
     // Fetch active locations for geofencing
     const { data: activeLocations } = await supabase
@@ -111,12 +112,12 @@ export default async function DashboardServerPage() {
             username={username}
             initials={initials}
             department={department}
+            team={team}
             initialIsCheckedIn={!!activeSession}
             checkInTime={activeSession?.check_in_time || null}
             serverTime={new Date().toISOString()}
             initialHistory={initialHistory}
             initialHasMore={initialHasMore}
-            initialLiveFeed={initialLiveFeed}
             avatarUrl={profile?.avatar_url || null}
             initialBroadcastSession={formattedBroadcast}
             activeLocations={activeLocations || []}

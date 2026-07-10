@@ -77,11 +77,12 @@ export async function verifyAndCheckIn(formData: FormData) {
     // Fetch the true department from the profiles table (Production Database)
     const { data: profile } = await supabase
         .from('profiles')
-        .select('department')
+        .select('department, team')
         .eq('id', user.id)
         .single();
 
     const department = profile?.department || user.user_metadata?.department || 'Unknown';
+    const team = profile?.team || user.user_metadata?.team || null;
 
     // 1. Verify the session is still active
     const { data: sessionData } = await supabase
@@ -114,6 +115,7 @@ export async function verifyAndCheckIn(formData: FormData) {
             user_id: user.id,
             session_id: sessionId,
             department,
+            team,
             check_in_lat: lat,
             check_in_lng: lng,
             status: 'active'

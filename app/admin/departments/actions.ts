@@ -6,6 +6,7 @@ import { createClient } from "@/utils/supabase/server";
 
 const departmentSchema = z.object({
     name: z.string().trim().min(2, "Department name is required.").max(80, "Department name is too long."),
+    team: z.enum(["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"], { required_error: "Team selection is required." }),
     description: z.string().trim().max(180, "Description is too long.").optional(),
 });
 
@@ -33,6 +34,7 @@ function normalizeDepartmentForm(formData: FormData) {
 
     return departmentSchema.safeParse({
         name: formData.get("name"),
+        team: formData.get("team"),
         description: description || undefined,
     });
 }
@@ -48,13 +50,14 @@ export async function createDepartment(formData: FormData) {
         .from("departments")
         .insert({
             name: parsed.data.name,
+            team: parsed.data.team,
             description: parsed.data.description || null,
             is_active: true,
         });
 
     if (error) {
         console.error("Error creating department:", error);
-        return { error: error.code === "23505" ? "A department with this name already exists." : "Failed to create department." };
+        return { error: error.code === "23505" ? "A department with this name already exists in this team." : "Failed to create department." };
     }
 
     revalidatePath("/admin/departments");
@@ -77,18 +80,19 @@ export async function updateDepartment(formData: FormData) {
         .from("departments")
         .update({
             name: parsed.data.name,
+            team: parsed.data.team,
             description: parsed.data.description || null,
         })
         .eq("id", idResult.data);
 
     if (error) {
         console.error("Error updating department:", error);
-        return { error: error.code === "23505" ? "A department with this name already exists." : "Failed to update department." };
+        return { error: error.code === "23505" ? "A department with this name already exists in this team." : "Failed to update department." };
     }
 
     await supabase
         .from("profiles")
-        .update({ department: parsed.data.name, updated_at: new Date().toISOString() })
+        .update({ department: parsed.data.name, team: parsed.data.team, updated_at: new Date().toISOString() })
         .eq("department_id", idResult.data);
 
     revalidatePath("/admin/departments");

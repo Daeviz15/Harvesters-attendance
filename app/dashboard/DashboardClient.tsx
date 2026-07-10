@@ -62,6 +62,7 @@ interface SidebarContentProps {
     username: string;
     initials: string;
     department: string;
+    team: string | null;
     avatarUrl?: string | null;
     headDepartmentName: string | null;
     history: AttendanceLog[];
@@ -70,7 +71,7 @@ interface SidebarContentProps {
     onLoadMore: () => void;
 }
 
-const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, initials, department, avatarUrl, headDepartmentName, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, initials, department, team, avatarUrl, headDepartmentName, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
@@ -101,7 +102,9 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, in
             </div>
             <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-semibold text-neutral-800 dark:text-white/90 truncate" title={username}>{username}</p>
-                <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium truncate" title={department}>{department}</p>
+                <p className="text-[12px] text-[#34A853] tracking-widest uppercase font-medium truncate" title={department}>
+                    {team ? `${team} \u2022 ` : ""}{department}
+                </p>
                 {headDepartmentName && (
                     <div className="mt-1 inline-flex max-w-full items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                         <Crown className="w-3 h-3 shrink-0" />
@@ -186,22 +189,23 @@ interface DashboardClientProps {
     username: string;
     initials: string;
     department: string;
+    team: string | null;
     avatarUrl?: string | null;
     initialIsCheckedIn: boolean;
     checkInTime: string | null;
     serverTime: string;
     initialHistory: AttendanceLog[];
     initialHasMore: boolean;
-    initialLiveFeed: LiveFeedEvent[];
+    // initialLiveFeed: LiveFeedEvent[]; // COMMENTED OUT: Live Feed disabled per team request
     initialBroadcastSession: { id: string, title: string } | null;
     activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[];
     headDepartmentName: string | null;
 }
 
 export default function DashboardClient({
-    userId, username, initials, department, avatarUrl,
+    userId, username, initials, department, team, avatarUrl,
     initialIsCheckedIn, checkInTime, serverTime,
-    initialHistory, initialHasMore, initialLiveFeed, initialBroadcastSession, activeLocations, headDepartmentName
+    initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession, activeLocations, headDepartmentName
 }: DashboardClientProps) {
     const router = useRouter();
     const geo = useGeolocation(activeLocations);
@@ -221,8 +225,8 @@ export default function DashboardClient({
     const [hasMore, setHasMore] = useState(initialHasMore);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-    // Live feed state
-    const [liveFeed, setLiveFeed] = useState<LiveFeedEvent[]>(initialLiveFeed);
+    // Live feed state — COMMENTED OUT: Live Feed disabled per team request
+    // const [liveFeed, setLiveFeed] = useState<LiveFeedEvent[]>(initialLiveFeed);
 
     // Refs for timer logic to avoid constant interval recreation
     const geoRef = useRef(geo);
@@ -284,15 +288,15 @@ export default function DashboardClient({
         const supabase = createClient();
 
         const channel = supabase.channel('dashboard-realtime')
-            // Listen to global live feed events
-            .on('postgres_changes', {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'live_feed_events'
-            }, (payload) => {
-                const newEvent = payload.new as LiveFeedEvent;
-                setLiveFeed(prev => [newEvent, ...prev].slice(0, 50)); // Keep max 50 items in memory
-            })
+            // COMMENTED OUT: Live Feed realtime subscription disabled per team request
+            // .on('postgres_changes', {
+            //     event: 'INSERT',
+            //     schema: 'public',
+            //     table: 'live_feed_events'
+            // }, (payload) => {
+            //     const newEvent = payload.new as LiveFeedEvent;
+            //     setLiveFeed(prev => [newEvent, ...prev].slice(0, 50));
+            // })
             // Listen to personal attendance logs (cross-device sync & auto-checkout)
             .on('postgres_changes', {
                 event: '*',
@@ -460,7 +464,7 @@ export default function DashboardClient({
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-neutral-200 dark:border-white/10 bg-neutral-100/40 dark:bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} team={team} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -481,7 +485,14 @@ export default function DashboardClient({
                             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                             className="fixed inset-y-0 left-0 w-[280px] bg-neutral-50 dark:bg-[#0f0f0f] border-r border-neutral-200 dark:border-white/10 p-6 flex flex-col z-50 md:hidden shadow-2xl"
                         >
-                            <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} initials={initials} department={department} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                            <SidebarContent
+                        setIsMobileMenuOpen={setIsMobileMenuOpen}
+                        setIsLeaveModalOpen={setIsLeaveModalOpen}
+                        username={username}
+                        initials={initials}
+                        department={department}
+                        team={team}
+                        avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
                         </motion.aside>
                     </>
                 )}
@@ -634,7 +645,7 @@ export default function DashboardClient({
                         </div>
                     </div>
 
-                    {/* Right Column: Live Feed */}
+                    {/* Right Column: Live Feed — COMMENTED OUT per team request
                     <div className="w-full lg:w-80 flex flex-col border-t lg:border-t-0 lg:border-l border-neutral-200 dark:border-white/10 pt-10 lg:pt-0 lg:pl-10 xl:pl-16">
                         <div className="flex items-center gap-2 mb-8">
                             <Users className="w-4 h-4 text-[#34A853]" />
@@ -668,6 +679,7 @@ export default function DashboardClient({
                             })}
                         </div>
                     </div>
+                    */}
 
                 </div>
 

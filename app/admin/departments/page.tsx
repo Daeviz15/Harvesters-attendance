@@ -8,6 +8,7 @@ export const metadata = {
 export type DepartmentRow = {
     id: string;
     name: string;
+    team: string | null;
     description: string | null;
     is_active: boolean;
     created_at: string;
@@ -20,7 +21,7 @@ export default async function DepartmentsPage() {
 
     const { data: departments, error: departmentsError } = await supabase
         .from("departments")
-        .select("id, name, description, is_active, created_at, updated_at")
+        .select("id, name, team, description, is_active, created_at, updated_at")
         .order("name", { ascending: true });
 
     if (departmentsError) {

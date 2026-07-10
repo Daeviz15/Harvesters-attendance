@@ -42,11 +42,23 @@ export async function signup(_prevState: ActionState, formData: FormData) {
   const password = formData.get('password') as string
   const username = formData.get('username') as string
 
-  if (!email || !password) {
-    return { error: 'Email and password are required' }
+  if (!email || !password || !username) {
+    return { error: 'Email, password, and username are required' }
   }
 
   const supabase = await createClient()
+
+  // Pre-validate username uniqueness before creating the auth account
+  const { data: existingUser } = await supabase
+    .from('profiles')
+    .select('id')
+    .ilike('first_name', username)
+    .eq('onboarding_complete', true)
+    .maybeSingle()
+
+  if (existingUser) {
+    return { error: 'This username is already taken. Please choose another one.' }
+  }
 
   const { error } = await supabase.auth.signUp({
     email,
@@ -92,7 +104,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   const { data: department, error: departmentError } = await supabase
     .from('departments')
-    .select('id, name')
+    .select('id, name, team')
     .eq('id', departmentId)
     .eq('is_active', true)
     .single()
@@ -109,6 +121,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
       last_name: "", // Clear out any real last name captured by Google
       department_id: department.id,
       department: department.name,
+      team: department.team,
       phone: `+234${phone}`,
       avatar_url: avatarUrl || null,
       onboarding_complete: true,
@@ -118,6 +131,9 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   if (dbError) {
     console.error("Profile update error:", dbError)
+    if (dbError.code === "23505") {
+        return { error: 'This username is already taken. Please choose another one.' }
+    }
     return { error: 'Failed to save profile data.' }
   }
 

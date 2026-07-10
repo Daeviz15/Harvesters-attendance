@@ -16,12 +16,14 @@ interface OnboardingClientProps {
         id: string;
         name: string;
         description: string | null;
+        team: string | null;
     }[];
 }
 
 export default function OnboardingClient({ initialUsername, userId, departments }: OnboardingClientProps) {
     const [state, formAction, isPending] = useActionState(completeOnboarding, null);
     const [username, setUsername] = useState(initialUsername);
+    const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -171,47 +173,125 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                         {avatarUrl && <input type="hidden" name="avatarUrl" value={avatarUrl} />}
                     </div>
 
-                    {/* Department Selection */}
+                    {/* Team & Department Selection — Accordion */}
                     <div>
-                        <div className="flex items-center gap-2 mb-6">
+                        <div className="flex items-center gap-2 mb-2">
                             <Users className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Which department do you primarily serve in?</label>
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Select Your Department</label>
                         </div>
+                        <p className="text-[12px] text-neutral-500 dark:text-white/40 mb-5 ml-7">Tap a team to see its departments, then choose yours.</p>
 
-                        {departments.length === 0 ? (
-                            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-[13px] text-amber-700 dark:text-amber-300">
-                                No active departments are available yet. Please contact an administrator to add departments before completing onboarding.
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                                {departments.map((department) => {
-                                    const isSelected = selectedDepartmentId === department.id;
+                        <div className="space-y-3">
+                            {["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"]
+                                .filter(teamName => departments.some(d => d.team === teamName))
+                                .map((teamName) => {
+                                    const isExpanded = selectedTeam === teamName;
+                                    const teamDepts = departments.filter(d => d.team === teamName);
+                                    const selectedInThisTeam = teamDepts.find(d => d.id === selectedDepartmentId);
 
                                     return (
-                                        <button
-                                            key={department.id}
-                                            type="button"
-                                            aria-pressed={isSelected}
-                                            onClick={() => setSelectedDepartmentId(department.id)}
-                                            className={`relative min-h-20 p-4 rounded-2xl border text-left transition-all duration-200 ${isSelected
-                                                    ? "bg-[#34A853]/10 border-[#34A853]/40 text-[#34A853] dark:text-white font-semibold"
-                                                    : "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-600 dark:text-white/50 hover:bg-neutral-200/80 dark:hover:bg-white/10"
-                                                }`}
+                                        <div
+                                            key={teamName}
+                                            className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+                                                isExpanded
+                                                    ? "border-[#34A853]/30 bg-[#34A853]/[0.03] dark:bg-[#34A853]/[0.04]"
+                                                    : selectedInThisTeam
+                                                        ? "border-[#34A853]/20 bg-[#34A853]/[0.02]"
+                                                        : "border-neutral-200 dark:border-white/10 bg-white dark:bg-white/[0.02]"
+                                            }`}
                                         >
-                                            <span className="text-[13px] font-medium leading-snug block pr-6">{department.name}</span>
-                                            {department.description && (
-                                                <span className="mt-1 text-[11px] leading-snug block text-neutral-500 dark:text-white/40 pr-6">
-                                                    {department.description}
-                                                </span>
+                                            {/* Team Header */}
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedTeam(isExpanded ? null : teamName);
+                                                }}
+                                                className="w-full flex items-center justify-between px-5 py-4 group"
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                                                        isExpanded || selectedInThisTeam
+                                                            ? "bg-[#34A853]/15 text-[#34A853]"
+                                                            : "bg-neutral-100 dark:bg-white/5 text-neutral-400 dark:text-white/30 group-hover:bg-neutral-200 dark:group-hover:bg-white/10"
+                                                    }`}>
+                                                        <Users className="w-4 h-4" />
+                                                    </div>
+                                                    <div className="text-left min-w-0">
+                                                        <span className={`text-[14px] font-semibold block ${
+                                                            isExpanded || selectedInThisTeam
+                                                                ? "text-[#34A853]"
+                                                                : "text-neutral-700 dark:text-white/80"
+                                                        }`}>{teamName}</span>
+                                                        <span className="text-[11px] text-neutral-400 dark:text-white/30">
+                                                            {teamDepts.length} department{teamDepts.length !== 1 ? "s" : ""}
+                                                            {selectedInThisTeam && !isExpanded && (
+                                                                <span className="text-[#34A853] font-medium"> · {selectedInThisTeam.name}</span>
+                                                            )}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-2 shrink-0">
+                                                    {selectedInThisTeam && !isExpanded && (
+                                                        <CheckCircle2 className="w-5 h-5 text-[#34A853]" />
+                                                    )}
+                                                    <svg
+                                                        className={`w-5 h-5 text-neutral-400 dark:text-white/30 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
+                                                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                                                    >
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                                    </svg>
+                                                </div>
+                                            </button>
+
+                                            {/* Departments Drawer */}
+                                            {isExpanded && (
+                                                <motion.div
+                                                    initial={{ opacity: 0, height: 0 }}
+                                                    animate={{ opacity: 1, height: "auto" }}
+                                                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                                                    className="overflow-hidden"
+                                                >
+                                                    <div className="px-4 pb-4 pt-1">
+                                                        <div className="border-t border-neutral-200/60 dark:border-white/5 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                            {teamDepts.map((dept) => {
+                                                                const isDeptSelected = selectedDepartmentId === dept.id;
+                                                                return (
+                                                                    <button
+                                                                        key={dept.id}
+                                                                        type="button"
+                                                                        aria-pressed={isDeptSelected}
+                                                                        onClick={() => setSelectedDepartmentId(dept.id)}
+                                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-150 ${
+                                                                            isDeptSelected
+                                                                                ? "bg-[#34A853]/10 border border-[#34A853]/30 text-neutral-800 dark:text-white"
+                                                                                : "bg-neutral-100/60 dark:bg-white/[0.03] border border-transparent hover:bg-neutral-200/60 dark:hover:bg-white/[0.06] text-neutral-600 dark:text-white/60"
+                                                                        }`}
+                                                                    >
+                                                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                                                            isDeptSelected
+                                                                                ? "border-[#34A853] bg-[#34A853]"
+                                                                                : "border-neutral-300 dark:border-white/20"
+                                                                        }`}>
+                                                                            {isDeptSelected && (
+                                                                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                                                                </svg>
+                                                                            )}
+                                                                        </div>
+                                                                        <span className={`text-[13px] leading-snug ${isDeptSelected ? "font-semibold" : "font-medium"}`}>
+                                                                            {dept.name}
+                                                                        </span>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
                                             )}
-                                            {isSelected && (
-                                                <CheckCircle2 className="w-4 h-4 text-[#34A853] absolute top-4 right-3" />
-                                            )}
-                                        </button>
+                                        </div>
                                     );
                                 })}
-                            </div>
-                        )}
+                        </div>
                         <input type="hidden" name="departmentId" value={selectedDepartmentId} required />
                     </div>
 
