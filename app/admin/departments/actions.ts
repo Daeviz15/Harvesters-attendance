@@ -6,7 +6,7 @@ import { createClient } from "@/utils/supabase/server";
 
 const departmentSchema = z.object({
     name: z.string().trim().min(2, "Department name is required.").max(80, "Department name is too long."),
-    team: z.enum(["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"], { required_error: "Team selection is required." }),
+    team: z.enum(["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"], { message: "Team selection is required." }),
     description: z.string().trim().max(180, "Description is too long.").optional(),
 });
 
