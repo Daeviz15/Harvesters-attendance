@@ -8,10 +8,13 @@ import { z } from 'zod'
 type ActionState = { error?: string } | null
 
 const onboardingSchema = z.object({
-  departmentId: z.uuid(),
-  phone: z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits.'),
-  avatarUrl: z.url(),
-  username: z.string().trim().min(2).max(32).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores.'),
+  departmentId: z.string().uuid({ message: 'Please select a department.' }),
+  phone: z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits (e.g., 8012345678).'),
+  avatarUrl: z.string().url({ message: 'Please upload a profile picture.' }),
+  username: z.string().trim()
+    .min(2, 'Username must be at least 2 characters.')
+    .max(32, 'Username cannot exceed 32 characters.')
+    .regex(/^[a-zA-Z0-9_ ]+$/, 'Username can only contain letters, numbers, underscores, and spaces.'),
 })
 
 export async function login(_prevState: ActionState, formData: FormData) {
@@ -89,7 +92,8 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
   const validatedFields = onboardingSchema.safeParse(rawData)
 
   if (!validatedFields.success) {
-    return { error: 'Username, department, phone number, and profile picture are required.' }
+    const firstError = validatedFields.error.issues[0]?.message || 'Please check your inputs and try again.'
+    return { error: firstError }
   }
 
   const { departmentId, phone, avatarUrl, username } = validatedFields.data

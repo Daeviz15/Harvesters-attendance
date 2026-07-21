@@ -126,12 +126,12 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                     name="username"
                                     required
                                     value={username}
-                                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_]/g, ''))}
+                                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_ ]/g, ''))}
                                     className="w-full bg-transparent text-neutral-800 dark:text-white text-[16px] focus:outline-none placeholder:text-neutral-400 dark:placeholder:text-white/20 tracking-wide"
-                                    placeholder="coolworker"
+                                    placeholder="e.g. daeviz15 or David Oyetade"
                                 />
                             </div>
-                            <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">Letters, numbers, and underscores only.</p>
+                            <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">Letters, numbers, underscores, and spaces allowed.</p>
                         </div>
                     </div>
 
