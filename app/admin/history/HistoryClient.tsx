@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Search, Loader2, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, CircleDashed } from "lucide-react";
 import Image from "next/image";
 import { motion } from "framer-motion";
+import ExportModal from "@/components/admin/ExportModal";
 
 interface FormattedLog {
     id: string;
@@ -33,6 +34,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
     
     const [searchTerm, setSearchTerm] = useState(initialSearch);
     const [isSearching, setIsSearching] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
     // Debounce search
     useEffect(() => {
@@ -94,21 +96,32 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                     <p className="text-neutral-500 dark:text-white/50 mt-1">Global audit trail of all check-ins ({totalCount} records)</p>
                 </div>
 
-                <div className="relative w-full md:w-72">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        {isSearching ? (
-                            <Loader2 className="w-4 h-4 text-neutral-400 animate-spin" />
-                        ) : (
-                            <Search className="w-4 h-4 text-neutral-400" />
-                        )}
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative w-full md:w-72">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            {isSearching ? (
+                                <Loader2 className="w-4 h-4 text-neutral-400 animate-spin" />
+                            ) : (
+                                <Search className="w-4 h-4 text-neutral-400" />
+                            )}
+                        </div>
+                        <input
+                            type="text"
+                            placeholder="Search by username..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                        />
                     </div>
-                    <input
-                        type="text"
-                        placeholder="Search by username..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
-                    />
+                    <button
+                        onClick={() => setIsExportModalOpen(true)}
+                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-[#111111] border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-semibold text-neutral-700 dark:text-white/80 hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors shadow-sm shrink-0"
+                    >
+                        <svg className="w-4 h-4 text-[#34A853]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span className="hidden sm:inline">Export CSV</span>
+                    </button>
                 </div>
             </div>
 
@@ -231,6 +244,12 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                     </div>
                 </div>
             </motion.div>
+            
+            {/* Export Modal */}
+            <ExportModal 
+                isOpen={isExportModalOpen} 
+                onClose={() => setIsExportModalOpen(false)} 
+            />
         </div>
     );
 }
