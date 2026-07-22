@@ -1,0 +1,116 @@
+import { Link } from "react-router-dom";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Church } from "lucide-react";
+import authSide from "@/assets/auth-side.jpg";
+
+export default function SignupPage() {
+  return (
+    <div className="grid min-h-screen grid-cols-1 bg-[#f7f5f0] lg:grid-cols-2">
+      <div className="flex flex-col px-6 py-8 sm:px-10 lg:px-16">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white">
+            <Church className="h-4 w-4" />
+          </div>
+          <span className="text-sm font-semibold tracking-tight text-slate-900">Shepherd</span>
+        </Link>
+
+        <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            Start your church workspace.
+          </h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Free for churches under 50 workers.
+          </p>
+
+          <div className="mt-8 space-y-4">
+            <Button
+              variant="outline"
+              className="w-full border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+            >
+              <GoogleIcon />
+              Continue with Google
+            </Button>
+
+            <div className="relative py-1">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-slate-200" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-[#f7f5f0] px-3 text-xs uppercase tracking-widest text-slate-500">
+                  or with email
+                </span>
+              </div>
+            </div>
+
+            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">Full name</Label>
+                <Input placeholder="Jane Doe" className="h-11 bg-white" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">Church name</Label>
+                <Input placeholder="Cornerstone Fellowship" className="h-11 bg-white" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">Email</Label>
+                <Input type="email" placeholder="you@church.org" className="h-11 bg-white" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium text-slate-700">Password</Label>
+                <Input
+                  type="password"
+                  placeholder="At least 8 characters"
+                  className="h-11 bg-white"
+                />
+              </div>
+              <Button className="h-11 w-full bg-slate-900 text-sm hover:bg-slate-800">
+                Create account
+              </Button>
+            </form>
+
+            <p className="text-center text-sm text-slate-600">
+              Already have an account?{" "}
+              <Link to="/auth/login" className="font-medium text-slate-900 hover:underline">
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          By creating an account you agree to our Terms and Privacy Policy.
+        </p>
+      </div>
+
+      <div className="relative hidden lg:block">
+        <img
+          src={authSide}
+          alt="Stained glass in a modern sanctuary"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-tr from-slate-900/60 via-slate-900/20 to-transparent" />
+        <div className="absolute bottom-12 left-12 right-12 text-white">
+          <blockquote className="font-serif text-2xl leading-snug">
+            "Set up on a Saturday. Ready by Sunday."
+          </blockquote>
+          <div className="mt-4 text-sm text-white/80">
+            The whole idea behind Shepherd.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GoogleIcon() {
+  return (
+    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.5c-.24 1.4-1.7 4.1-5.5 4.1-3.3 0-6-2.7-6-6.1s2.7-6.1 6-6.1c1.9 0 3.2.8 3.9 1.5l2.7-2.6C16.9 3.3 14.7 2.3 12 2.3 6.7 2.3 2.4 6.6 2.4 12s4.3 9.7 9.6 9.7c5.5 0 9.2-3.9 9.2-9.4 0-.6-.1-1.1-.2-1.6H12z"
+      />
+    </svg>
+  );
+}
