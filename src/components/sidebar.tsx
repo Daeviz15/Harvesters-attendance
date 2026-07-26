@@ -1,99 +1,81 @@
-import { Link, useLocation } from "react-router-dom";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  Users,
-  Building2,
-  Network,
-  ChevronLeft,
-  ChevronRight,
   User,
   CalendarCheck,
   Megaphone,
-  LogOut,
+  Users,
 } from "lucide-react";
-import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useRole } from "@/lib/role-context";
 
-type Item = { title: string; url: string; icon: typeof LayoutDashboard };
-
-const adminItems: Item[] = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Workers", url: "/workers", icon: Users },
-  { title: "Departments", url: "/departments", icon: Building2 },
-  { title: "Organogram", url: "/organogram", icon: Network },
-];
-
-const workerItems: Item[] = [
-  { title: "My Dashboard", url: "/worker", icon: LayoutDashboard },
-  { title: "My Profile", url: "/worker/profile", icon: User },
-  { title: "Attendance", url: "/worker/attendance", icon: CalendarCheck },
-  { title: "Announcements", url: "/worker/announcements", icon: Megaphone },
-  { title: "Department", url: "/worker/department", icon: Building2 },
+const workerItems = [
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
+  { icon: User, label: "My Profile", href: "/profile" },
+  { icon: CalendarCheck, label: "Attendance", href: "/attendance" },
+  { icon: Megaphone, label: "Announcements", href: "/announcements" },
+  { icon: Users, label: "My Department", href: "/department" },
 ];
 
 export function AppSidebar() {
-  const [collapsed, setCollapsed] = useState(false);
-  const { pathname } = useLocation();
-  const { role } = useRole();
-  const isWorker = role === "worker";
-  const items = isWorker ? workerItems : adminItems;
+  const pathname = usePathname();
 
   return (
-    <aside
-      className={cn(
-        "sticky top-0 h-screen shrink-0 border-r border-slate-200 bg-slate-900 text-slate-100 transition-all duration-200 flex flex-col",
-        collapsed ? "w-16" : "w-60",
-      )}
-    >
-      <div className="flex h-16 items-center justify-between border-b border-slate-800 px-3">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-black text-white overflow-hidden">
-            <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
-          </div>
-          {!collapsed && <span className="truncate text-sm font-semibold">Harvesters Church Management System</span>}
+    <div className="flex h-full w-full flex-col border-r border-slate-200 bg-white">
+      <div className="flex h-16 items-center border-b border-slate-200 px-6">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-black text-white overflow-hidden mr-3">
+          <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
         </div>
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="rounded p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
-          aria-label="toggle sidebar"
-        >
-          {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-        </button>
+        <h1 className="text-lg font-bold text-slate-900">ChurchHub</h1>
       </div>
-      <nav className="flex-1 p-2">
-        {items.map((item) => {
-          const homeUrl = isWorker ? "/worker" : "/dashboard";
-          const active =
-            item.url === homeUrl ? pathname === homeUrl : pathname.startsWith(item.url);
+
+      <nav className="flex-1 space-y-1 p-4">
+        {workerItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
           return (
             <Link
-              key={item.url}
-              to={item.url}
+              key={item.href}
+              href={item.href}
               className={cn(
-                "mb-1 flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                active
-                  ? "bg-slate-800 text-white"
-                  : "text-slate-300 hover:bg-slate-800 hover:text-white",
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-slate-100 text-slate-900"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               )}
             >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{item.title}</span>}
+              <Icon className="h-4 w-4" />
+              {item.label}
             </Link>
           );
         })}
       </nav>
-      {isWorker && (
-        <div className="border-t border-slate-800 p-2">
-          <Link
-            to="/auth/login"
-            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white"
-          >
-            <LogOut className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>Sign out</span>}
-          </Link>
+      
+      <div className="border-t border-slate-200 p-4">
+        <Link
+          href="/"
+          onClick={(e) => {
+            // We'll let the Link handle navigation, but clear localStorage first
+            localStorage.removeItem("church_hub_auth_id");
+          }}
+          className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900 mb-4"
+        >
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+            <polyline points="16 17 21 12 16 7"></polyline>
+            <line x1="21" y1="12" x2="9" y2="12"></line>
+          </svg>
+          Log out
+        </Link>
+        <div className="rounded-md bg-slate-50 p-4">
+          <h4 className="text-sm font-semibold text-slate-900">Need help?</h4>
+          <p className="mt-1 text-xs text-slate-500">
+            Contact the IT department at support@harvesters.org
+          </p>
         </div>
-      )}
-    </aside>
+      </div>
+    </div>
   );
 }

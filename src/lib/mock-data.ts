@@ -16,10 +16,8 @@ export type Worker = {
   dateJoined?: string;
   membershipStatus?: string;
   baptismStatus?: string;
+  cellGroup?: string;
   businessType?: string;
-  workAddress?: string;
-  workPhone?: string;
-  professionalEmail?: string;
 };
 
 export type Department = {
@@ -63,15 +61,13 @@ export const sampleWorker = {
   avatar: avatar("Grace Adeyemi"),
   department: "Ushering",
   role: "Team Lead",
-  dateJoined: "2018-09-01",
+  dateJoined: "2023-01-15",
   membershipStatus: "Active",
-  baptismStatus: "Baptized",
+  baptismStatus: "baptized",
+  cellGroup: "Grace Cell",
   occupation: "Accountant",
   businessName: "GA Consulting",
   businessType: "Financial Services",
-  workAddress: "24 Commerce Rd, Victoria Island",
-  workPhone: "+234 700 000 1111",
-  professionalEmail: "grace@gaconsulting.com",
 };
 
 export type OrgNode = {
@@ -180,9 +176,6 @@ export const profileCompletenessFields = [
   { key: "occupation", label: "Occupation" },
   { key: "businessName", label: "Business Name" },
   { key: "businessType", label: "Business Type" },
-  { key: "workAddress", label: "Work Address" },
-  { key: "workPhone", label: "Work Phone" },
-  { key: "professionalEmail", label: "Professional Email" },
 ] as const;
 
 export type UpcomingService = { id: string; title: string; date: string; time: string; role: string };
