@@ -11,10 +11,10 @@ export default function LoginPage() {
       {/* Left panel — form */}
       <div className="flex flex-col px-6 py-8 sm:px-10 lg:px-16">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white">
-            <Church className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-black text-white overflow-hidden">
+            <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
           </div>
-          <span className="text-sm font-semibold tracking-tight text-slate-900">Shepherd</span>
+          <span className="text-sm font-semibold tracking-tight text-slate-900">Harvesters Church Management System</span>
         </Link>
 
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
@@ -82,7 +82,7 @@ export default function LoginPage() {
             </form>
 
             <p className="text-center text-sm text-slate-600">
-              New to Shepherd?{" "}
+              New to Harvesters Church Management System?{" "}
               <Link to="/auth/signup" className="font-medium text-slate-900 hover:underline">
                 Create an account
               </Link>
@@ -105,7 +105,7 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-900/60 via-slate-900/20 to-transparent" />
         <div className="absolute bottom-12 left-12 right-12 text-white">
           <blockquote className="font-serif text-2xl leading-snug">
-            "Shepherd gave our ushering team back their Sunday mornings."
+            "Harvesters Church Management System gave our ushering team back their Sunday mornings."
           </blockquote>
           <div className="mt-4 text-sm text-white/80">
             Pastor Ade — Cornerstone Fellowship

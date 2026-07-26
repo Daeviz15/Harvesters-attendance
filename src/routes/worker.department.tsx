@@ -1,4 +1,3 @@
-
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -11,16 +10,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Building2, Users, UserCog, Mail, Phone, Briefcase, X } from "lucide-react";
-import { currentWorker, departments, teammatesMock, type Worker } from "@/lib/mock-data";
+import type { Worker } from "@/lib/mock-data";
+import { useData } from "@/lib/data-context";
 import * as React from "react";
-
-
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm font-medium text-slate-900">{value}</div>
+      <div className="mt-1 text-sm font-medium text-slate-900">{value || "-"}</div>
     </div>
   );
 }
@@ -74,15 +72,15 @@ function TeammateProfileModal({
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-700">
               <Phone className="h-4 w-4 text-slate-400" />
-              <span>{teammate.phone}</span>
+              <span>{teammate.phone || "—"}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-700">
               <Briefcase className="h-4 w-4 text-slate-400" />
-              <span>{teammate.occupation}</span>
+              <span>{teammate.occupation || "—"}</span>
             </div>
             <div className="flex items-center gap-2 text-sm text-slate-700">
               <Building2 className="h-4 w-4 text-slate-400" />
-              <span className="truncate">{teammate.businessName}</span>
+              <span className="truncate">{teammate.businessName || "—"}</span>
             </div>
           </div>
 
@@ -99,8 +97,13 @@ function TeammateProfileModal({
 }
 
 export default function DepartmentPage() {
-  const w = currentWorker;
+  const { workers, departments } = useData();
+  const w = workers[0]; // mock current worker
+  
+  if (!w) return <div className="p-6 text-slate-500">No worker data available.</div>;
+
   const dept = departments.find((d) => d.name === w.department);
+  const teammates = workers.filter(worker => worker.department === w.department && worker.id !== w.id);
   const [selected, setSelected] = React.useState<Worker | null>(null);
 
   return (
@@ -130,7 +133,7 @@ export default function DepartmentPage() {
             <div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Department admin</div>
               <div className="text-lg font-semibold text-slate-900">
-                {dept?.admin ?? "—"}
+                {dept?.admin || "—"}
               </div>
             </div>
           </CardContent>
@@ -143,7 +146,7 @@ export default function DepartmentPage() {
             <div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Team size</div>
               <div className="text-lg font-semibold text-slate-900">
-                {dept?.workersCount ?? teammatesMock.length}
+                {teammates.length + 1}
               </div>
             </div>
           </CardContent>
@@ -153,27 +156,31 @@ export default function DepartmentPage() {
       <Card className="border-slate-200">
         <CardContent className="p-6">
           <h2 className="mb-4 text-base font-semibold text-slate-900">Teammates</h2>
-          <ul className="grid gap-3 sm:grid-cols-2">
-            {teammatesMock.map((t) => (
-              <li
-                key={t.id}
-                onClick={() => setSelected(t)}
-                className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-200 p-3 transition-colors hover:border-slate-300 hover:bg-slate-50"
-              >
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={t.avatar} alt={t.fullName} />
-                  <AvatarFallback>{t.fullName.slice(0, 2)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-slate-900 truncate">{t.fullName}</div>
-                  <div className="text-xs text-slate-500 truncate">{t.role}</div>
-                </div>
-                <Badge variant="secondary" className="bg-slate-100 text-slate-700 shrink-0">
-                  {t.department}
-                </Badge>
-              </li>
-            ))}
-          </ul>
+          {teammates.length === 0 ? (
+            <p className="text-sm text-slate-500">No teammates found.</p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2">
+              {teammates.map((t) => (
+                <li
+                  key={t.id}
+                  onClick={() => setSelected(t)}
+                  className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-200 p-3 transition-colors hover:border-slate-300 hover:bg-slate-50"
+                >
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={t.avatar} alt={t.fullName} />
+                    <AvatarFallback>{t.fullName.slice(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium text-slate-900 truncate">{t.fullName}</div>
+                    <div className="text-xs text-slate-500 truncate">{t.role}</div>
+                  </div>
+                  <Badge variant="secondary" className="bg-slate-100 text-slate-700 shrink-0">
+                    {t.department}
+                  </Badge>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

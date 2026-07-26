@@ -10,10 +10,10 @@ export default function SignupPage() {
     <div className="grid min-h-screen grid-cols-1 bg-[#f7f5f0] lg:grid-cols-2">
       <div className="flex flex-col px-6 py-8 sm:px-10 lg:px-16">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white">
-            <Church className="h-4 w-4" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-black text-white overflow-hidden">
+            <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
           </div>
-          <span className="text-sm font-semibold tracking-tight text-slate-900">Shepherd</span>
+          <span className="text-sm font-semibold tracking-tight text-slate-900">Harvesters Church Management System</span>
         </Link>
 
         <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center py-12">
@@ -96,7 +96,7 @@ export default function SignupPage() {
             "Set up on a Saturday. Ready by Sunday."
           </blockquote>
           <div className="mt-4 text-sm text-white/80">
-            The whole idea behind Shepherd.
+            The whole idea behind Harvesters Church Management System.
           </div>
         </div>
       </div>

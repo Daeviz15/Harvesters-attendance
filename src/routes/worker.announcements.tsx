@@ -1,19 +1,39 @@
-
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Megaphone } from "lucide-react";
-import { announcementsMock } from "@/lib/mock-data";
+import { Megaphone, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useData } from "@/lib/data-context";
+import { toast } from "sonner";
+import { useRole } from "@/lib/role-context";
 
 export default function AnnouncementsPage() {
+  const { announcements, addAnnouncement } = useData();
+  const { role } = useRole();
+
+  const handleAdd = () => {
+    const title = window.prompt("Enter announcement title:");
+    if (!title) return;
+    const body = window.prompt("Enter announcement details:") || "";
+    addAnnouncement({ title, body, department: role === "admin" ? "All Departments" : "Ushering" });
+    toast.success("Announcement posted.");
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-slate-900">Announcements</h1>
-        <p className="text-sm text-slate-500">Updates from your admins and department leads.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">Announcements</h1>
+          <p className="text-sm text-slate-500">Updates from your admins and department leads.</p>
+        </div>
+        {role !== "worker" && (
+          <Button className="bg-slate-900 hover:bg-slate-800" onClick={handleAdd}>
+            <Plus className="mr-2 h-4 w-4" /> Post Announcement
+          </Button>
+        )}
       </div>
 
       <div className="space-y-3">
-        {announcementsMock.map((a) => (
+        {announcements.map((a) => (
           <Card key={a.id} className="border-slate-200">
             <CardContent className="p-5">
               <div className="mb-2 flex flex-wrap items-center justify-between gap-2">

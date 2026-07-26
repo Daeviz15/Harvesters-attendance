@@ -8,6 +8,18 @@ export type Worker = {
   businessName: string;
   avatar: string;
   role: string;
+  dob?: string;
+  gender?: string;
+  maritalStatus?: string;
+  homeAddress?: string;
+  emergencyContact?: string;
+  dateJoined?: string;
+  membershipStatus?: string;
+  baptismStatus?: string;
+  businessType?: string;
+  workAddress?: string;
+  workPhone?: string;
+  professionalEmail?: string;
 };
 
 export type Department = {

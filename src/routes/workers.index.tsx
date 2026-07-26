@@ -21,11 +21,21 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Eye, Pencil, Trash2, Plus, Search } from "lucide-react";
 import { useRole } from "@/lib/role-context";
-import { workersAdmin, workersDeptAdmin, departments } from "@/lib/mock-data";
+import { useData } from "@/lib/data-context";
+import { toast } from "sonner";
 
 export default function WorkersList() {
   const { role } = useRole();
-  const workers = role === "admin" ? workersAdmin : workersDeptAdmin;
+  const { workers: allWorkers, departments, deleteWorker } = useData();
+  
+  const workers = role === "admin" ? allWorkers : allWorkers.filter((w) => w.department === "Ushering");
+
+  const handleDelete = (id: string) => {
+    if (window.confirm("Are you sure you want to remove this worker?")) {
+      deleteWorker(id);
+      toast.success("Worker removed.");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -55,7 +65,7 @@ export default function WorkersList() {
             </SelectTrigger>
             <SelectContent>
               {departments.map((d) => (
-                <SelectItem key={d.id} value={d.id}>
+                <SelectItem key={d.id} value={d.name}>
                   {d.name}
                 </SelectItem>
               ))}
@@ -108,13 +118,20 @@ export default function WorkersList() {
                           <Pencil className="h-4 w-4" />
                         </Link>
                       </Button>
-                      <Button variant="ghost" size="icon" className="text-red-600">
+                      <Button variant="ghost" size="icon" className="text-red-600" onClick={() => handleDelete(w.id)}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
+              {workers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6 text-slate-500">
+                    No workers found.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </div>

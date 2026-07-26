@@ -29,7 +29,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-6">
       <div>
-        <h2 className="text-sm font-medium text-slate-500">Church Workers Management</h2>
+        <h2 className="text-sm font-medium text-slate-500">Harvesters Church Management System</h2>
       </div>
       <div className="flex items-center gap-3">
         <Badge variant="secondary" className="bg-slate-100 text-slate-700">

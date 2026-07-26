@@ -5,21 +5,26 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Pencil } from "lucide-react";
-import { currentWorker, profileCompletenessFields } from "@/lib/mock-data";
+import { profileCompletenessFields } from "@/lib/mock-data";
+import { useData } from "@/lib/data-context";
 
-function Field({ label, value }: { label: string; value: string }) {
+function Field({ label, value }: { label: string; value: string | undefined }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm text-slate-900">{value}</div>
+      <div className="mt-1 text-sm text-slate-900">{value || "-"}</div>
     </div>
   );
 }
 
 export default function MyProfile() {
-  const w = currentWorker;
+  const { workers } = useData();
+  const w = workers[0]; // Just use the first worker for the mock UI
+  
+  if (!w) return <div className="p-6 text-slate-500">No worker data available.</div>;
+
   const filled = profileCompletenessFields.filter(
-    (f) => typeof w[f.key] === "string" && (w[f.key] as string).trim()
+    (f) => typeof w[f.key as keyof typeof w] === "string" && (w[f.key as keyof typeof w] as string).trim()
   ).length;
   const total = profileCompletenessFields.length;
   const pct = Math.round((filled / total) * 100);
@@ -52,10 +57,10 @@ export default function MyProfile() {
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                {w.membershipStatus}
+                {w.membershipStatus || "Active"}
               </Badge>
               <Badge variant="secondary" className="bg-slate-100 text-slate-700">
-                Joined {w.dateJoined}
+                Joined {w.dateJoined || "Recently"}
               </Badge>
             </div>
           </div>

@@ -5,13 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CalendarCheck, Flame, Percent, Megaphone, ArrowRight } from "lucide-react";
 import {
-  currentWorker,
   attendanceStats,
-  announcementsMock,
   upcomingServices,
 } from "@/lib/mock-data";
-
-
+import { useData } from "@/lib/data-context";
 
 function StatCard({
   icon: Icon,
@@ -41,9 +38,12 @@ function StatCard({
 }
 
 export default function WorkerDashboard() {
-  const w = currentWorker;
+  const { workers, announcements } = useData();
+  const w = workers[0];
   const next = upcomingServices[0];
-  const recent = announcementsMock.slice(0, 3);
+  const recent = announcements.slice(0, 3);
+
+  if (!w) return <div className="p-6">No worker found.</div>;
 
   return (
     <div className="space-y-6">
@@ -142,6 +142,9 @@ export default function WorkerDashboard() {
                   <p className="line-clamp-2 text-sm text-slate-600">{a.body}</p>
                 </li>
               ))}
+              {recent.length === 0 && (
+                <li className="text-sm text-slate-500">No announcements yet.</li>
+              )}
             </ul>
           </CardContent>
         </Card>

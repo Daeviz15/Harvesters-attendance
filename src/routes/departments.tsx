@@ -10,9 +10,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Eye, Pencil, Trash2, Plus } from "lucide-react";
-import { departments } from "@/lib/mock-data";
+import { useData } from "@/lib/data-context";
+import { toast } from "sonner";
 
 export default function DepartmentsPage() {
+  const { departments, addDepartment } = useData();
+
+  const handleAdd = () => {
+    const name = window.prompt("Enter department name:");
+    if (!name) return;
+    const admin = window.prompt("Enter admin name:") || "Unassigned";
+    addDepartment({ name, admin });
+    toast.success("Department added.");
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -20,7 +31,7 @@ export default function DepartmentsPage() {
           <h1 className="text-2xl font-semibold text-slate-900">Departments</h1>
           <p className="text-sm text-slate-500">Manage church departments.</p>
         </div>
-        <Button className="bg-slate-900 hover:bg-slate-800">
+        <Button className="bg-slate-900 hover:bg-slate-800" onClick={handleAdd}>
           <Plus className="mr-2 h-4 w-4" /> Add Department
         </Button>
       </div>
@@ -63,6 +74,13 @@ export default function DepartmentsPage() {
                 </TableCell>
               </TableRow>
             ))}
+            {departments.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={4} className="text-center py-6 text-slate-500">
+                  No departments found.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </Card>

@@ -5,17 +5,18 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Pencil, CalendarDays } from "lucide-react";
-import { sampleWorker } from "@/lib/mock-data";
-function Field({ label, value }: { label: string; value: string }) {
+import { useData } from "@/lib/data-context";
+
+function Field({ label, value }: { label: string; value: string | undefined }) {
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-1 text-sm text-slate-900">{value}</div>
+      <div className="mt-1 text-sm text-slate-900">{value || "-"}</div>
     </div>
   );
 }
 
-const TRACKED_FIELDS: (keyof typeof sampleWorker)[] = [
+const TRACKED_FIELDS = [
   "fullName", "email", "phone", "dob", "gender", "maritalStatus",
   "homeAddress", "emergencyContact", "avatar",
   "department", "role", "dateJoined", "membershipStatus", "baptismStatus",
@@ -24,9 +25,13 @@ const TRACKED_FIELDS: (keyof typeof sampleWorker)[] = [
 
 export default function WorkerProfile() {
   const { id } = useParams();
-  const w = sampleWorker;
+  const { workers } = useData();
+  const w = workers.find((w) => w.id === id);
+
+  if (!w) return <div className="p-6">Worker not found</div>;
+
   const filled = TRACKED_FIELDS.filter((k) => {
-    const v = w[k];
+    const v = w[k as keyof typeof w];
     return typeof v === "string" && v.trim().length > 0;
   }).length;
   const total = TRACKED_FIELDS.length;
@@ -62,10 +67,10 @@ export default function WorkerProfile() {
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">
-                {w.membershipStatus}
+                {w.membershipStatus || "Active"}
               </Badge>
               <Badge variant="secondary" className="bg-slate-100 text-slate-700">
-                Joined {w.dateJoined}
+                Joined {w.dateJoined || "Recently"}
               </Badge>
             </div>
           </div>

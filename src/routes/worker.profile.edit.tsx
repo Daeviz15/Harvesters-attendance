@@ -1,12 +1,14 @@
 import { WorkerForm } from "@/components/worker-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Check, Circle } from "lucide-react";
-import { currentWorker, profileCompletenessFields } from "@/lib/mock-data";
+import { profileCompletenessFields } from "@/lib/mock-data";
+import { useData } from "@/lib/data-context";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
-function ProfileChecklist() {
-  const w = currentWorker;
+function ProfileChecklist({ worker }: { worker: any }) {
   const items = profileCompletenessFields.map((field) => {
-    const value = w[field.key as keyof typeof w];
+    const value = worker[field.key as keyof typeof worker];
     const isComplete = typeof value === "string" && value.trim().length > 0;
     return { ...field, isComplete };
   });
@@ -45,10 +47,22 @@ function ProfileChecklist() {
 }
 
 export default function WorkerProfileEdit() {
+  const { workers, updateWorker } = useData();
+  const navigate = useNavigate();
+  const worker = workers[0]; // mock current worker
+
+  if (!worker) return <div className="p-6 text-slate-500">No worker data available.</div>;
+
+  const handleSubmit = (data: any) => {
+    updateWorker(worker.id, data);
+    toast.success("Profile updated successfully.");
+    navigate("/worker/profile");
+  };
+
   return (
     <div className="space-y-6">
-      <ProfileChecklist />
-      <WorkerForm mode="edit" />
+      <ProfileChecklist worker={worker} />
+      <WorkerForm mode="edit" initialData={worker} onSubmit={handleSubmit} />
     </div>
   );
 }

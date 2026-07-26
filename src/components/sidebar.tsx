@@ -6,7 +6,6 @@ import {
   Network,
   ChevronLeft,
   ChevronRight,
-  Church,
   User,
   CalendarCheck,
   Megaphone,
@@ -49,8 +48,10 @@ export function AppSidebar() {
     >
       <div className="flex h-16 items-center justify-between border-b border-slate-800 px-3">
         <div className="flex items-center gap-2 overflow-hidden">
-          <Church className="h-6 w-6 shrink-0 text-slate-100" />
-          {!collapsed && <span className="truncate text-sm font-semibold">Church WMS</span>}
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-black text-white overflow-hidden">
+            <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
+          </div>
+          {!collapsed && <span className="truncate text-sm font-semibold">Harvesters Church Management System</span>}
         </div>
         <button
           onClick={() => setCollapsed((c) => !c)}

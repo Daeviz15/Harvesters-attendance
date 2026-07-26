@@ -14,15 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Upload } from "lucide-react";
 
-function Section({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, description, children }: { title: string; description: string; children: React.ReactNode }) {
   return (
     <div className="grid gap-6 md:grid-cols-3">
       <div>
@@ -34,13 +26,7 @@ function Section({
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <Label className="text-xs font-medium text-slate-600">{label}</Label>
@@ -49,9 +35,16 @@ function Field({
   );
 }
 
-export function WorkerForm({ mode }: { mode: "new" | "edit" }) {
+export function WorkerForm({ mode, initialData, onSubmit }: { mode: "new" | "edit", initialData?: any, onSubmit: (data: any) => void }) {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    const data = Object.fromEntries(formData.entries());
+    onSubmit(data);
+  };
+
   return (
-    <div className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">
           {mode === "new" ? "Add Worker" : "Edit Worker"}
@@ -76,12 +69,12 @@ export function WorkerForm({ mode }: { mode: "new" | "edit" }) {
           <Separator />
 
           <Section title="Personal Information" description="Basic contact details.">
-            <Field label="Full Name"><Input placeholder="Jane Doe" /></Field>
-            <Field label="Email"><Input type="email" placeholder="jane@church.org" /></Field>
-            <Field label="Phone"><Input placeholder="+234 800 000 0000" /></Field>
-            <Field label="Date of Birth"><Input type="date" /></Field>
+            <Field label="Full Name"><Input name="fullName" defaultValue={initialData?.fullName} placeholder="Jane Doe" required /></Field>
+            <Field label="Email"><Input name="email" defaultValue={initialData?.email} type="email" placeholder="jane@church.org" required /></Field>
+            <Field label="Phone"><Input name="phone" defaultValue={initialData?.phone} placeholder="+234 800 000 0000" /></Field>
+            <Field label="Date of Birth"><Input name="dob" defaultValue={initialData?.dob} type="date" /></Field>
             <Field label="Gender">
-              <Select>
+              <Select name="gender" defaultValue={initialData?.gender}>
                 <SelectTrigger><SelectValue placeholder="Select gender" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="male">Male</SelectItem>
@@ -90,7 +83,7 @@ export function WorkerForm({ mode }: { mode: "new" | "edit" }) {
               </Select>
             </Field>
             <Field label="Marital Status">
-              <Select>
+              <Select name="maritalStatus" defaultValue={initialData?.maritalStatus}>
                 <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="single">Single</SelectItem>
@@ -99,28 +92,28 @@ export function WorkerForm({ mode }: { mode: "new" | "edit" }) {
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Home Address"><Input placeholder="Street, City" /></Field>
-            <Field label="Emergency Contact"><Input placeholder="Name — phone" /></Field>
+            <Field label="Home Address"><Input name="homeAddress" defaultValue={initialData?.homeAddress} placeholder="Street, City" /></Field>
+            <Field label="Emergency Contact"><Input name="emergencyContact" defaultValue={initialData?.emergencyContact} placeholder="Name — phone" /></Field>
           </Section>
 
           <Separator />
 
           <Section title="Church & Department" description="Membership and role info.">
             <Field label="Department">
-              <Select>
+              <Select name="department" defaultValue={initialData?.department} required>
                 <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ushering">Ushering</SelectItem>
-                  <SelectItem value="choir">Choir</SelectItem>
-                  <SelectItem value="media">Media</SelectItem>
-                  <SelectItem value="protocol">Protocol</SelectItem>
+                  <SelectItem value="Ushering">Ushering</SelectItem>
+                  <SelectItem value="Choir">Choir</SelectItem>
+                  <SelectItem value="Media">Media</SelectItem>
+                  <SelectItem value="Protocol">Protocol</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Role"><Input placeholder="e.g. Team Lead" /></Field>
-            <Field label="Date Joined"><Input type="date" /></Field>
+            <Field label="Role"><Input name="role" defaultValue={initialData?.role} placeholder="e.g. Team Lead" required /></Field>
+            <Field label="Date Joined"><Input name="dateJoined" defaultValue={initialData?.dateJoined} type="date" /></Field>
             <Field label="Baptism Status">
-              <Select>
+              <Select name="baptismStatus" defaultValue={initialData?.baptismStatus}>
                 <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="baptized">Baptized</SelectItem>
@@ -133,31 +126,31 @@ export function WorkerForm({ mode }: { mode: "new" | "edit" }) {
                 <div className="text-sm font-medium text-slate-900">Membership Status</div>
                 <div className="text-xs text-slate-500">Toggle if this worker is active.</div>
               </div>
-              <Switch />
+              <Switch name="active" defaultChecked={initialData ? initialData.active : true} />
             </div>
           </Section>
 
           <Separator />
 
           <Section title="Work & Business" description="Professional details.">
-            <Field label="Occupation"><Input placeholder="e.g. Engineer" /></Field>
-            <Field label="Business Name"><Input /></Field>
-            <Field label="Business Type"><Input /></Field>
-            <Field label="Work Address"><Input /></Field>
-            <Field label="Work Phone"><Input /></Field>
-            <Field label="Professional Email"><Input type="email" /></Field>
+            <Field label="Occupation"><Input name="occupation" defaultValue={initialData?.occupation} placeholder="e.g. Engineer" /></Field>
+            <Field label="Business Name"><Input name="businessName" defaultValue={initialData?.businessName} /></Field>
+            <Field label="Business Type"><Input name="businessType" defaultValue={initialData?.businessType} /></Field>
+            <Field label="Work Address"><Input name="workAddress" defaultValue={initialData?.workAddress} /></Field>
+            <Field label="Work Phone"><Input name="workPhone" defaultValue={initialData?.workPhone} /></Field>
+            <Field label="Professional Email"><Input name="professionalEmail" defaultValue={initialData?.professionalEmail} type="email" /></Field>
           </Section>
 
           <Separator />
 
           <div className="flex justify-end gap-2">
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" type="button">
               <Link to="/workers">Cancel</Link>
             </Button>
-            <Button className="bg-slate-900 hover:bg-slate-800">Save Worker</Button>
+            <Button type="submit" className="bg-slate-900 hover:bg-slate-800">Save Worker</Button>
           </div>
         </CardContent>
       </Card>
-    </div>
+    </form>
   );
 }
