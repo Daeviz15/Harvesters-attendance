@@ -477,6 +477,7 @@ export default function WorkersClient({
                                             Department
                                         </label>
                                         <select
+                                            name="departmentId"
                                             value={selectedDeptId}
                                             onChange={(e) => setSelectedDeptId(e.target.value)}
                                             className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
@@ -488,6 +489,11 @@ export default function WorkersClient({
                                                 </option>
                                             ))}
                                         </select>
+                                        <input
+                                            type="hidden"
+                                            name="department"
+                                            value={departments.find((d) => d.id === selectedDeptId)?.name || ""}
+                                        />
                                     </div>
                                 </div>
 

@@ -212,7 +212,6 @@ export async function createWorkerAccount(formData: FormData) {
                 id: userId,
                 first_name: firstName,
                 last_name: lastName,
-                email: generatedEmail,
                 phone: phone || null,
                 department: department || null,
                 department_id: departmentId || null,
@@ -223,7 +222,7 @@ export async function createWorkerAccount(formData: FormData) {
 
         if (profileError) {
             console.error("Error updating worker profile:", profileError);
-            return { error: "Worker created, but profile details failed to save." };
+            return { error: `Failed to save profile: ${profileError.message || profileError.details || "Database error"}` };
         }
 
         // 3. Optional Instant Check-In if an active session was passed
