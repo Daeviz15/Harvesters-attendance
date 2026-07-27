@@ -28,7 +28,7 @@ interface SearchWorkerResult {
     id: string;
     first_name: string;
     last_name: string;
-    email: string;
+    email: string | null;
     phone: string | null;
     department: string | null;
     avatar_url: string | null;

@@ -243,6 +243,8 @@ export async function createWorkerAccount(formData: FormData) {
                         session_id: session.id,
                         department: department || "General",
                         status: "active",
+                        check_in_lat: 0.0,
+                        check_in_lng: 0.0,
                         is_manual: true,
                         checked_in_by: adminUser.id,
                         check_in_note: checkInNote || "Account registered and checked in by Admin",

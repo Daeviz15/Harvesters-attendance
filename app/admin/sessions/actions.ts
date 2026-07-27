@@ -98,13 +98,13 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
         // 2. Query profiles
         let profilesQuery = supabase
             .from("profiles")
-            .select("id, first_name, last_name, email, phone, department, avatar_url, role, worker_id")
+            .select("id, first_name, last_name, phone, department, avatar_url, role, worker_id")
             .order("first_name", { ascending: true })
             .limit(50);
 
         if (cleanQuery.length > 0) {
             profilesQuery = profilesQuery.or(
-                `first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%,phone.ilike.%${cleanQuery}%,department.ilike.%${cleanQuery}%,worker_id.ilike.%${cleanQuery}%`
+                `first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,phone.ilike.%${cleanQuery}%,department.ilike.%${cleanQuery}%,worker_id.ilike.%${cleanQuery}%`
             );
         }
 
@@ -114,13 +114,13 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
         if (error && (error.code === '42703' || error.message?.toLowerCase().includes('worker_id'))) {
             let fallbackQuery = supabase
                 .from("profiles")
-                .select("id, first_name, last_name, email, phone, department, avatar_url, role")
+                .select("id, first_name, last_name, phone, department, avatar_url, role")
                 .order("first_name", { ascending: true })
                 .limit(50);
 
             if (cleanQuery.length > 0) {
                 fallbackQuery = fallbackQuery.or(
-                    `first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%,phone.ilike.%${cleanQuery}%,department.ilike.%${cleanQuery}%`
+                    `first_name.ilike.%${cleanQuery}%,last_name.ilike.%${cleanQuery}%,phone.ilike.%${cleanQuery}%,department.ilike.%${cleanQuery}%`
                 );
             }
 
@@ -136,6 +136,7 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
 
         const formattedWorkers = (workers || []).map((w) => ({
             ...w,
+            email: null,
             isCheckedIn: checkedInUserIds.has(w.id),
         }));
 
@@ -186,22 +187,39 @@ export async function manualWorkerCheckIn(params: { workerId: string; sessionId:
             .single();
 
         // 4. Perform proxy manual check-in
-        const { error: insertError } = await supabase
+        let insertData: any = {
+            user_id: workerId,
+            session_id: sessionId,
+            department: workerProfile?.department || "General",
+            team: workerProfile?.team || null,
+            status: "active",
+            check_in_lat: 0.0,
+            check_in_lng: 0.0,
+            is_manual: true,
+            checked_in_by: adminUser.id,
+            check_in_note: note || "Manually checked in by Admin",
+        };
+
+        let { error: insertError } = await supabase
             .from("attendance_logs")
-            .insert({
-                user_id: workerId,
-                session_id: sessionId,
-                department: workerProfile?.department || "General",
-                team: workerProfile?.team || null,
-                status: "active",
-                is_manual: true,
-                checked_in_by: adminUser.id,
-                check_in_note: note || "Manually checked in by Admin",
-            });
+            .insert(insertData);
+
+        // Fallback if is_manual / checked_in_by columns do not exist in database yet
+        if (insertError && (insertError.code === '42703' || insertError.message?.toLowerCase().includes('column'))) {
+            delete insertData.is_manual;
+            delete insertData.checked_in_by;
+            delete insertData.check_in_note;
+
+            const fallbackInsert = await supabase
+                .from("attendance_logs")
+                .insert(insertData);
+
+            insertError = fallbackInsert.error;
+        }
 
         if (insertError) {
             console.error("Manual Check-In Insert Error:", insertError);
-            return { error: "Database error: Could not complete manual check-in." };
+            return { error: `Database error: ${insertError.message || insertError.details || "Could not complete manual check-in."}` };
         }
 
         revalidatePath("/admin/sessions");
