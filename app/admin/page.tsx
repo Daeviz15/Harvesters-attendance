@@ -7,8 +7,7 @@ export default async function AdminDashboardPage() {
     // Get basic stats
     const { count: workerCount } = await supabase
         .from('profiles')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'worker');
+        .select('*', { count: 'exact', head: true });
 
     const { count: activeSessionsCount } = await supabase
         .from('attendance_sessions')
