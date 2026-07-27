@@ -19,23 +19,27 @@ export type DepartmentRow = {
 export default async function DepartmentsPage() {
     const supabase = await createClient();
 
-    const { data: departments, error: departmentsError } = await supabase
-        .from("departments")
-        .select("id, name, team, description, is_active, created_at, updated_at")
-        .order("name", { ascending: true });
+    // Parallelize queries to eliminate waterfalls and speed up tab navigation
+    const [departmentsRes, profilesRes] = await Promise.all([
+        supabase
+            .from("departments")
+            .select("id, name, team, description, is_active, created_at, updated_at")
+            .order("name", { ascending: true }),
+        supabase
+            .from("profiles")
+            .select("department_id")
+            .not("department_id", "is", null)
+    ]);
 
-    if (departmentsError) {
-        console.error("Error fetching departments:", departmentsError);
+    if (departmentsRes.error) {
+        console.error("Error fetching departments:", departmentsRes.error);
+    }
+    if (profilesRes.error) {
+        console.error("Error fetching department usage:", profilesRes.error);
     }
 
-    const { data: assignedProfiles, error: profilesError } = await supabase
-        .from("profiles")
-        .select("department_id")
-        .not("department_id", "is", null);
-
-    if (profilesError) {
-        console.error("Error fetching department usage:", profilesError);
-    }
+    const departments = departmentsRes.data || [];
+    const assignedProfiles = profilesRes.data || [];
 
     const workerCounts = new Map<string, number>();
     for (const profile of assignedProfiles || []) {

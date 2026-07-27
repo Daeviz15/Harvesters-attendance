@@ -60,6 +60,8 @@ export async function GET(req: NextRequest) {
         const value = searchParams.get('value');
         const startDateParam = searchParams.get('startDate') || value;
         const endDateParam = searchParams.get('endDate') || value || startDateParam;
+        const selectedDept = searchParams.get('department');
+        const selectedTeam = searchParams.get('team');
 
         const tzOffsetRaw = parseInt(searchParams.get('tzOffset') || '0', 10);
         const tzOffset = Number.isFinite(tzOffsetRaw) && Math.abs(tzOffsetRaw) <= 840 ? tzOffsetRaw : 0;
@@ -117,7 +119,6 @@ export async function GET(req: NextRequest) {
         let hasMore = true;
 
         while (hasMore) {
-            // Step A: Fetch attendance logs (with session/event join)
             let query = supabase
                 .from('attendance_logs')
                 .select(`
@@ -127,6 +128,7 @@ export async function GET(req: NextRequest) {
                     check_out_time,
                     status,
                     department,
+                    team,
                     session:attendance_sessions (
                         event:events (title)
                     )
@@ -140,6 +142,14 @@ export async function GET(req: NextRequest) {
                     .lte('check_in_time', endTime);
             } else if (type === 'session' && value) {
                 query = query.eq('session_id', value);
+            }
+
+            if (selectedDept && selectedDept !== 'all') {
+                query = query.eq('department', selectedDept);
+            }
+
+            if (selectedTeam && selectedTeam !== 'all') {
+                query = query.eq('team', selectedTeam);
             }
 
             const { data: logs, error: dbError } = await query;

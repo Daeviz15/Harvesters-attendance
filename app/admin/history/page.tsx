@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import HistoryClient from "./HistoryClient";
+import { getAttendanceAnalytics } from "../sessions/actions";
 
 export const metadata = {
     title: "Global Attendance History | Admin Portal",
@@ -22,23 +23,20 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
 
     const supabase = await createClient();
 
-    
     let matchingUserIds: string[] | null = null;
     if (search) {
         const { data: matchedProfiles } = await supabase
             .from('profiles')
             .select('id')
             .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
-            
+
         if (matchedProfiles && matchedProfiles.length > 0) {
             matchingUserIds = matchedProfiles.map(p => p.id);
         } else {
-            // Search yielded no users, so there will be no logs.
             matchingUserIds = [];
         }
     }
 
-    // 2. Query attendance logs with pagination
     let query = supabase
         .from('attendance_logs')
         .select(`
@@ -55,7 +53,6 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
 
     if (matchingUserIds !== null) {
         if (matchingUserIds.length === 0) {
-            // Force empty result if search didn't match any users
             query = query.in('user_id', ['00000000-0000-0000-0000-000000000000']);
         } else {
             query = query.in('user_id', matchingUserIds);
@@ -65,15 +62,20 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
     const from = (page - 1) * HISTORY_PAGE_SIZE;
     const to = from + HISTORY_PAGE_SIZE - 1;
 
-    const { data: logs, count, error } = await query
-        .order('check_in_time', { ascending: false })
-        .range(from, to);
+    // Parallelize history query and analytics fetch
+    const [historyRes, analyticsRes] = await Promise.all([
+        query
+            .order('check_in_time', { ascending: false })
+            .range(from, to),
+        getAttendanceAnalytics(),
+    ]);
 
-    if (error) {
-        console.error("Error fetching history:", error);
+    const logs = historyRes.data || [];
+    const count = historyRes.count || 0;
+    if (historyRes.error) {
+        console.error("Error fetching history:", historyRes.error);
     }
 
-    // 3. Fetch the profile details for the fetched logs
     let profilesMap: Record<string, HistoryProfile> = {};
     if (logs && logs.length > 0) {
         const userIdsToFetch = Array.from(new Set(logs.map(log => log.user_id)));
@@ -81,7 +83,7 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
             .from('profiles')
             .select('id, first_name, last_name, avatar_url')
             .in('id', userIdsToFetch);
-            
+
         if (profilesData) {
             profilesMap = profilesData.reduce((acc, p) => {
                 acc[p.id] = p;
@@ -92,12 +94,11 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
 
     const totalPages = count ? Math.ceil(count / HISTORY_PAGE_SIZE) : 1;
 
-    // Transform data safely for the client
     const formattedLogs = (logs || []).map(log => {
         const p = profilesMap[log.user_id];
         const s = Array.isArray(log.session) ? log.session[0] : log.session;
         const e = s ? (Array.isArray(s.event) ? s.event[0] : s.event) : null;
-        
+
         return {
             id: log.id,
             check_in_time: log.check_in_time,
@@ -110,14 +111,28 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
         };
     });
 
+    const analytics = analyticsRes.data || {
+        totalCheckIns: 0,
+        selfGpsCheckIns: 0,
+        proxyCheckIns: 0,
+        gpsRatePercent: 0,
+        activeSessionsCount: 0,
+        totalWorkersCount: 0,
+        ministryTurnout: [],
+        topDepartments: [],
+        latestSessionSummary: null,
+        attendanceTrends: [],
+    };
+
     return (
-        <HistoryClient 
-            logs={formattedLogs} 
-            currentPage={page} 
-            totalPages={totalPages} 
+        <HistoryClient
+            logs={formattedLogs}
+            currentPage={page}
+            totalPages={totalPages}
             totalCount={count || 0}
             initialSearch={search}
             pageSize={HISTORY_PAGE_SIZE}
+            analytics={analytics}
         />
     );
 }

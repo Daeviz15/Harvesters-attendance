@@ -1,8 +1,7 @@
-"use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Download, CalendarDays, Loader2, FileDown, CheckCircle2 } from "lucide-react";
+import { X, Download, CalendarDays, Loader2, FileDown, CheckCircle2, Building2, Users } from "lucide-react";
+import { createClient } from "@/utils/supabase/client";
 
 interface ExportModalProps {
     isOpen: boolean;
@@ -13,8 +12,27 @@ export default function ExportModal({ isOpen, onClose }: ExportModalProps) {
     const [exportType, setExportType] = useState<"date" | "all">("date");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
+    const [selectedTeam, setSelectedTeam] = useState<string>("all");
+    const [selectedDepartment, setSelectedDepartment] = useState<string>("all");
+    const [departments, setDepartments] = useState<{ id: string; name: string; team: string | null }[]>([]);
     const [isExporting, setIsExporting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        async function fetchDepts() {
+            const supabase = createClient();
+            const { data } = await supabase
+                .from('departments')
+                .select('id, name, team')
+                .eq('is_active', true)
+                .order('name', { ascending: true });
+            if (data) {
+                setDepartments(data);
+            }
+        }
+        fetchDepts();
+    }, [isOpen]);
 
     const handleStartDateChange = (val: string) => {
         setStartDate(val);
@@ -28,7 +46,6 @@ export default function ExportModal({ isOpen, onClose }: ExportModalProps) {
         setIsExporting(true);
 
         try {
-            
             const url = new URL("/api/export/attendance", window.location.origin);
             url.searchParams.set("type", exportType);
             url.searchParams.set("tzOffset", new Date().getTimezoneOffset().toString());
@@ -36,6 +53,14 @@ export default function ExportModal({ isOpen, onClose }: ExportModalProps) {
             if (exportType === "date") {
                 url.searchParams.set("startDate", startDate);
                 url.searchParams.set("endDate", endDate || startDate);
+            }
+
+            if (selectedTeam !== "all") {
+                url.searchParams.set("team", selectedTeam);
+            }
+
+            if (selectedDepartment !== "all") {
+                url.searchParams.set("department", selectedDepartment);
             }
 
             
@@ -212,6 +237,52 @@ export default function ExportModal({ isOpen, onClose }: ExportModalProps) {
                                                     </div>
                                                 </motion.div>
                                             )}
+
+                                            {/* Ministry / Team Filter */}
+                                            <div>
+                                                <label className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 dark:text-white/50 block mb-2">
+                                                    Ministry / Team Filter
+                                                </label>
+                                                <div className="relative">
+                                                    <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 dark:text-white/30" />
+                                                    <select
+                                                        value={selectedTeam}
+                                                        onChange={(e) => setSelectedTeam(e.target.value)}
+                                                        className="w-full pl-10 pr-3 py-3 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all"
+                                                    >
+                                                        <option value="all">All Ministries & Teams</option>
+                                                        <option value="PROGRAMS">Programs Ministry</option>
+                                                        <option value="MINISTRY">Ministry Team</option>
+                                                        <option value="MATURITY">Maturity Ministry</option>
+                                                        <option value="MEMBERSHIP">Membership Ministry</option>
+                                                        <option value="MISSIONS">Missions Ministry</option>
+                                                        <option value="NEXT GEN">Next Gen Ministry</option>
+                                                        <option value="GENERAL">General</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Department Filter */}
+                                            <div>
+                                                <label className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 dark:text-white/50 block mb-2">
+                                                    Department Filter
+                                                </label>
+                                                <div className="relative">
+                                                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 dark:text-white/30" />
+                                                    <select
+                                                        value={selectedDepartment}
+                                                        onChange={(e) => setSelectedDepartment(e.target.value)}
+                                                        className="w-full pl-10 pr-3 py-3 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all"
+                                                    >
+                                                        <option value="all">All Departments</option>
+                                                        {departments.map((d) => (
+                                                            <option key={d.id} value={d.name}>
+                                                                {d.name} {d.team ? `(${d.team})` : ""}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            </div>
 
                                             {/* Submit */}
                                             <button

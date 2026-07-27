@@ -20,56 +20,40 @@ type ActiveSession = {
 export default async function AdminSessionsPage() {
     const supabase = await createClient();
 
-    
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-        redirect("/auth/login");
+    // Parallelize events and activeSessions queries to eliminate waterfalls
+    const [eventsRes, sessionsRes] = await Promise.all([
+        supabase
+            .from('events')
+            .select('*')
+            .order('created_at', { ascending: false }),
+        supabase
+            .from('attendance_sessions')
+            .select(`
+                id, 
+                event_id, 
+                start_time,
+                scheduled_start_at,
+                scheduled_end_at,
+                started_by_mode,
+                ended_by_mode,
+                event:events (
+                    title
+                )
+            `)
+            .eq('status', 'active')
+    ]);
+
+    if (eventsRes.error) {
+        console.error("Failed to fetch events:", eventsRes.error);
+    }
+    if (sessionsRes.error) {
+        console.error("Failed to fetch active sessions:", sessionsRes.error);
     }
 
-    
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
+    const events = eventsRes.data || [];
+    const activeSessions = sessionsRes.data || [];
 
-    if (!profile || profile.role !== 'admin') {
-        redirect("/dashboard");
-    }
-
-    
-    const { data: events, error: eventsError } = await supabase
-        .from('events')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-    if (eventsError) {
-        console.error("Failed to fetch events:", eventsError);
-    }
-
-    
-    const { data: activeSessions, error: sessionsError } = await supabase
-        .from('attendance_sessions')
-        .select(`
-            id, 
-            event_id, 
-            start_time,
-            scheduled_start_at,
-            scheduled_end_at,
-            started_by_mode,
-            ended_by_mode,
-            event:events (
-                title
-            )
-        `)
-        .eq('status', 'active');
-
-    if (sessionsError) {
-        console.error("Failed to fetch active sessions:", sessionsError);
-    }
-
-    
-    const formattedSessions: ActiveSession[] = (activeSessions || []).map(session => ({
+    const formattedSessions: ActiveSession[] = activeSessions.map(session => ({
         ...session,
         event: Array.isArray(session.event) ? session.event[0] : session.event,
     }));

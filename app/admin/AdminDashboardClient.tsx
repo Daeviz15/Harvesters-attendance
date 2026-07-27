@@ -13,6 +13,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { createWorkerAccount } from "@/app/admin/workers/actions";
 import { searchWorkersForCheckIn, manualWorkerCheckIn } from "@/app/admin/sessions/actions";
 
+import DepartmentAttendanceBreakdown from "@/components/admin/DepartmentAttendanceBreakdown";
+import type { MinistryGroup } from "./sessions/actions";
+
 interface DepartmentOption {
     id: string;
     name: string;
@@ -43,6 +46,10 @@ interface AdminDashboardClientProps {
     totalEventsCount: number;
     departments: DepartmentOption[];
     activeSessions: ActiveSessionOption[];
+    initialBreakdown?: {
+        totalCheckedIn: number;
+        ministries: MinistryGroup[];
+    };
 }
 
 const REASON_CHIPS = [
@@ -58,6 +65,7 @@ export default function AdminDashboardClient({
     totalEventsCount,
     departments,
     activeSessions,
+    initialBreakdown,
 }: AdminDashboardClientProps) {
     const router = useRouter();
 
@@ -285,6 +293,13 @@ export default function AdminDashboardClient({
                     </div>
                 </div>
             </div>
+
+            {/* Department & Ministry Attendance Breakdown Widget */}
+            <DepartmentAttendanceBreakdown
+                totalCheckedIn={initialBreakdown?.totalCheckedIn || 0}
+                ministries={initialBreakdown?.ministries || []}
+                sessionTitle={activeSessions[0]?.title}
+            />
 
             {/* ===== REGISTER WORKER MODAL ===== */}
             <AnimatePresence>

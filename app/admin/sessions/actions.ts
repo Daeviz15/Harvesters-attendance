@@ -232,3 +232,230 @@ export async function manualWorkerCheckIn(params: { workerId: string; sessionId:
     }
 }
 
+export interface CheckedInWorker {
+    id: string;
+    userId: string;
+    firstName: string;
+    lastName: string;
+    workerId: string | null;
+    avatarUrl: string | null;
+    department: string;
+    team: string;
+    checkInTime: string;
+    isManual: boolean;
+    checkInNote: string | null;
+}
+
+export interface DepartmentGroup {
+    department: string;
+    team: string;
+    count: number;
+    workers: CheckedInWorker[];
+}
+
+export interface MinistryGroup {
+    team: string;
+    count: number;
+    departments: DepartmentGroup[];
+}
+
+export async function getDepartmentAttendanceBreakdown(targetSessionId?: string) {
+    try {
+        const { supabase } = await verifyAdminServer();
+
+        let activeSessionId = targetSessionId;
+
+        if (!activeSessionId) {
+            const { data: session } = await supabase
+                .from("attendance_sessions")
+                .select("id")
+                .eq("status", "active")
+                .limit(1)
+                .maybeSingle();
+
+            if (session) {
+                activeSessionId = session.id;
+            }
+        }
+
+        if (!activeSessionId) {
+            return { data: { totalCheckedIn: 0, ministries: [] as MinistryGroup[] } };
+        }
+
+        const { data: logs, error: logsError } = await supabase
+            .from("attendance_logs")
+            .select(`
+                id,
+                user_id,
+                session_id,
+                department,
+                team,
+                check_in_time,
+                is_manual,
+                check_in_note,
+                status
+            `)
+            .eq("session_id", activeSessionId)
+            .eq("status", "active")
+            .order("check_in_time", { ascending: false });
+
+        if (logsError) {
+            console.error("Error fetching breakdown logs:", logsError);
+            return { error: "Failed to fetch attendance breakdown." };
+        }
+
+        if (!logs || logs.length === 0) {
+            return { data: { totalCheckedIn: 0, ministries: [] as MinistryGroup[] } };
+        }
+
+        const userIds = Array.from(new Set(logs.map(l => l.user_id)));
+
+        let profilesQuery = supabase
+            .from("profiles")
+            .select("id, first_name, last_name, avatar_url, worker_id, department, team")
+            .in("id", userIds);
+
+        let { data: profiles, error: profileErr } = await profilesQuery;
+
+        if (profileErr && (profileErr.code === '42703' || profileErr.message?.toLowerCase().includes('worker_id'))) {
+            const fallbackQuery = supabase
+                .from("profiles")
+                .select("id, first_name, last_name, avatar_url, department, team")
+                .in("id", userIds);
+
+            const fb = await fallbackQuery;
+            profiles = (fb.data || []).map((p: any) => ({ ...p, worker_id: null }));
+        }
+
+        const profileMap = new Map((profiles || []).map(p => [p.id, p]));
+
+        const checkedInWorkers: CheckedInWorker[] = logs.map(log => {
+            const prof = profileMap.get(log.user_id);
+            const dept = log.department || prof?.department || "General";
+            const teamName = log.team || prof?.team || "GENERAL";
+            return {
+                id: log.id,
+                userId: log.user_id,
+                firstName: prof?.first_name || "Worker",
+                lastName: prof?.last_name || "",
+                workerId: prof?.worker_id || null,
+                avatarUrl: prof?.avatar_url || null,
+                department: dept,
+                team: (teamName || "GENERAL").trim().toUpperCase(),
+                checkInTime: log.check_in_time,
+                isManual: !!log.is_manual,
+                checkInNote: log.check_in_note || null,
+            };
+        });
+
+        const ministryMap = new Map<string, Map<string, CheckedInWorker[]>>();
+
+        for (const worker of checkedInWorkers) {
+            const mKey = worker.team || "GENERAL";
+            const dKey = worker.department || "General";
+
+            if (!ministryMap.has(mKey)) {
+                ministryMap.set(mKey, new Map());
+            }
+            const deptMap = ministryMap.get(mKey)!;
+            if (!deptMap.has(dKey)) {
+                deptMap.set(dKey, []);
+            }
+            deptMap.get(dKey)!.push(worker);
+        }
+
+        const knownTeamOrder = ["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN", "GENERAL"];
+        const presentTeams = Array.from(ministryMap.keys());
+        const sortedTeams = knownTeamOrder.filter(t => presentTeams.includes(t));
+        presentTeams.forEach(t => {
+            if (!sortedTeams.includes(t)) sortedTeams.push(t);
+        });
+
+        const ministries: MinistryGroup[] = sortedTeams.map(teamName => {
+            const deptMap = ministryMap.get(teamName)!;
+            let teamCount = 0;
+            const departments: DepartmentGroup[] = [];
+
+            deptMap.forEach((workers, department) => {
+                teamCount += workers.length;
+                departments.push({
+                    department,
+                    team: teamName,
+                    count: workers.length,
+                    workers,
+                });
+            });
+
+            departments.sort((a, b) => a.department.localeCompare(b.department));
+
+            return {
+                team: teamName,
+            count: teamCount,
+                departments,
+            };
+        });
+
+        return {
+            data: {
+                totalCheckedIn: checkedInWorkers.length,
+                ministries,
+            }
+        };
+    } catch (e: unknown) {
+        return { error: getErrorMessage(e) };
+    }
+}
+
+export interface AnalyticsData {
+    totalCheckIns: number;
+    selfGpsCheckIns: number;
+    proxyCheckIns: number;
+    gpsRatePercent: number;
+    activeSessionsCount: number;
+    totalWorkersCount: number;
+    ministryTurnout: { team: string; count: number; percentage: number }[];
+    topDepartments: { department: string; team: string; count: number }[];
+    latestSessionSummary: {
+        title: string;
+        date: string;
+        totalCheckedIn: number;
+    } | null;
+    attendanceTrends: {
+        session_date: string;
+        title: string;
+        attendance: number;
+    }[];
+}
+
+export async function getAttendanceAnalytics() {
+    try {
+        const { supabase } = await verifyAdminServer();
+
+        const { data, error } = await supabase.rpc('get_attendance_analytics');
+
+        if (error) {
+            console.error("Analytics RPC error full:", JSON.stringify(error, null, 2));
+            console.error("Analytics RPC error object:", error);
+            return { error: error.message || "Failed to fetch analytics from database." };
+        }
+
+        // The RPC returns a JSON object matching AnalyticsData shape
+        const analytics: AnalyticsData = {
+            totalCheckIns: data?.totalCheckIns ?? 0,
+            selfGpsCheckIns: data?.selfGpsCheckIns ?? 0,
+            proxyCheckIns: data?.proxyCheckIns ?? 0,
+            gpsRatePercent: data?.gpsRatePercent ?? 0,
+            activeSessionsCount: data?.activeSessionsCount ?? 0,
+            totalWorkersCount: data?.totalWorkersCount ?? 0,
+            ministryTurnout: data?.ministryTurnout ?? [],
+            topDepartments: data?.topDepartments ?? [],
+            latestSessionSummary: data?.latestSessionSummary ?? null,
+            attendanceTrends: data?.attendanceTrends ?? [],
+        };
+
+        return { data: analytics };
+    } catch (e: unknown) {
+        return { error: getErrorMessage(e) };
+    }
+}
+

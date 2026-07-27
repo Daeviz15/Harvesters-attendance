@@ -2,10 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, Loader2, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, CircleDashed } from "lucide-react";
+import { Search, Loader2, ChevronLeft, ChevronRight, CalendarDays, CheckCircle2, CircleDashed, BarChart3, Table } from "lucide-react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import ExportModal from "@/components/admin/ExportModal";
+import AttendanceAnalyticsView from "@/components/admin/AttendanceAnalyticsView";
+import type { AnalyticsData } from "../sessions/actions";
 
 interface FormattedLog {
     id: string;
@@ -25,9 +27,10 @@ interface HistoryClientProps {
     totalCount: number;
     initialSearch: string;
     pageSize: number;
+    analytics?: AnalyticsData;
 }
 
-export default function HistoryClient({ logs, currentPage, totalPages, totalCount, initialSearch, pageSize }: HistoryClientProps) {
+export default function HistoryClient({ logs, currentPage, totalPages, totalCount, initialSearch, pageSize, analytics }: HistoryClientProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
@@ -35,6 +38,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
     const [searchTerm, setSearchTerm] = useState(initialSearch);
     const [isSearching, setIsSearching] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [showAnalytics, setShowAnalytics] = useState(false);
 
     
     useEffect(() => {
@@ -114,6 +118,27 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                         />
                     </div>
                     <button
+                        onClick={() => setShowAnalytics(!showAnalytics)}
+                        className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-semibold transition-all shadow-sm shrink-0 border ${
+                            showAnalytics
+                                ? "bg-[#34A853] text-white border-[#34A853]"
+                                : "bg-white dark:bg-[#111111] border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-white/80 hover:bg-neutral-50 dark:hover:bg-white/5"
+                        }`}
+                    >
+                        {showAnalytics ? (
+                            <>
+                                <Table className="w-4 h-4" />
+                                <span className="hidden sm:inline">Show Audit Logs</span>
+                            </>
+                        ) : (
+                            <>
+                                <BarChart3 className="w-4 h-4 text-[#34A853]" />
+                                <span className="hidden sm:inline">Show Analytics</span>
+                            </>
+                        )}
+                    </button>
+
+                    <button
                         onClick={() => setIsExportModalOpen(true)}
                         className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white dark:bg-[#111111] border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-semibold text-neutral-700 dark:text-white/80 hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors shadow-sm shrink-0"
                     >
@@ -125,11 +150,15 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                 </div>
             </div>
 
-            <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-white dark:bg-[#0f0f0f] rounded-2xl border border-neutral-200 dark:border-white/10 shadow-sm overflow-hidden"
-            >
+            {/* Conditional Render: Analytics View vs Audit Logs Table */}
+            {showAnalytics ? (
+                analytics && <AttendanceAnalyticsView analytics={analytics} />
+            ) : (
+                <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-white dark:bg-[#0f0f0f] rounded-2xl border border-neutral-200 dark:border-white/10 shadow-sm overflow-hidden"
+                >
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse">
                         <thead>
@@ -244,6 +273,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                     </div>
                 </div>
             </motion.div>
+            )}
             
             {/* Export Modal */}
             <ExportModal 
