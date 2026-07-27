@@ -38,15 +38,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${outfit.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${outfit.variable} ${geistMono.variable} antialiased`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col relative bg-background text-foreground transition-colors duration-300">
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',d)}catch(e){}})()`,
-          }}
-        />
         <ThemeProvider>
           <SmoothScrollProvider>
             {children}
@@ -56,4 +51,3 @@ export default function RootLayout({
     </html>
   );
 }
-

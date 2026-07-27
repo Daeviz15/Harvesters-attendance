@@ -41,6 +41,27 @@ body {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+/* Lenis Smooth Scroll Recommended Base Styles */
+html.lenis, html.lenis-smooth {
+  height: auto !important;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-smooth iframe {
+  pointer-events: none;
+}
+
 /* Hide all scrollbars globally but keep functionality */
 ::-webkit-scrollbar {
   display: none;
@@ -51,3 +72,4 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+

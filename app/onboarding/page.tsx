@@ -74,6 +74,7 @@ export default async function OnboardingPage() {
             userId={user.id}
             initialAvatarUrl={profile?.avatar_url || user.user_metadata?.avatar_url || null}
             initialPhone={profile?.phone ? profile.phone.replace('+234', '') : ''}
+            initialDepartmentId={profile?.department_id || null}
             departments={departments || []}
         />
     );

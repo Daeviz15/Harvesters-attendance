@@ -16,6 +16,7 @@ interface OnboardingClientProps {
     userId: string;
     initialAvatarUrl: string | null;
     initialPhone: string;
+    initialDepartmentId?: string | null;
     departments: {
         id: string;
         name: string;
@@ -31,17 +32,28 @@ export default function OnboardingClient({
     userId,
     initialAvatarUrl,
     initialPhone,
+    initialDepartmentId,
     departments,
 }: OnboardingClientProps) {
     const [state, formAction, isPending] = useActionState(completeOnboarding, null);
     const [firstName, setFirstName] = useState(initialFirstName);
     const [lastName, setLastName] = useState(initialLastName);
     const [phone, setPhone] = useState(initialPhone);
-    const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
     const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
+
+    // Normalize team names for case-insensitive matching and group uncategorized departments
+    const normalizedDepts = (departments || []).map(d => ({
+        ...d,
+        teamNormalized: d.team ? d.team.trim().toUpperCase() : "GENERAL"
+    }));
+
+    const initialDept = normalizedDepts.find(d => d.id === initialDepartmentId);
+    const [selectedTeam, setSelectedTeam] = useState<string | null>(
+        initialDept ? initialDept.teamNormalized : null
+    );
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState(initialDepartmentId || "");
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -83,18 +95,17 @@ export default function OnboardingClient({
     const isPhoneValid = phone.length === 10;
     const isFormValid = firstName.trim().length >= 2 && isPhoneValid && !!selectedDepartmentId && !isUploading;
 
-    // Normalize team names for case-insensitive matching and group uncategorized departments
-    const normalizedDepts = (departments || []).map(d => ({
-        ...d,
-        teamNormalized: d.team ? d.team.trim().toUpperCase() : "GENERAL"
-    }));
-
     const knownTeamOrder = ["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN", "GENERAL"];
     const presentTeams = Array.from(new Set(normalizedDepts.map(d => d.teamNormalized)));
     const sortedTeams = knownTeamOrder.filter(t => presentTeams.includes(t));
     presentTeams.forEach(t => {
         if (!sortedTeams.includes(t)) sortedTeams.push(t);
     });
+
+    const filteredDepts = selectedTeam
+        ? normalizedDepts.filter(d => d.teamNormalized === selectedTeam)
+        : [];
+    const selectedDepartment = normalizedDepts.find(d => d.id === selectedDepartmentId);
 
     return (
         <main className="min-h-screen w-full flex items-center justify-center bg-background text-foreground relative overflow-hidden font-sans py-12 px-6 transition-colors duration-300">
@@ -246,127 +257,109 @@ export default function OnboardingClient({
                         <input type="hidden" name="avatarUrl" value={avatarUrl || ""} />
                     </div>
 
-                    {/* Section 4: Department Selection */}
-                    <div>
+                    {/* Section 4: Ministry Team & Department Selection (Cascading Dropdowns) */}
+                    <div className="space-y-4">
                         <div className="flex items-center gap-2 mb-1">
                             <Users className="w-5 h-5 text-[#34A853]" />
                             <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">
-                                Select Your Department <span className="text-red-500">*</span>
+                                Select Your Team & Department <span className="text-red-500">*</span>
                             </label>
                         </div>
-                        <p className="text-[12px] text-neutral-500 dark:text-white/40 mb-4 ml-7">Tap a team below to view departments and select yours.</p>
+                        <p className="text-[12px] text-neutral-500 dark:text-white/40 mb-3 ml-7">
+                            Choose your Ministry Team first to view and select your assigned department.
+                        </p>
 
                         {sortedTeams.length === 0 ? (
                             <div className="bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 p-4 rounded-xl text-[13px] font-medium text-center">
-                                No active departments found in the database. Please ensure <code className="bg-amber-500/20 px-1.5 py-0.5 rounded font-mono">supabase_teams_setup.sql</code> is run in Supabase.
+                                No active departments found in database.
                             </div>
                         ) : (
-                            <div className="space-y-3">
-                                {sortedTeams.map((teamName) => {
-                                    const isExpanded = selectedTeam === teamName;
-                                    const teamDepts = normalizedDepts.filter(d => d.teamNormalized === teamName);
-                                    const selectedInThisTeam = teamDepts.find(d => d.id === selectedDepartmentId);
-
-                                    return (
-                                        <div
-                                            key={teamName}
-                                            className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
-                                                isExpanded
-                                                    ? "border-[#34A853]/30 bg-[#34A853]/[0.03] dark:bg-[#34A853]/[0.04]"
-                                                    : selectedInThisTeam
-                                                        ? "border-[#34A853]/20 bg-[#34A853]/[0.02]"
-                                                        : "border-neutral-200 dark:border-white/10 bg-white dark:bg-white/[0.02]"
-                                            }`}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                {/* Step 1: Ministry Team Dropdown */}
+                                <div>
+                                    <label className="block text-[12px] font-medium text-neutral-500 dark:text-white/50 mb-1.5">
+                                        Ministry Team <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            value={selectedTeam || ""}
+                                            onChange={(e) => {
+                                                const newTeam = e.target.value || null;
+                                                setSelectedTeam(newTeam);
+                                                if (selectedDepartmentId) {
+                                                    const currentDept = normalizedDepts.find(d => d.id === selectedDepartmentId);
+                                                    if (currentDept && currentDept.teamNormalized !== newTeam) {
+                                                        setSelectedDepartmentId("");
+                                                    }
+                                                }
+                                            }}
+                                            className="w-full bg-neutral-100/70 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-xl px-4 py-3 text-neutral-800 dark:text-white text-[14px] font-medium focus:outline-none focus:border-[#34A853] transition-colors appearance-none cursor-pointer pr-10"
                                         >
-                                            <button
-                                                type="button"
-                                                onClick={() => setSelectedTeam(isExpanded ? null : teamName)}
-                                                className="w-full flex items-center justify-between px-5 py-3.5 group cursor-pointer"
-                                            >
-                                                <div className="flex items-center gap-3 min-w-0">
-                                                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                                                        isExpanded || selectedInThisTeam
-                                                            ? "bg-[#34A853]/15 text-[#34A853]"
-                                                            : "bg-neutral-100 dark:bg-white/5 text-neutral-400 dark:text-white/30 group-hover:bg-neutral-200 dark:group-hover:bg-white/10"
-                                                    }`}>
-                                                        <Users className="w-4 h-4" />
-                                                    </div>
-                                                    <div className="text-left min-w-0">
-                                                        <span className={`text-[14px] font-semibold block ${
-                                                            isExpanded || selectedInThisTeam
-                                                                ? "text-[#34A853]"
-                                                                : "text-neutral-700 dark:text-white/80"
-                                                        }`}>{teamName}</span>
-                                                        <span className="text-[11px] text-neutral-400 dark:text-white/30">
-                                                            {teamDepts.length} department{teamDepts.length !== 1 ? "s" : ""}
-                                                            {selectedInThisTeam && !isExpanded && (
-                                                                <span className="text-[#34A853] font-medium"> · {selectedInThisTeam.name}</span>
-                                                            )}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className="flex items-center gap-2 shrink-0">
-                                                    {selectedInThisTeam && !isExpanded && (
-                                                        <CheckCircle2 className="w-5 h-5 text-[#34A853]" />
-                                                    )}
-                                                    <svg
-                                                        className={`w-5 h-5 text-neutral-400 dark:text-white/30 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`}
-                                                        fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                                                    >
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                                    </svg>
-                                                </div>
-                                            </button>
-
-                                            {isExpanded && (
-                                                <motion.div
-                                                    initial={{ opacity: 0, height: 0 }}
-                                                    animate={{ opacity: 1, height: "auto" }}
-                                                    transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                                                    className="overflow-hidden"
-                                                >
-                                                    <div className="px-4 pb-4 pt-1">
-                                                        <div className="border-t border-neutral-200/60 dark:border-white/5 pt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                            {teamDepts.map((dept) => {
-                                                                const isDeptSelected = selectedDepartmentId === dept.id;
-                                                                return (
-                                                                    <button
-                                                                        key={dept.id}
-                                                                        type="button"
-                                                                        aria-pressed={isDeptSelected}
-                                                                        onClick={() => setSelectedDepartmentId(dept.id)}
-                                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-150 cursor-pointer ${
-                                                                            isDeptSelected
-                                                                                ? "bg-[#34A853]/10 border border-[#34A853]/30 text-neutral-800 dark:text-white"
-                                                                                : "bg-neutral-100/60 dark:bg-white/[0.03] border border-transparent hover:bg-neutral-200/60 dark:hover:bg-white/[0.06] text-neutral-600 dark:text-white/60"
-                                                                        }`}
-                                                                    >
-                                                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                                                                            isDeptSelected
-                                                                                ? "border-[#34A853] bg-[#34A853]"
-                                                                                : "border-neutral-300 dark:border-white/20"
-                                                                        }`}>
-                                                                            {isDeptSelected && (
-                                                                                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                                                                </svg>
-                                                                            )}
-                                                                        </div>
-                                                                        <span className={`text-[13px] leading-snug ${isDeptSelected ? "font-semibold" : "font-medium"}`}>
-                                                                            {dept.name}
-                                                                        </span>
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            )}
+                                            <option value="" disabled className="dark:bg-[#121212] text-neutral-400">
+                                                -- Select Ministry Team --
+                                            </option>
+                                            {sortedTeams.map((teamName) => {
+                                                const count = normalizedDepts.filter(d => d.teamNormalized === teamName).length;
+                                                return (
+                                                    <option key={teamName} value={teamName} className="dark:bg-[#121212] text-neutral-800 dark:text-white">
+                                                        {teamName} ({count} dept{count !== 1 ? 's' : ''})
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                        <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-neutral-400 dark:text-white/40">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                            </svg>
                                         </div>
-                                    );
-                                })}
+                                    </div>
+                                </div>
+
+                                {/* Step 2: Department Dropdown (Cascading based on selectedTeam) */}
+                                <div>
+                                    <label className="block text-[12px] font-medium text-neutral-500 dark:text-white/50 mb-1.5">
+                                        Department <span className="text-red-500">*</span>
+                                    </label>
+                                    <div className="relative">
+                                        <select
+                                            disabled={!selectedTeam}
+                                            value={selectedDepartmentId}
+                                            onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                            className="w-full bg-neutral-100/70 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-xl px-4 py-3 text-neutral-800 dark:text-white text-[14px] font-medium focus:outline-none focus:border-[#34A853] transition-colors appearance-none cursor-pointer pr-10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="" disabled className="dark:bg-[#121212] text-neutral-400">
+                                                {selectedTeam ? "-- Select Department --" : "-- Select Team First --"}
+                                            </option>
+                                            {filteredDepts.map((dept) => (
+                                                <option key={dept.id} value={dept.id} className="dark:bg-[#121212] text-neutral-800 dark:text-white">
+                                                    {dept.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-neutral-400 dark:text-white/40">
+                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
+
+                        {/* Selected Department Confirmation Badge */}
+                        {selectedDepartment && selectedTeam && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -5 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-[#34A853]/10 border border-[#34A853]/20 text-[#34A853] text-[13px] font-medium mt-2"
+                            >
+                                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                                <span>
+                                    Selected: <strong className="font-bold">{selectedDepartment.name}</strong> under <strong className="font-bold">{selectedTeam}</strong> Ministry
+                                </span>
+                            </motion.div>
+                        )}
+
                         <input type="hidden" name="departmentId" value={selectedDepartmentId} required />
                     </div>
 

@@ -15,20 +15,24 @@ export default function SmoothScrollProvider({
             orientation: 'vertical',
             smoothWheel: true,
             wheelMultiplier: 1,
-            touchMultiplier: 2,
+            touchMultiplier: 1.5,
+            autoResize: true,
         });
 
+        let rafId: number;
         function raf(time: number) {
             lenis.raf(time);
-            requestAnimationFrame(raf);
+            rafId = requestAnimationFrame(raf);
         }
 
-        requestAnimationFrame(raf);
+        rafId = requestAnimationFrame(raf);
 
         return () => {
+            cancelAnimationFrame(rafId);
             lenis.destroy();
         };
     }, []);
 
     return <>{children}</>;
 }
+

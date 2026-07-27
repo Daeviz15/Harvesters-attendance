@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState } from "react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -11,36 +11,24 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
+// Use useLayoutEffect on client, useEffect on server (SSR safety)
+const useIsomorphicLayoutEffect =
+    typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const [theme, setThemeState] = useState<Theme>("system");
 
-    useEffect(() => {
-        
+    // Read saved theme from localStorage synchronously on mount
+    useIsomorphicLayoutEffect(() => {
         const savedTheme = (localStorage.getItem("theme") as Theme) || "system";
         setThemeState(savedTheme);
+        applyTheme(savedTheme);
     }, []);
 
+    // Re-apply theme whenever it changes
     useEffect(() => {
-        const root = document.documentElement;
-
-        const applyTheme = (currentTheme: Theme) => {
-            if (currentTheme === "system") {
-                const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                if (systemPrefersDark) {
-                    root.classList.add("dark");
-                } else {
-                    root.classList.remove("dark");
-                }
-            } else if (currentTheme === "dark") {
-                root.classList.add("dark");
-            } else {
-                root.classList.remove("dark");
-            }
-        };
-
         applyTheme(theme);
 
-        
         if (theme === "system") {
             const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
             const handleMediaChange = () => applyTheme("system");
@@ -59,6 +47,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             {children}
         </ThemeContext.Provider>
     );
+}
+
+function applyTheme(currentTheme: Theme) {
+    const root = document.documentElement;
+    if (currentTheme === "system") {
+        const systemPrefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        root.classList.toggle("dark", systemPrefersDark);
+    } else {
+        root.classList.toggle("dark", currentTheme === "dark");
+    }
 }
 
 export function useTheme() {
