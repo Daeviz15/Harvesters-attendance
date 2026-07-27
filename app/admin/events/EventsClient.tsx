@@ -21,6 +21,7 @@ type EventType = {
     end_time: string | null;
     timezone: string | null;
     recurrence_rule: string | null;
+    location_ids: string[] | null;
     created_at: string;
 };
 
@@ -127,11 +128,17 @@ function getRuleLabel(frequency: ScheduleFrequency) {
     return "Single event";
 }
 
-export default function EventsClient({ initialEvents }: { initialEvents: EventType[] }) {
+export type LocationBasic = {
+    id: string;
+    name: string;
+};
+
+export default function EventsClient({ initialEvents, activeLocations }: { initialEvents: EventType[], activeLocations: LocationBasic[] }) {
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
     const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("weekly");
+    const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     
@@ -167,6 +174,7 @@ export default function EventsClient({ initialEvents }: { initialEvents: EventTy
     const openCreateModal = () => {
         setEditingEvent(null);
         setScheduleFrequency("weekly");
+        setSelectedLocations([]);
         setError(null);
         setIsModalOpen(true);
     };
@@ -174,6 +182,7 @@ export default function EventsClient({ initialEvents }: { initialEvents: EventTy
     const openEditModal = (event: EventType) => {
         setEditingEvent(event);
         setScheduleFrequency(getFrequency(event));
+        setSelectedLocations(event.location_ids || []);
         setError(null);
         setIsModalOpen(true);
     };
@@ -187,10 +196,18 @@ export default function EventsClient({ initialEvents }: { initialEvents: EventTy
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
+        
+        if (selectedLocations.length === 0) {
+            setError("You must select at least one location.");
+            return;
+        }
+
         setIsSubmitting(true);
         setError(null);
 
         const formData = new FormData(e.currentTarget);
+        // Append selected locations as JSON
+        formData.append("location_ids", JSON.stringify(selectedLocations));
         
         let result;
         if (editingEvent) {
@@ -587,6 +604,46 @@ export default function EventsClient({ initialEvents }: { initialEvents: EventTy
                                                 </div>
                                             </div>
                                         </div>
+                                    </div>
+                                    
+                                    {/* Locations Selection (Mandatory) */}
+                                    <div className="mt-8 border-t border-neutral-100 dark:border-white/10 pt-6">
+                                        <h3 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">
+                                            Event Locations <span className="text-red-500">*</span>
+                                        </h3>
+                                        <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
+                                            Select which branch locations are allowed for this event. Workers must be physically at one of these locations to check in.
+                                        </p>
+                                        
+                                        {activeLocations.length === 0 ? (
+                                            <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 flex gap-3">
+                                                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 shrink-0" />
+                                                <p className="text-sm text-orange-800 dark:text-orange-200">
+                                                    You haven't created any active branch locations yet. You must add at least one location before creating an event.
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-2 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-100 dark:border-white/5">
+                                                {activeLocations.map((loc) => (
+                                                    <label key={loc.id} className="flex items-center gap-3 p-3 rounded-lg bg-white dark:bg-black border border-neutral-200 dark:border-white/10 cursor-pointer hover:border-[#34A853]/50 transition-colors">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            className="w-4 h-4 text-[#34A853] rounded border-neutral-300 dark:border-neutral-600 focus:ring-[#34A853]"
+                                                            checked={selectedLocations.includes(loc.id)}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setSelectedLocations(prev => [...prev, loc.id]);
+                                                                } else {
+                                                                    setSelectedLocations(prev => prev.filter(id => id !== loc.id));
+                                                                }
+                                                                setError(null);
+                                                            }}
+                                                        />
+                                                        <span className="text-sm font-medium text-neutral-900 dark:text-neutral-200">{loc.name}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
 
                                     <div className="mt-8 flex items-center justify-end gap-3 pt-6 border-t border-neutral-100 dark:border-white/10">

@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { motion } from "framer-motion";
-import { Phone, Users, CheckCircle2 } from "lucide-react";
+import { Phone, Users, CheckCircle2, Lock, User, ShieldCheck } from "lucide-react";
 import Image from "next/image";
 import { completeOnboarding } from "@/app/auth/actions";
 import { createClient } from "@/utils/supabase/client";
@@ -10,8 +10,12 @@ import LoadingOverlay from "@/components/LoadingOverlay";
 import ThemeToggle from "@/components/ThemeToggle";
 
 interface OnboardingClientProps {
-    initialUsername: string;
+    initialFirstName: string;
+    initialLastName: string;
+    workerId: string;
     userId: string;
+    initialAvatarUrl: string | null;
+    initialPhone: string;
     departments: {
         id: string;
         name: string;
@@ -20,12 +24,22 @@ interface OnboardingClientProps {
     }[];
 }
 
-export default function OnboardingClient({ initialUsername, userId, departments }: OnboardingClientProps) {
+export default function OnboardingClient({
+    initialFirstName,
+    initialLastName,
+    workerId,
+    userId,
+    initialAvatarUrl,
+    initialPhone,
+    departments,
+}: OnboardingClientProps) {
     const [state, formAction, isPending] = useActionState(completeOnboarding, null);
-    const [username, setUsername] = useState(initialUsername);
+    const [firstName, setFirstName] = useState(initialFirstName);
+    const [lastName, setLastName] = useState(initialLastName);
+    const [phone, setPhone] = useState(initialPhone);
     const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState("");
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -43,8 +57,6 @@ export default function OnboardingClient({ initialUsername, userId, departments 
 
         try {
             const supabase = createClient();
-            
-            // Create a unique file name inside a folder named after the user's ID for RLS security
             const fileExt = file.name.split('.').pop();
             const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
             const filePath = `${userId}/${fileName}`;
@@ -68,11 +80,27 @@ export default function OnboardingClient({ initialUsername, userId, departments 
         }
     };
 
+    const isPhoneValid = phone.length === 10;
+    const isFormValid = firstName.trim().length >= 2 && isPhoneValid && !!selectedDepartmentId && !isUploading;
+
+    // Normalize team names for case-insensitive matching and group uncategorized departments
+    const normalizedDepts = (departments || []).map(d => ({
+        ...d,
+        teamNormalized: d.team ? d.team.trim().toUpperCase() : "GENERAL"
+    }));
+
+    const knownTeamOrder = ["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN", "GENERAL"];
+    const presentTeams = Array.from(new Set(normalizedDepts.map(d => d.teamNormalized)));
+    const sortedTeams = knownTeamOrder.filter(t => presentTeams.includes(t));
+    presentTeams.forEach(t => {
+        if (!sortedTeams.includes(t)) sortedTeams.push(t);
+    });
+
     return (
         <main className="min-h-screen w-full flex items-center justify-center bg-background text-foreground relative overflow-hidden font-sans py-12 px-6 transition-colors duration-300">
             <LoadingOverlay isOpen={isPending} />
 
-            {/* Theme Toggle in Top Right */}
+            {/* Theme Toggle */}
             <div className="absolute top-6 right-6 z-20">
                 <ThemeToggle />
             </div>
@@ -102,49 +130,95 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                         />
                     </div>
                     <h1 className="text-3xl md:text-4xl font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-3">Welcome!</h1>
-                    <p className="text-[15px] text-neutral-500 dark:text-white/50 max-w-md">Let&apos;s get your profile set up so you can start checking in for your service shifts.</p>
+                    <p className="text-[15px] text-neutral-500 dark:text-white/50 max-w-md">Let&apos;s complete your profile set up so you can start checking in for your service shifts.</p>
                 </div>
 
-                <form action={formAction} className="space-y-10">
+                <form action={formAction} className="space-y-8">
                     {state?.error && (
-                        <div className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-[13px] p-4 rounded-xl text-center">
+                        <div className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-[13px] p-4 rounded-xl text-center font-medium">
                             {state.error}
                         </div>
                     )}
 
-                    {/* Username Input */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-4">
-                            <Users className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Choose a Username</label>
+                    {/* Section 1: Assigned Worker ID (Auto-generated & Uneditable) */}
+                    <div className="bg-neutral-50 dark:bg-white/[0.03] border border-neutral-200/80 dark:border-white/10 rounded-2xl p-5">
+                        <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                                <ShieldCheck className="w-5 h-5 text-[#34A853]" />
+                                <label className="text-[14px] font-semibold tracking-wide text-neutral-800 dark:text-white/90">
+                                    Assigned Worker ID
+                                </label>
+                            </div>
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-[#34A853]/10 text-[#34A853] border border-[#34A853]/20">
+                                <Lock className="w-3 h-3" /> System Generated
+                            </span>
                         </div>
-                        <div className="relative group max-w-md">
-                            <div className="flex items-center border-b border-neutral-300 dark:border-white/10 group-focus-within:border-[#34A853]/50 transition-colors pb-3">
-                                <span className="text-neutral-500 dark:text-white/40 text-[15px] mr-2">@</span>
+
+                        <div className="mt-3 flex items-center justify-between bg-white dark:bg-black/40 border border-neutral-300 dark:border-white/15 rounded-xl px-4 py-3 shadow-inner">
+                            <span className="font-mono text-[18px] font-bold text-[#34A853] tracking-widest">
+                                {workerId}
+                            </span>
+                            <span className="text-[11px] uppercase font-semibold tracking-wider text-neutral-400 dark:text-white/40 bg-neutral-100 dark:bg-white/5 px-2.5 py-1 rounded-md">
+                                Read Only
+                            </span>
+                        </div>
+                        <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2.5 font-medium">
+                            This unique Worker ID is permanently assigned to your profile for attendance tracking.
+                        </p>
+                        <input type="hidden" name="workerId" value={workerId} />
+                    </div>
+
+                    {/* Section 2: Full Name Input */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <User className="w-5 h-5 text-[#34A853]" />
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">
+                                Your Full Name
+                            </label>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-[12px] font-medium text-neutral-500 dark:text-white/50 mb-1.5">
+                                    First Name <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="text"
-                                    name="username"
+                                    name="firstName"
                                     required
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value.replace(/[^a-zA-Z0-9_ ]/g, ''))}
-                                    className="w-full bg-transparent text-neutral-800 dark:text-white text-[16px] focus:outline-none placeholder:text-neutral-400 dark:placeholder:text-white/20 tracking-wide"
-                                    placeholder="e.g. daeviz15 or David Oyetade"
+                                    value={firstName}
+                                    onChange={(e) => setFirstName(e.target.value)}
+                                    className="w-full bg-neutral-100/70 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-xl px-4 py-3 text-neutral-800 dark:text-white text-[15px] focus:outline-none focus:border-[#34A853] transition-colors"
+                                    placeholder="e.g. David"
                                 />
                             </div>
-                            <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">Letters, numbers, underscores, and spaces allowed.</p>
+                            <div>
+                                <label className="block text-[12px] font-medium text-neutral-500 dark:text-white/50 mb-1.5">
+                                    Last Name
+                                </label>
+                                <input
+                                    type="text"
+                                    name="lastName"
+                                    value={lastName}
+                                    onChange={(e) => setLastName(e.target.value)}
+                                    className="w-full bg-neutral-100/70 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-xl px-4 py-3 text-neutral-800 dark:text-white text-[15px] focus:outline-none focus:border-[#34A853] transition-colors"
+                                    placeholder="e.g. Oyetade"
+                                />
+                            </div>
                         </div>
                     </div>
 
-                    {/* Profile Picture Upload */}
+                    {/* Section 3: Profile Picture Upload */}
                     <div>
-                        <div className="flex items-center gap-2 mb-4">
+                        <div className="flex items-center gap-2 mb-3">
                             <Users className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Profile Picture</label>
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">
+                                Profile Picture <span className="text-[12px] font-normal text-neutral-400 dark:text-white/40 ml-1">(Optional)</span>
+                            </label>
                         </div>
-                        <div className="flex items-center gap-6">
-                            <div className="relative w-24 h-24 rounded-full bg-neutral-200 dark:bg-white/5 border-2 border-dashed border-neutral-300 dark:border-white/20 flex items-center justify-center overflow-hidden shrink-0">
+                        <div className="flex items-center gap-6 bg-neutral-50/50 dark:bg-white/[0.02] border border-neutral-200 dark:border-white/5 p-4 rounded-2xl">
+                            <div className="relative w-20 h-20 rounded-full bg-neutral-200 dark:bg-white/5 border-2 border-dashed border-neutral-300 dark:border-white/20 flex items-center justify-center overflow-hidden shrink-0">
                                 {avatarUrl ? (
-                                    <Image src={avatarUrl} alt="Avatar" fill className="object-cover" sizes="96px" />
+                                    <Image src={avatarUrl} alt="Avatar" fill className="object-cover" sizes="80px" />
                                 ) : (
                                     <span className="text-neutral-400 dark:text-white/30 text-[10px] uppercase font-bold tracking-widest">Upload</span>
                                 )}
@@ -155,7 +229,7 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                 )}
                             </div>
                             <div className="flex-1">
-                                <label className="cursor-pointer bg-neutral-100 dark:bg-white/5 hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-700 dark:text-white/80 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors border border-neutral-200 dark:border-white/10">
+                                <label className="cursor-pointer inline-block bg-neutral-100 dark:bg-white/5 hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-700 dark:text-white/80 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors border border-neutral-200 dark:border-white/10">
                                     Choose Image
                                     <input 
                                         type="file" 
@@ -165,28 +239,32 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                         className="hidden" 
                                     />
                                 </label>
-                                <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-3 font-medium">JPEG, PNG, or WebP. Max 5MB.</p>
+                                <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">JPEG, PNG, or WebP. Max 5MB.</p>
                                 {uploadError && <p className="text-[12px] text-red-500 mt-2">{uploadError}</p>}
                             </div>
                         </div>
-                        {/* Hidden input to pass avatar URL to server action */}
-                        {avatarUrl && <input type="hidden" name="avatarUrl" value={avatarUrl} />}
+                        <input type="hidden" name="avatarUrl" value={avatarUrl || ""} />
                     </div>
 
-                    {/* Team & Department Selection — Accordion */}
+                    {/* Section 4: Department Selection */}
                     <div>
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-1">
                             <Users className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Select Your Department</label>
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">
+                                Select Your Department <span className="text-red-500">*</span>
+                            </label>
                         </div>
-                        <p className="text-[12px] text-neutral-500 dark:text-white/40 mb-5 ml-7">Tap a team to see its departments, then choose yours.</p>
+                        <p className="text-[12px] text-neutral-500 dark:text-white/40 mb-4 ml-7">Tap a team below to view departments and select yours.</p>
 
-                        <div className="space-y-3">
-                            {["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"]
-                                .filter(teamName => departments.some(d => d.team === teamName))
-                                .map((teamName) => {
+                        {sortedTeams.length === 0 ? (
+                            <div className="bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 p-4 rounded-xl text-[13px] font-medium text-center">
+                                No active departments found in the database. Please ensure <code className="bg-amber-500/20 px-1.5 py-0.5 rounded font-mono">supabase_teams_setup.sql</code> is run in Supabase.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {sortedTeams.map((teamName) => {
                                     const isExpanded = selectedTeam === teamName;
-                                    const teamDepts = departments.filter(d => d.team === teamName);
+                                    const teamDepts = normalizedDepts.filter(d => d.teamNormalized === teamName);
                                     const selectedInThisTeam = teamDepts.find(d => d.id === selectedDepartmentId);
 
                                     return (
@@ -200,13 +278,10 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                                         : "border-neutral-200 dark:border-white/10 bg-white dark:bg-white/[0.02]"
                                             }`}
                                         >
-                                            {/* Team Header */}
                                             <button
                                                 type="button"
-                                                onClick={() => {
-                                                    setSelectedTeam(isExpanded ? null : teamName);
-                                                }}
-                                                className="w-full flex items-center justify-between px-5 py-4 group"
+                                                onClick={() => setSelectedTeam(isExpanded ? null : teamName)}
+                                                className="w-full flex items-center justify-between px-5 py-3.5 group cursor-pointer"
                                             >
                                                 <div className="flex items-center gap-3 min-w-0">
                                                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
@@ -243,7 +318,6 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                                 </div>
                                             </button>
 
-                                            {/* Departments Drawer */}
                                             {isExpanded && (
                                                 <motion.div
                                                     initial={{ opacity: 0, height: 0 }}
@@ -261,7 +335,7 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                                                         type="button"
                                                                         aria-pressed={isDeptSelected}
                                                                         onClick={() => setSelectedDepartmentId(dept.id)}
-                                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-150 ${
+                                                                        className={`relative flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-150 cursor-pointer ${
                                                                             isDeptSelected
                                                                                 ? "bg-[#34A853]/10 border border-[#34A853]/30 text-neutral-800 dark:text-white"
                                                                                 : "bg-neutral-100/60 dark:bg-white/[0.03] border border-transparent hover:bg-neutral-200/60 dark:hover:bg-white/[0.06] text-neutral-600 dark:text-white/60"
@@ -291,41 +365,46 @@ export default function OnboardingClient({ initialUsername, userId, departments 
                                         </div>
                                     );
                                 })}
-                        </div>
+                            </div>
+                        )}
                         <input type="hidden" name="departmentId" value={selectedDepartmentId} required />
                     </div>
 
-                    {/* Phone Number Input */}
+                    {/* Section 5: Phone Number Input */}
                     <div>
-                        <div className="flex items-center gap-2 mb-4">
+                        <div className="flex items-center gap-2 mb-3">
                             <Phone className="w-5 h-5 text-[#34A853]" />
-                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">Phone Number</label>
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">
+                                Phone Number <span className="text-red-500">*</span>
+                            </label>
                         </div>
                         <div className="relative group max-w-md">
                             <div className="flex items-center border-b border-neutral-300 dark:border-white/10 group-focus-within:border-[#34A853]/50 transition-colors pb-3">
-                                <span className="text-neutral-500 dark:text-white/40 text-[15px] mr-2">+234</span>
+                                <span className="text-neutral-500 dark:text-white/40 text-[15px] mr-2 font-medium">+234</span>
                                 <input
                                     type="tel"
                                     name="phone"
                                     required
                                     pattern="[0-9]{10}"
                                     maxLength={10}
-                                    onInput={(e) => {
-                                        e.currentTarget.value = e.currentTarget.value.replace(/[^0-9]/g, '');
-                                    }}
-                                    className="w-full bg-transparent text-neutral-800 dark:text-white text-[16px] focus:outline-none placeholder:text-neutral-400 dark:placeholder:text-white/20 tracking-wide"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ''))}
+                                    className="w-full bg-transparent text-neutral-800 dark:text-white text-[16px] focus:outline-none placeholder:text-neutral-400 dark:placeholder:text-white/20 tracking-wide font-medium"
                                     placeholder="8012345678"
                                 />
                             </div>
+                            <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">
+                                Enter your 10-digit mobile number.
+                            </p>
                         </div>
                     </div>
 
                     <button
                         type="submit"
-                        disabled={isPending || !selectedDepartmentId || isUploading || !avatarUrl || !username}
-                        className="w-full flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2e9347] disabled:opacity-40 disabled:hover:bg-[#34A853] text-white py-4 rounded-xl font-bold tracking-widest text-[14px] uppercase transition-all duration-300 shadow-lg hover:shadow-xl mt-8"
+                        disabled={isPending || !isFormValid}
+                        className="w-full flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2e9347] disabled:opacity-40 disabled:hover:bg-[#34A853] text-white py-4 rounded-xl font-bold tracking-widest text-[14px] uppercase transition-all duration-300 shadow-lg hover:shadow-xl mt-8 cursor-pointer disabled:cursor-not-allowed"
                     >
-                        {isPending ? "Setting up..." : "Complete Setup"}
+                        {isPending ? "Completing Setup..." : "Complete Setup"}
                     </button>
                 </form>
             </motion.div>

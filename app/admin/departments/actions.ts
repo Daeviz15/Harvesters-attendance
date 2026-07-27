@@ -70,7 +70,7 @@ export async function updateDepartment(formData: FormData) {
     if (authError) return { error: authError };
 
     const id = formData.get("id") as string | null;
-    const idResult = z.uuid().safeParse(id);
+    const idResult = z.string().uuid().safeParse(id);
     const parsed = normalizeDepartmentForm(formData);
 
     if (!idResult.success) return { error: "Invalid department selected." };
@@ -106,7 +106,7 @@ export async function setDepartmentActive(id: string, isActive: boolean) {
     const { supabase, error: authError } = await requireAdmin();
     if (authError) return { error: authError };
 
-    const idResult = z.uuid().safeParse(id);
+    const idResult = z.string().uuid().safeParse(id);
     if (!idResult.success) return { error: "Invalid department selected." };
 
     const { error } = await supabase
@@ -128,7 +128,7 @@ export async function deleteDepartment(id: string) {
     const { supabase, error: authError } = await requireAdmin();
     if (authError) return { error: authError };
 
-    const idResult = z.uuid().safeParse(id);
+    const idResult = z.string().uuid().safeParse(id);
     if (!idResult.success) return { error: "Invalid department selected." };
 
     const { count, error: countError } = await supabase

@@ -40,16 +40,38 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const supabase = await createClient();
 
-    // Fetch active locations
-    const { data: activeLocations, error: locError } = await supabase
-        .from('locations')
-        .select('latitude, longitude, radius, name')
-        .eq('is_active', true);
+    // 1. Verify session and fetch associated event location IDs in a single optimized query
+    const { data: sessionData, error: sessionError } = await supabase
+        .from('attendance_sessions')
+        .select('id, status, events(location_ids)')
+        .eq('id', sessionId)
+        .single();
 
-    if (locError || !activeLocations || activeLocations.length === 0) {
-        return { error: 'No active locations found in the system. Check-in is currently disabled.' };
+    if (sessionError || !sessionData || sessionData.status !== 'active') {
+        return { error: 'This attendance session is no longer active or could not be found.' };
     }
 
+    // Safely extract the linked locations from the joined events table
+    // @ts-ignore - Supabase types might not immediately reflect the join structure deeply
+    const eventLocationIds = sessionData.events?.location_ids as string[] | undefined;
+    const allowedLocationIds: string[] = eventLocationIds || [];
+
+    if (allowedLocationIds.length === 0) {
+        return { error: 'Security constraint: This event has no branch locations assigned. Please contact an administrator to update the event.' };
+    }
+
+    // 2. Fetch ONLY the allowed active locations for this event
+    const { data: activeLocations, error: locError } = await supabase
+        .from('locations')
+        .select('latitude, longitude, radius, name, id')
+        .eq('is_active', true)
+        .in('id', allowedLocationIds);
+
+    if (locError || !activeLocations || activeLocations.length === 0) {
+        return { error: 'The locations assigned to this event are currently inactive or invalid. Check-in is disabled.' };
+    }
+
+    // 4. Validate GPS against allowed locations
     let isWithinAnyPerimeter = false;
     let closestDistance = Infinity;
 
@@ -65,9 +87,10 @@ export async function verifyAndCheckIn(formData: FormData) {
     }
 
     if (!isWithinAnyPerimeter) {
-        return { error: `Verification failed: You are approximately ${Math.round(closestDistance)} meters away from the nearest branch.` };
+        return { error: `Verification failed: You are approximately ${Math.round(closestDistance)} meters away from the nearest allowed event location.` };
     }
 
+    // 5. Verify User
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
@@ -84,18 +107,7 @@ export async function verifyAndCheckIn(formData: FormData) {
     const department = profile?.department || user.user_metadata?.department || 'Unknown';
     const team = profile?.team || user.user_metadata?.team || null;
 
-    // 1. Verify the session is still active
-    const { data: sessionData } = await supabase
-        .from('attendance_sessions')
-        .select('id, status')
-        .eq('id', sessionId)
-        .single();
-
-    if (!sessionData || sessionData.status !== 'active') {
-        return { error: 'This attendance session is no longer active.' };
-    }
-
-    // 2. Check if the user is already checked in to THIS session
+    // 6. Check if the user is already checked in to THIS session
     const { data: activeSession } = await supabase
         .from('attendance_logs')
         .select('id')

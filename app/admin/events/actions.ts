@@ -28,6 +28,7 @@ const eventFormSchema = z.object({
     recurrence_day: z.enum(validRecurrenceDays).optional(),
     recurrence_month: z.coerce.number().int().min(1).max(12).optional(),
     recurrence_month_day: z.coerce.number().int().min(1).max(31).optional(),
+    location_ids: z.array(z.string().uuid()).min(1, "At least one location is required."),
 });
 type EventPayload = {
     title: string;
@@ -41,6 +42,7 @@ type EventPayload = {
     recurrence_month: number | null;
     recurrence_month_day: number | null;
     recurrence_rule: string | null;
+    location_ids: string[];
 };
 type EventFormResult = { data: EventPayload; error?: never } | { error: string; data?: never };
 
@@ -106,6 +108,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         recurrence_day: formData.get("recurrence_day")?.toString() || undefined,
         recurrence_month: formData.get("recurrence_month")?.toString() || undefined,
         recurrence_month_day: formData.get("recurrence_month_day")?.toString() || undefined,
+        location_ids: formData.get("location_ids") ? JSON.parse(formData.get("location_ids") as string) : [],
     });
 
     if (!validatedFields.success) {
@@ -125,6 +128,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         recurrence_day: recurrenceDay,
         recurrence_month: recurrenceMonth,
         recurrence_month_day: recurrenceMonthDay,
+        location_ids,
     } = validatedFields.data;
 
     if (endTime <= startTime) {
@@ -167,6 +171,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
                 recurrenceMonth || null,
                 recurrenceMonthDay || null,
             ),
+            location_ids,
         },
     };
 }

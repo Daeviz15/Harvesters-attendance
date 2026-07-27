@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X } from "lucide-react";
+import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Plus, Check } from "lucide-react";
 import Image from "next/image";
-import { motion } from "framer-motion";
-import { assignDepartmentHead, removeDepartmentHead } from "./actions";
+import { motion, AnimatePresence } from "framer-motion";
+import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount } from "./actions";
 
 interface Profile {
     id: string;
@@ -18,6 +18,7 @@ interface Profile {
     created_at: string;
     head_department_id: string | null;
     head_department_name: string | null;
+    worker_id?: string | null;
 }
 
 interface DepartmentOption {
@@ -25,6 +26,11 @@ interface DepartmentOption {
     name: string;
     is_active: boolean;
     head_user_id: string | null;
+}
+
+interface ActiveSessionOption {
+    id: string;
+    title: string;
 }
 
 interface WorkersClientProps {
@@ -36,6 +42,7 @@ interface WorkersClientProps {
     selectedDepartment: string;
     departments: DepartmentOption[];
     pageSize: number;
+    activeSessions?: ActiveSessionOption[];
 }
 
 export default function WorkersClient({
@@ -47,15 +54,54 @@ export default function WorkersClient({
     selectedDepartment,
     departments,
     pageSize,
+    activeSessions = [],
 }: WorkersClientProps) {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
-    
+
     const [searchTerm, setSearchTerm] = useState(initialSearch);
     const [isSearching, setIsSearching] = useState(false);
     const [busyWorkerId, setBusyWorkerId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    // Register worker modal state
+    const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [registerError, setRegisterError] = useState<string | null>(null);
+    const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+    const [selectedDeptId, setSelectedDeptId] = useState<string>("");
+
+    const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        setIsRegistering(true);
+        setRegisterError(null);
+        setRegisterSuccess(null);
+
+        const formData = new FormData(e.currentTarget);
+
+        if (selectedDeptId) {
+            const match = departments.find(d => d.id === selectedDeptId);
+            if (match) {
+                formData.set("department", match.name);
+                formData.set("departmentId", match.id);
+            }
+        }
+
+        const res = await createWorkerAccount(formData);
+        setIsRegistering(false);
+
+        if (res.error) {
+            setRegisterError(res.error);
+        } else {
+            setRegisterSuccess(`Worker registered successfully! (${res.email})`);
+            setTimeout(() => {
+                setIsRegisterModalOpen(false);
+                setRegisterSuccess(null);
+                router.refresh();
+            }, 1800);
+        }
+    };
 
     // Debounce search
     useEffect(() => {
@@ -69,7 +115,7 @@ export default function WorkersClient({
                     params.delete('search');
                 }
                 params.set('page', '1'); // Reset to page 1 on new search
-                
+
                 router.push(`${pathname}?${params.toString()}`);
             }
         }, 500);
@@ -179,6 +225,18 @@ export default function WorkersClient({
                             ))}
                         </select>
                     </div>
+
+                    <button
+                        onClick={() => {
+                            setIsRegisterModalOpen(true);
+                            setRegisterError(null);
+                            setRegisterSuccess(null);
+                        }}
+                        className="flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-[#34A853]/20 shrink-0"
+                    >
+                        <UserPlus className="w-4 h-4" />
+                        Add Worker
+                    </button>
                 </div>
             </div>
 
@@ -191,7 +249,7 @@ export default function WorkersClient({
                 </div>
             )}
 
-            <motion.div 
+            <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white dark:bg-[#0f0f0f] rounded-2xl border border-neutral-200 dark:border-white/10 shadow-sm overflow-hidden"
@@ -229,9 +287,16 @@ export default function WorkersClient({
                                                         )}
                                                     </div>
                                                     <div>
-                                                        <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90 group-hover:text-[#34A853] transition-colors">
-                                                            @{worker.first_name}
-                                                        </p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90 group-hover:text-[#34A853] transition-colors">
+                                                                {worker.first_name} {worker.last_name}
+                                                            </p>
+                                                            {worker.worker_id && (
+                                                                <span className="px-1.5 py-0.5 bg-neutral-100 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 text-[10px] font-mono font-semibold rounded shrink-0">
+                                                                    {worker.worker_id}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                         {worker.head_department_name && (
                                                             <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
                                                                 <Crown className="w-3 h-3" />
@@ -248,11 +313,10 @@ export default function WorkersClient({
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide uppercase ${
-                                                    worker.role === 'admin' 
-                                                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20' 
+                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide uppercase ${worker.role === 'admin'
+                                                        ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                                                         : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
-                                                }`}>
+                                                    }`}>
                                                     {worker.role === 'admin' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
                                                     {worker.role}
                                                 </div>
@@ -321,6 +385,181 @@ export default function WorkersClient({
                     </div>
                 </div>
             </motion.div>
+            {/* REGISTER WORKER MODAL */}
+            <AnimatePresence>
+                {isRegisterModalOpen && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => !isRegistering && setIsRegisterModalOpen(false)}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                        >
+                            <div className="p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between">
+                                <div>
+                                    <h2 className="text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                                        <UserPlus className="w-5 h-5 text-[#34A853]" />
+                                        Register Worker Account
+                                    </h2>
+                                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                                        Create worker profile for individuals without smartphones or email access.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setIsRegisterModalOpen(false)}
+                                    disabled={isRegistering}
+                                    className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleRegisterSubmit} className="p-6 space-y-4">
+                                {registerError && (
+                                    <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-xs text-red-600 dark:text-red-300">
+                                        {registerError}
+                                    </div>
+                                )}
+                                {registerSuccess && (
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-300 font-medium">
+                                        {registerSuccess}
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            First Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="firstName"
+                                            required
+                                            placeholder="e.g. Emmanuel"
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Last Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="lastName"
+                                            required
+                                            placeholder="e.g. Adebayo"
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Phone Number (Optional)
+                                        </label>
+                                        <input
+                                            type="tel"
+                                            name="phone"
+                                            placeholder="e.g. 08012345678"
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Department
+                                        </label>
+                                        <select
+                                            value={selectedDeptId}
+                                            onChange={(e) => setSelectedDeptId(e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        >
+                                            <option value="">Select Department</option>
+                                            {departments.map((d) => (
+                                                <option key={d.id} value={d.id}>
+                                                    {d.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                        Email Address (Optional)
+                                    </label>
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        placeholder="Leave blank to auto-generate worker identity email"
+                                        className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                    />
+                                    <p className="text-[11px] text-neutral-400 mt-1">
+                                        If left empty, a secure system identity email will be assigned automatically.
+                                    </p>
+                                </div>
+
+                                {activeSessions.length > 0 && (
+                                    <div className="p-4 bg-[#34A853]/5 border border-[#34A853]/20 rounded-xl space-y-2">
+                                        <label className="block text-xs font-bold text-[#34A853] uppercase tracking-wider">
+                                            Instant Check-In to Active Session
+                                        </label>
+                                        <select
+                                            name="checkInSessionId"
+                                            className="w-full px-3 py-2 bg-white dark:bg-black border border-neutral-200 dark:border-white/10 rounded-lg text-xs text-neutral-900 dark:text-white"
+                                        >
+                                            <option value="">Do not check in right now</option>
+                                            {activeSessions.map((session) => (
+                                                <option key={session.id} value={session.id}>
+                                                    Sign in to: {session.title}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            type="text"
+                                            name="checkInNote"
+                                            placeholder="Check-in note (e.g. Registered by Admin)"
+                                            className="w-full px-3 py-2 bg-white dark:bg-black border border-neutral-200 dark:border-white/10 rounded-lg text-xs text-neutral-900 dark:text-white"
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="flex justify-end gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsRegisterModalOpen(false)}
+                                        disabled={isRegistering}
+                                        className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isRegistering}
+                                        className="flex items-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-5 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50"
+                                    >
+                                        {isRegistering ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Creating Worker...
+                                            </>
+                                        ) : (
+                                            "Register Worker"
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

@@ -14,7 +14,7 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER;
 
 
 -- 2. Create the `events` table (Dynamic Events)
-CREATE TABLE events (
+CREATE TABLE IF NOT EXISTS events (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     title TEXT NOT NULL,
     description TEXT,
@@ -93,7 +93,7 @@ WITH CHECK ( public.is_admin() );
 
 
 -- 2. Create the `attendance_sessions` table
-CREATE TABLE attendance_sessions (
+CREATE TABLE IF NOT EXISTS attendance_sessions (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     event_id UUID REFERENCES events(id) ON DELETE CASCADE NOT NULL,
     created_by UUID REFERENCES profiles(id) NOT NULL,
@@ -201,3 +201,24 @@ WHERE id = (
     SELECT id FROM auth.users WHERE email = 'david@example.com'
 );
 */
+
+-- ==============================================================================
+-- EVENT LOCATIONS UPDATE
+-- ==============================================================================
+ALTER TABLE events 
+ADD COLUMN IF NOT EXISTS location_ids UUID[] DEFAULT '{}';
+
+
+-- ==============================================================================
+-- ADMIN PROXY / MANUAL CHECK-IN & AUDIT TRAIL
+-- ==============================================================================
+ALTER TABLE attendance_logs 
+ADD COLUMN IF NOT EXISTS is_manual BOOLEAN DEFAULT false,
+ADD COLUMN IF NOT EXISTS checked_in_by UUID REFERENCES profiles(id),
+ADD COLUMN IF NOT EXISTS check_in_note TEXT;
+
+-- Policy allowing Admins to insert attendance logs for any user
+DROP POLICY IF EXISTS "Admins can insert attendance logs for any user" ON attendance_logs;
+CREATE POLICY "Admins can insert attendance logs for any user"
+ON attendance_logs FOR INSERT TO authenticated
+WITH CHECK ( public.is_admin() );

@@ -1,0 +1,632 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetTrigger,
+  SheetClose,
+} from "@/components/ui/sheet";
+import {
+  Church,
+  Users,
+  CalendarCheck,
+  Megaphone,
+  Network,
+  ArrowRight,
+  Check,
+  Menu,
+  X,
+} from "lucide-react";
+const heroImg = "/hero_image.png";
+import {
+  useScrollAnimation,
+  useStaggerAnimation,
+} from "@/hooks/use-scroll-animation";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
+function TwitterIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.936 9.936 0 0024 4.59z" />
+    </svg>
+  );
+}
+
+function InstagramIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+      <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+      <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+      <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+    </svg>
+  );
+}
+
+function YoutubeIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+      <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+    </svg>
+  );
+}
+
+/* ──────────── feature data ──────────── */
+const features = [
+  {
+    icon: Users,
+    title: "Worker directory",
+    body: "One place for every worker's profile, department, and role — searchable and always current.",
+    gradient: "from-[#E05D06] to-[#F97316]",
+  },
+  {
+    icon: CalendarCheck,
+    title: "Attendance you'll trust",
+    body: "Track service attendance without paper sheets. See streaks, gaps, and month-over-month at a glance.",
+    gradient: "from-[#E05D06] to-[#EA580C]",
+  },
+  {
+    icon: Network,
+    title: "Department structure",
+    body: "Organize workers into departments with clear leads, transparent rosters, and group management.",
+    gradient: "from-[#F97316] to-[#E05D06]",
+  },
+  {
+    icon: Megaphone,
+    title: "Announcements that reach",
+    body: "Broadcast updates to your entire church team or pin urgent alerts to specific department feeds.",
+    gradient: "from-[#E05D06] to-[#C85002]",
+  },
+  {
+    icon: Church,
+    title: "Built for local churches",
+    body: "Designed specifically around how ministry teams operate on Sundays and throughout the week.",
+    gradient: "from-[#EA580C] to-[#E05D06]",
+  },
+  {
+    icon: Check,
+    title: "Role-based access",
+    body: "Admins see the big picture. Department leads manage their team. Workers view their own records.",
+    gradient: "from-[#E05D06] to-[#F97316]",
+  },
+];
+
+const steps = [
+  {
+    n: "01",
+    t: "Create your church workspace",
+    b: "Name your church, choose your subdomain, and get your workspace URL in under a minute.",
+  },
+  {
+    n: "02",
+    t: "Set up departments & leads",
+    b: "Add your Ushering, Choir, Media, or Children's ministry teams and assign their leads.",
+  },
+  {
+    n: "03",
+    t: "Run your first Sunday",
+    b: "Check attendance from a phone in the back of the sanctuary. That's it.",
+  },
+];
+
+const trustChurches = [
+  "Grace Assembly",
+  "House on the Rock",
+  "Redeemed Chapel",
+  "Cornerstone Fellowship",
+  "City Light Church",
+];
+
+const testimonials = [
+  {
+    quote: "Harvesters Church Management System gave our team back their evenings. We stopped chasing workers on WhatsApp.",
+    author: "Pst Bolaji Idowu",
+    role: "Lead Pastor, Harvesters International Christian Centre",
+    initials: "PB",
+  },
+  {
+    quote: "The attendance tracking is seamless. Our department leads now have accurate data right after every service.",
+    author: "Pst Ade",
+    role: "Resident Pastor, Harvesters Lekki",
+    initials: "PA",
+  },
+  {
+    quote: "Organizing our volunteers used to take hours of spreadsheet work. Now it takes minutes.",
+    author: "Minister Joy",
+    role: "Head of Ushering, Harvesters Ikeja",
+    initials: "MJ",
+  },
+];
+
+const navLinks = [
+  { href: "#features", label: "Features" },
+  { href: "#how", label: "How it works" },
+  { href: "/workers-attendance", label: "Workers Attendance" },
+];
+
+/* ──────────── component ──────────── */
+export default function LandingPage() {
+  const [scrolled, setScrolled] = useState(false);
+  const [activeTestimonial, setActiveTestimonial] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveTestimonial((prev) => (prev + 1) % testimonials.length);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  /* scroll-animation refs */
+  const featuresRef = useStaggerAnimation<HTMLDivElement>();
+  const howRef = useScrollAnimation();
+  const testimonialRef = useScrollAnimation();
+  const ctaRef = useScrollAnimation();
+
+  return (
+    <div className="min-h-screen bg-[#08080a] text-white selection:bg-[#E05D06] selection:text-white overflow-x-hidden relative">
+      {/* ──── Ambient Glowing Orbs ──── */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-60 -left-60 w-[600px] h-[600px] bg-[#E05D06]/15 rounded-full filter blur-[180px]" />
+        <div className="absolute top-1/3 -right-40 w-[500px] h-[500px] bg-[#E05D06]/10 rounded-full filter blur-[160px]" />
+        <div className="absolute -bottom-40 left-1/4 w-[550px] h-[550px] bg-[#E05D06]/12 rounded-full filter blur-[170px]" />
+      </div>
+
+      {/* ──── Nav ──── */}
+      <header
+        className={`fixed top-0 left-0 right-0 z-50 border-b bg-[#08080a]/80 backdrop-blur-xl transition-all duration-300 ${scrolled
+          ? "border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.8)]"
+          : "border-transparent"
+          }`}
+      >
+        <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-3 group">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-black border border-white/15 text-white shadow-[0_0_15px_rgba(224,93,6,0.3)] overflow-hidden group-hover:border-[#E05D06] transition-colors">
+              <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
+            </div>
+            <span className="text-sm font-bold tracking-tight text-white group-hover:text-neutral-200 transition-colors">
+              Harvesters Globe
+            </span>
+          </Link>
+
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-8 text-sm font-medium text-neutral-400 md:flex">
+            {navLinks.map((l) => (
+              <a
+                key={l.href}
+                href={l.href}
+                className="transition-colors hover:text-[#FF7A1A]"
+              >
+                {l.label}
+              </a>
+            ))}
+          </nav>
+
+          <div className="flex items-center gap-4">
+            <Link
+              href="/auth/login"
+              className="hidden text-sm font-medium text-neutral-300 transition-colors hover:text-white sm:inline"
+            >
+              Sign in
+            </Link>
+            <Link href="/auth/signup">
+              <Button
+                variant="orange"
+                size="sm"
+                className="px-5 py-2.5 text-xs font-bold uppercase tracking-wider shadow-[0_0_20px_rgba(224,93,6,0.4)]"
+              >
+                Become a worker
+              </Button>
+            </Link>
+
+            {/* Mobile hamburger */}
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="md:hidden text-neutral-300 hover:text-white"
+                  aria-label="Open navigation menu"
+                >
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-72 bg-[#0d0d12] text-white border-l border-white/10">
+                <div className="flex flex-col gap-6 pt-8">
+                  <div className="flex items-center gap-2.5 px-2">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black border border-white/15 overflow-hidden">
+                      <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
+                    </div>
+                    <span className="text-sm font-bold text-white">Harvesters Church</span>
+                  </div>
+                  <nav className="flex flex-col gap-1">
+                    {navLinks.map((l) => (
+                      <SheetClose asChild key={l.href}>
+                        <a
+                          href={l.href}
+                          className="rounded-md px-3 py-2.5 text-sm font-medium text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+                        >
+                          {l.label}
+                        </a>
+                      </SheetClose>
+                    ))}
+                  </nav>
+                  <hr className="border-white/10" />
+                  <div className="flex flex-col gap-3 px-2">
+                    <Link href="/auth/login">
+                      <Button
+                        variant="outline"
+                        className="w-full border-white/15 text-white hover:bg-white/10"
+                      >
+                        Sign in
+                      </Button>
+                    </Link>
+                    <Link href="/auth/signup">
+                      <Button variant="orange" className="w-full">
+                        Get started
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </SheetContent>
+            </Sheet>
+          </div>
+        </div>
+      </header>
+
+      {/* ──── Hero ──── */}
+      <section className="relative mx-auto max-w-6xl px-6 pt-28 pb-20 md:pt-36 md:pb-28">
+        <div className="relative grid items-center gap-12 md:grid-cols-2">
+          {/* Text side */}
+          <div className="animate-fade-in-up">
+            <h1 className="mt-4 text-4xl font-extrabold leading-[1.08] tracking-tight text-white md:text-5xl lg:text-[3.5rem]">
+              Harvesters is not just a space,
+              <br />
+              <span className="bg-gradient-to-r from-[#FF7A1A] via-[#E05D06] to-[#FF9E4D] bg-clip-text text-transparent">
+                it is an experience.
+              </span>
+            </h1>
+            <p className="mt-5 max-w-lg text-base leading-relaxed text-neutral-400">
+              It is a series of impactful and transformational encounters that bring change to the lives of people. It is felt, seen, heard and perceived like frangrance. It encapsulates on the outside and penetrates beyond our human fibres into the depths of the heart. Under the intense focus of the Spirit and the Word, change happens. "As we behold in a glass with open face, we are being changed...
+            </p>
+            <div className="mt-8 flex flex-wrap items-center gap-4">
+              <Link href="/auth/signup">
+                <Button variant="orange" className="px-7 py-3 text-sm rounded-xl">
+                  Join our Community
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                </Button>
+              </Link>
+              <Link href="/auth/login">
+                <Button
+                  variant="outline"
+                  className="px-6 py-3 text-sm rounded-xl"
+                >
+                  Sign in
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Image side */}
+          <div className="relative animate-fade-in-scale" style={{ animationDelay: "0.2s" }}>
+            {/* Ambient Background Glow */}
+            <div className="absolute -inset-10 -z-10 rounded-full bg-gradient-to-tr from-[#E05D06]/25 via-[#E05D06]/10 to-transparent blur-3xl opacity-80" />
+
+            {/* Frameless Hero Image with Seamless Blend */}
+            <div className="relative w-full max-w-lg mx-auto">
+              <img
+                src={heroImg}
+                alt="Harvesters Church Experience"
+                width={1024}
+                height={1024}
+                className="h-auto w-full object-contain [mask-image:radial-gradient(ellipse_at_center,black_70%,transparent_100%)] drop-shadow-[0_10px_35px_rgba(224,93,6,0.2)]"
+              />
+              {/* Soft Dark Gradient Blends */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#08080a] via-transparent to-transparent opacity-90 pointer-events-none" />
+              <div className="absolute inset-0 bg-gradient-to-b from-[#08080a]/30 via-transparent to-transparent opacity-60 pointer-events-none" />
+            </div>
+
+            {/* Floating stat card */}
+            <div className="absolute -bottom-4 left-4 animate-fade-in-up rounded-xl border border-white/10 bg-[#0c0c12]/90 p-4 shadow-[0_10px_35px_rgba(0,0,0,0.8)] backdrop-blur-md z-10" style={{ animationDelay: "0.6s" }}>
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-[#E05D06] to-[#B34700] text-white shadow-[0_0_15px_rgba(224,93,6,0.4)]">
+                  <CalendarCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-neutral-400">This month</div>
+                  <div className="text-sm font-bold text-white">200+ registered</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ──── Trust strip ──── */}
+      <section className="flex border-y border-white/10 bg-white/[0.02] py-6 overflow-hidden backdrop-blur-sm">
+        <div className="flex w-max animate-marquee items-center gap-x-10">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="flex shrink-0 items-center gap-x-10 px-5">
+              <span className="shrink-0 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                Trusted by teams at
+              </span>
+              {trustChurches.map((c) => (
+                <span
+                  key={c}
+                  className="shrink-0 text-sm font-semibold tracking-wide text-neutral-400 transition-colors hover:text-[#FF7A1A]"
+                >
+                  {c}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ──── Features ──── */}
+      <section id="features" className="mx-auto max-w-6xl px-6 py-24">
+        <div className="max-w-2xl animate-fade-in-up">
+          <p className="text-sm font-semibold uppercase tracking-widest text-[#FF7A1A]">
+            What's inside
+          </p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">
+            Everything a growing church actually needs.
+          </h2>
+          <p className="mt-3 text-neutral-400">
+            No feature bloat. Just the tools your admins reach for every week.
+          </p>
+        </div>
+        <div
+          ref={featuresRef}
+          className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+        >
+          {features.map((f) => (
+            <div
+              key={f.title}
+              className="group relative rounded-2xl border border-white/10 bg-neutral-900/50 p-6 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-[#E05D06]/50 hover:shadow-[0_0_30px_rgba(224,93,6,0.15)]"
+            >
+              {/* Gradient accent line on hover */}
+              <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-2xl bg-gradient-to-r from-[#E05D06] to-[#FF7A1A] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+              <div
+                className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${f.gradient} text-white shadow-[0_0_15px_rgba(224,93,6,0.3)]`}
+              >
+                <f.icon className="h-5 w-5" />
+              </div>
+              <h3 className="mt-4 text-base font-bold text-white">
+                {f.title}
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-neutral-400">
+                {f.body}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ──── How it works ──── */}
+      <section id="how" className="border-t border-white/10 bg-[#060608]">
+        <div
+          ref={howRef}
+          className="mx-auto grid max-w-6xl gap-16 px-6 py-24 md:grid-cols-2"
+        >
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-widest text-[#FF7A1A]">
+              How it works
+            </p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white md:text-4xl">
+              Set up on a Saturday.
+              <br />
+              Ready by Sunday.
+            </h2>
+            <p className="mt-4 text-neutral-400 leading-relaxed">
+              Harvesters is intentionally simple. Your first admin can invite
+              department leads, and department leads can bring their workers on
+              board — all in the same afternoon.
+            </p>
+          </div>
+          <ol className="space-y-8">
+            {steps.map((s, i) => (
+              <li key={s.n} className="flex gap-5">
+                <div className="flex flex-col items-center">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#E05D06] to-[#B34700] text-sm font-bold text-white shadow-[0_0_15px_rgba(224,93,6,0.4)]">
+                    {s.n}
+                  </div>
+                  {i < steps.length - 1 && (
+                    <div className="mt-2 h-full w-px bg-gradient-to-b from-[#E05D06]/50 to-transparent" />
+                  )}
+                </div>
+                <div className="pb-2">
+                  <h3 className="text-base font-bold text-white">{s.t}</h3>
+                  <p className="mt-1 text-sm text-neutral-400">{s.b}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ──── Testimonial ──── */}
+      <section className="relative overflow-hidden border-t border-white/10">
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-[#08080a] via-[#120f14] to-[#08080a]" />
+        <div
+          ref={testimonialRef}
+          className="relative mx-auto max-w-4xl px-6 py-24 text-center"
+        >
+          <p className="text-sm font-semibold uppercase tracking-widest text-[#FF7A1A]">
+            What leaders are saying
+          </p>
+          <div className="relative mt-8 min-h-[300px] md:min-h-[220px]">
+            <span className="absolute -top-8 -left-4 text-7xl font-bold leading-none text-[#E05D06]/25 select-none md:-left-8 md:text-8xl">
+              "
+            </span>
+            {testimonials.map((t, i) => (
+              <div
+                key={i}
+                className={`absolute inset-0 flex flex-col justify-between transition-all duration-700 ease-in-out ${i === activeTestimonial
+                  ? "opacity-100 translate-x-0"
+                  : i < activeTestimonial
+                    ? "opacity-0 -translate-x-12"
+                    : "opacity-0 translate-x-12"
+                  }`}
+              >
+                <blockquote className="text-2xl font-medium leading-relaxed text-neutral-200 italic md:text-3xl lg:text-[2rem]">
+                  {t.quote}
+                </blockquote>
+                <div className="mt-8 flex items-center justify-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#E05D06] to-[#B34700] text-sm font-bold text-white shadow-md">
+                    {t.initials}
+                  </div>
+                  <div className="text-left">
+                    <div className="text-sm font-semibold text-white">{t.author}</div>
+                    <div className="text-xs text-neutral-400">{t.role}</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination dots */}
+          <div className="mt-8 flex justify-center gap-2">
+            {testimonials.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveTestimonial(i)}
+                className={`h-2 rounded-full transition-all duration-300 ${i === activeTestimonial
+                  ? "w-6 bg-[#E05D06] shadow-[0_0_10px_rgba(224,93,6,0.6)]"
+                  : "w-2 bg-white/20 hover:bg-white/40"
+                  }`}
+                aria-label={`Go to testimonial ${i + 1}`}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ──── CTA ──── */}
+      <section className="mx-auto max-w-6xl px-6 py-24">
+        <div
+          ref={ctaRef}
+          className="relative overflow-hidden rounded-3xl border border-white/15 bg-gradient-to-br from-neutral-900 via-[#141016] to-neutral-950 px-8 py-16 text-center text-white shadow-2xl md:px-16"
+        >
+          {/* Subtle glowing overlay */}
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_30%,rgba(224,93,6,0.15),transparent_70%)]" />
+          <div className="relative z-10">
+            <h2 className="text-3xl font-bold tracking-tight md:text-4xl text-white">
+              A calmer Sunday starts on Monday.
+            </h2>
+            <p className="mx-auto mt-4 max-w-lg text-neutral-300">
+              Bring your workers, departments, and attendance into one place — in
+              the time it takes to make coffee.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <Link href="/auth/signup">
+                <Button variant="orange" className="px-8 py-3.5 text-sm rounded-xl">
+                  Create your church
+                  <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                </Button>
+              </Link>
+              <Link href="/auth/login">
+                <Button variant="outline" className="px-6 py-3.5 text-sm rounded-xl">
+                  Sign in
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ──── Footer ──── */}
+      <footer className="border-t border-white/10 bg-[#050507]">
+        <div className="mx-auto max-w-6xl px-6 py-12">
+          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+            {/* Brand */}
+            <div className="lg:col-span-1">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-black border border-white/15 overflow-hidden">
+                  <img src="/Harvester-icon.png" alt="Harvesters Icon" className="h-5 w-5 object-contain" />
+                </div>
+                <span className="text-sm font-bold text-white">Harvesters Church System</span>
+              </div>
+              <p className="mt-3 max-w-xs text-sm text-neutral-400">
+                The quiet workspace behind every service. Helping church teams
+                stay organized so Sunday feels like Sunday.
+              </p>
+              <div className="mt-4 flex gap-3">
+                <a
+                  href="#"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 border border-white/10 text-neutral-400 transition-all hover:bg-[#E05D06] hover:text-white hover:border-[#E05D06]"
+                  aria-label="Twitter"
+                >
+                  <TwitterIcon className="h-3.5 w-3.5" />
+                </a>
+                <a
+                  href="#"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 border border-white/10 text-neutral-400 transition-all hover:bg-[#E05D06] hover:text-white hover:border-[#E05D06]"
+                  aria-label="Instagram"
+                >
+                  <InstagramIcon className="h-3.5 w-3.5" />
+                </a>
+                <a
+                  href="#"
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 border border-white/10 text-neutral-400 transition-all hover:bg-[#E05D06] hover:text-white hover:border-[#E05D06]"
+                  aria-label="YouTube"
+                >
+                  <YoutubeIcon className="h-3.5 w-3.5" />
+                </a>
+              </div>
+            </div>
+
+            {/* Product */}
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-[#FF7A1A]">
+                Product
+              </h4>
+              <ul className="mt-3 space-y-2.5">
+                <li><a href="#features" className="text-sm text-neutral-400 transition-colors hover:text-white">Features</a></li>
+                <li><a href="#how" className="text-sm text-neutral-400 transition-colors hover:text-white">How it works</a></li>
+                <li><a href="#faq" className="text-sm text-neutral-400 transition-colors hover:text-white">FAQ</a></li>
+              </ul>
+            </div>
+
+            {/* Company */}
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-[#FF7A1A]">
+                Company
+              </h4>
+              <ul className="mt-3 space-y-2.5">
+                <li><a href="#" className="text-sm text-neutral-400 transition-colors hover:text-white">About</a></li>
+                <li><a href="#" className="text-sm text-neutral-400 transition-colors hover:text-white">Blog</a></li>
+                <li><a href="#" className="text-sm text-neutral-400 transition-colors hover:text-white">Careers</a></li>
+              </ul>
+            </div>
+
+            {/* Legal */}
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-widest text-[#FF7A1A]">
+                Legal
+              </h4>
+              <ul className="mt-3 space-y-2.5">
+                <li><Link href="/privacy" className="text-sm text-neutral-400 transition-colors hover:text-white">Privacy</Link></li>
+                <li><Link href="/terms" className="text-sm text-neutral-400 transition-colors hover:text-white">Terms</Link></li>
+                <li><a href="mailto:feedback@harvestersng.org" className="text-sm text-neutral-400 transition-colors hover:text-white">Contact</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <hr className="mt-10 border-white/10" />
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-xs text-neutral-500">
+            <span>© {new Date().getFullYear()} Harvesters Globe. All rights reserved.</span>
+            <span>Made with ♥ for the local church.</span>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

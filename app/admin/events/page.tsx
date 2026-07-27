@@ -35,8 +35,19 @@ export default async function AdminEventsPage() {
     if (error) {
         console.error("Failed to fetch events:", error);
     }
+    
+    // Fetch all active locations
+    const { data: locations, error: locationsError } = await supabase
+        .from('locations')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+        
+    if (locationsError) {
+        console.error("Failed to fetch locations:", locationsError);
+    }
 
     return (
-        <EventsClient initialEvents={events || []} />
+        <EventsClient initialEvents={events || []} activeLocations={locations || []} />
     );
 }
