@@ -8,8 +8,8 @@ import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog, AttendanceHistoryResponse } from '@/lib/types';
 
 const locationSchema = z.object({
-  lat: z.coerce.number().min(-90).max(90),
-  lng: z.coerce.number().min(-180).max(180)
+    lat: z.coerce.number().min(-90).max(90),
+    lng: z.coerce.number().min(-180).max(180)
 });
 
 export async function verifyAndCheckIn(formData: FormData) {
@@ -21,7 +21,7 @@ export async function verifyAndCheckIn(formData: FormData) {
     const latStr = formData.get('lat');
     const lngStr = formData.get('lng');
 
-    
+
     if (latStr === null || lngStr === null || latStr === '' || lngStr === '') {
         return { error: 'Missing GPS coordinates. Please ensure location services are enabled.' };
     }
@@ -33,13 +33,13 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const { lat, lng } = parsed.data;
 
-    
+
     const accuracyStr = formData.get('accuracy');
-    const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0; 
+    const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0;
 
     const supabase = await createClient();
 
-    
+
     const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_sessions')
         .select('id, status, events(location_ids)')
@@ -58,7 +58,7 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: 'Security constraint: This event has no branch locations assigned. Please contact an administrator to update the event.' };
     }
 
-    
+
     const { data: activeLocations, error: locError } = await supabase
         .from('locations')
         .select('latitude, longitude, radius, name, id')
@@ -69,14 +69,14 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: 'The locations assigned to this event are currently inactive or invalid. Check-in is disabled.' };
     }
 
-    
+
     let isWithinAnyPerimeter = false;
     let closestDistance = Infinity;
 
     for (const loc of activeLocations) {
         const distance = calculateDistanceInMeters(lat, lng, loc.latitude, loc.longitude);
         if (distance < closestDistance) closestDistance = distance;
-        
+
         const effectiveDistance = distance - accuracy;
         if (effectiveDistance <= loc.radius) {
             isWithinAnyPerimeter = true;

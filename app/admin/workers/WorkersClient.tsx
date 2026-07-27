@@ -400,12 +400,12 @@ export default function WorkersClient({
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[90vh] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
                         >
-                            <div className="p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between">
+                            <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between shrink-0">
                                 <div>
-                                    <h2 className="text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                                        <UserPlus className="w-5 h-5 text-[#34A853]" />
+                                    <h2 className="text-base sm:text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                                        <UserPlus className="w-5 h-5 text-[#34A853] shrink-0" />
                                         Register Worker Account
                                     </h2>
                                     <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
@@ -415,13 +415,13 @@ export default function WorkersClient({
                                 <button
                                     onClick={() => setIsRegisterModalOpen(false)}
                                     disabled={isRegistering}
-                                    className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors"
+                                    className="p-1.5 sm:p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors shrink-0"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
-                            <form onSubmit={handleRegisterSubmit} className="p-6 space-y-4">
+                            <form onSubmit={handleRegisterSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
                                 {registerError && (
                                     <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-xs text-red-600 dark:text-red-300">
                                         {registerError}
@@ -433,7 +433,7 @@ export default function WorkersClient({
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                                             First Name <span className="text-red-500">*</span>
@@ -460,7 +460,7 @@ export default function WorkersClient({
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                                             Phone Number (Optional)
@@ -504,7 +504,7 @@ export default function WorkersClient({
                                     <input
                                         type="email"
                                         name="email"
-                                        placeholder="Leave blank to auto-generate worker identity email"
+                                        placeholder="Leave blank for auto identity email"
                                         className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
                                     />
                                     <p className="text-[11px] text-neutral-400 mt-1">
@@ -513,7 +513,7 @@ export default function WorkersClient({
                                 </div>
 
                                 {activeSessions.length > 0 && (
-                                    <div className="p-4 bg-[#34A853]/5 border border-[#34A853]/20 rounded-xl space-y-2">
+                                    <div className="p-3 sm:p-4 bg-[#34A853]/5 border border-[#34A853]/20 rounded-xl space-y-2">
                                         <label className="block text-xs font-bold text-[#34A853] uppercase tracking-wider">
                                             Instant Check-In to Active Session
                                         </label>
@@ -537,19 +537,19 @@ export default function WorkersClient({
                                     </div>
                                 )}
 
-                                <div className="flex justify-end gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">
+                                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">
                                     <button
                                         type="button"
                                         onClick={() => setIsRegisterModalOpen(false)}
                                         disabled={isRegistering}
-                                        className="px-4 py-2 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-xl transition-colors"
+                                        className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-xl transition-colors border border-neutral-200 dark:border-white/10 sm:border-0"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isRegistering}
-                                        className="flex items-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-5 py-2 text-sm font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50"
+                                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-5 py-2.5 text-sm font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50"
                                     >
                                         {isRegistering ? (
                                             <>

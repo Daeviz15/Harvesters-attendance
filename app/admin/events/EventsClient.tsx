@@ -141,7 +141,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
     const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    
+
     // For deleting
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [eventToDelete, setEventToDelete] = useState<EventType | null>(null);
@@ -196,7 +196,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
-        
+
         if (selectedLocations.length === 0) {
             setError("You must select at least one location.");
             return;
@@ -208,7 +208,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
         const formData = new FormData(e.currentTarget);
         // Append selected locations as JSON
         formData.append("location_ids", JSON.stringify(selectedLocations));
-        
+
         let result;
         if (editingEvent) {
             result = await updateEvent(editingEvent.id, formData);
@@ -233,11 +233,11 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
 
     const confirmDelete = async () => {
         if (!eventToDelete) return;
-        
+
         setDeletingId(eventToDelete.id);
         setDeleteError(null);
         const result = await deleteEvent(eventToDelete.id);
-        
+
         if (result.error) {
             setDeleteError(result.error);
             setDeletingId(null);
@@ -286,7 +286,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {initialEvents.map((event) => (
-                        <div 
+                        <div
                             key={event.id}
                             className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-6 shadow-sm flex flex-col group"
                         >
@@ -312,7 +312,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div className="mt-6 pt-6 border-t border-neutral-100 dark:border-white/5 flex items-center justify-between">
                                 <span className="text-xs text-neutral-400">
                                     Added {new Date(event.created_at).toLocaleDateString()}
@@ -366,19 +366,19 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                                 aria-labelledby="event-form-title"
                                 className="w-full max-w-2xl bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl shadow-xl pointer-events-auto flex flex-col max-h-[90vh]"
                             >
-                                <div className="p-6 border-b border-neutral-100 dark:border-white/10 flex items-center justify-between shrink-0">
-                                    <h2 id="event-form-title" className="text-xl font-semibold text-neutral-900 dark:text-white">
+                                <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/10 flex items-center justify-between shrink-0">
+                                    <h2 id="event-form-title" className="text-lg sm:text-xl font-semibold text-neutral-900 dark:text-white">
                                         {editingEvent ? "Edit Event" : "Create Event"}
                                     </h2>
-                                    <button 
+                                    <button
                                         onClick={closeModal}
-                                        className="p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                                        className="p-1.5 sm:p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-lg transition-colors"
                                     >
                                         <X className="w-5 h-5" />
                                     </button>
                                 </div>
 
-                                <form ref={formRef} onSubmit={handleSubmit} className="p-6 overflow-y-auto">
+                                <form ref={formRef} onSubmit={handleSubmit} className="p-4 sm:p-6 overflow-y-auto">
                                     {error && (
                                         <div className="mb-6 p-4 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl flex items-start gap-3">
                                             <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -605,7 +605,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                                             </div>
                                         </div>
                                     </div>
-                                    
+
                                     {/* Locations Selection (Mandatory) */}
                                     <div className="mt-8 border-t border-neutral-100 dark:border-white/10 pt-6">
                                         <h3 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">
@@ -614,7 +614,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                                         <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-4">
                                             Select which branch locations are allowed for this event. Workers must be physically at one of these locations to check in.
                                         </p>
-                                        
+
                                         {activeLocations.length === 0 ? (
                                             <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 flex gap-3">
                                                 <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 shrink-0" />
@@ -626,8 +626,8 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-48 overflow-y-auto p-2 bg-neutral-50 dark:bg-neutral-900/50 rounded-xl border border-neutral-100 dark:border-white/5">
                                                 {activeLocations.map((loc) => (
                                                     <label key={loc.id} className="flex items-center gap-3 p-3 rounded-lg bg-white dark:bg-black border border-neutral-200 dark:border-white/10 cursor-pointer hover:border-[#34A853]/50 transition-colors">
-                                                        <input 
-                                                            type="checkbox" 
+                                                        <input
+                                                            type="checkbox"
                                                             className="w-4 h-4 text-[#34A853] rounded border-neutral-300 dark:border-neutral-600 focus:ring-[#34A853]"
                                                             checked={selectedLocations.includes(loc.id)}
                                                             onChange={(e) => {

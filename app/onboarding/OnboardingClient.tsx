@@ -215,7 +215,7 @@ export default function OnboardingClient({
                                 Profile Picture <span className="text-[12px] font-normal text-neutral-400 dark:text-white/40 ml-1">(Optional)</span>
                             </label>
                         </div>
-                        <div className="flex items-center gap-6 bg-neutral-50/50 dark:bg-white/[0.02] border border-neutral-200 dark:border-white/5 p-4 rounded-2xl">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-4 sm:gap-6 bg-neutral-50/50 dark:bg-white/[0.02] border border-neutral-200 dark:border-white/5 p-4 rounded-2xl">
                             <div className="relative w-20 h-20 rounded-full bg-neutral-200 dark:bg-white/5 border-2 border-dashed border-neutral-300 dark:border-white/20 flex items-center justify-center overflow-hidden shrink-0">
                                 {avatarUrl ? (
                                     <Image src={avatarUrl} alt="Avatar" fill className="object-cover" sizes="80px" />
@@ -228,7 +228,7 @@ export default function OnboardingClient({
                                     </div>
                                 )}
                             </div>
-                            <div className="flex-1">
+                            <div className="flex-1 w-full">
                                 <label className="cursor-pointer inline-block bg-neutral-100 dark:bg-white/5 hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-700 dark:text-white/80 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors border border-neutral-200 dark:border-white/10">
                                     Choose Image
                                     <input 

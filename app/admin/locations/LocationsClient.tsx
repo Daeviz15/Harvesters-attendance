@@ -208,21 +208,21 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-md max-h-[90vh] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
                         >
-                            <div className="p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between">
-                                <h2 className="text-xl font-bold text-neutral-900 dark:text-white">
+                            <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between shrink-0">
+                                <h2 className="text-base sm:text-xl font-bold text-neutral-900 dark:text-white">
                                     {editingLocation ? "Edit Branch Location" : "Add Branch Location"}
                                 </h2>
                                 <button
                                     onClick={() => setIsModalOpen(false)}
-                                    className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors"
+                                    className="p-1.5 sm:p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors shrink-0"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
-                            <form ref={formRef} onSubmit={handleSubmit} className="p-6 space-y-5">
+                            <form ref={formRef} onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
                                 {error && (
                                     <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl flex items-start gap-3">
                                         <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
@@ -238,11 +238,11 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                         required
                                         defaultValue={editingLocation?.name || ""}
                                         placeholder="e.g. Lekki Phase 1"
-                                        className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all"
+                                        className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all text-sm"
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Latitude</label>
                                         <input
@@ -250,8 +250,8 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                             type="number"
                                             step="any"
                                             required
-                                            defaultValue={editingLocation?.latitude || ""}
-                                            placeholder="6.4369"
+                                            defaultValue={editingLocation?.latitude ?? ""}
+                                            placeholder="6.4531"
                                             className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
                                         />
                                     </div>
@@ -262,39 +262,38 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                             type="number"
                                             step="any"
                                             required
-                                            defaultValue={editingLocation?.longitude || ""}
-                                            placeholder="3.5185"
+                                            defaultValue={editingLocation?.longitude ?? ""}
+                                            placeholder="3.4312"
                                             className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
                                         />
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Radius (Meters)</label>
+                                    <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Radius Threshold (Meters)</label>
                                     <input
                                         name="radius"
                                         type="number"
                                         required
-                                        min="10"
-                                        defaultValue={editingLocation?.radius || 100}
+                                        defaultValue={editingLocation?.radius ?? 100}
                                         placeholder="100"
                                         className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
                                     />
                                     <p className="text-xs text-neutral-500 dark:text-white/40 mt-1">Recommended: 100 meters to account for GPS drift.</p>
                                 </div>
 
-                                <div className="pt-4 flex gap-3">
+                                <div className="pt-4 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">
                                     <button
                                         type="button"
                                         onClick={() => setIsModalOpen(false)}
-                                        className="flex-1 py-2.5 border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-white/70 hover:bg-neutral-50 dark:hover:bg-white/5 rounded-xl font-medium transition-colors"
+                                        className="w-full sm:flex-1 py-2.5 border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-white/70 hover:bg-neutral-50 dark:hover:bg-white/5 rounded-xl font-medium transition-colors text-sm"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isSubmitting}
-                                        className="flex-1 py-2.5 bg-[#34A853] hover:bg-[#2b8a44] text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="w-full sm:flex-1 py-2.5 bg-[#34A853] hover:bg-[#2b8a44] text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                                     >
                                         {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                                         {editingLocation ? "Save Changes" : "Create Location"}

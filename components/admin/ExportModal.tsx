@@ -94,17 +94,16 @@ export default function ExportModal({ isOpen, onClose }: ExportModalProps) {
 
                     {}
                     <motion.div
-                        initial={{ opacity: 0, y: 40, scale: 0.95 }}
+                        initial={{ opacity: 0, y: 20, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 40, scale: 0.95 }}
+                        exit={{ opacity: 0, y: 20, scale: 0.95 }}
                         transition={{ type: "spring", bounce: 0.15, duration: 0.5 }}
-                        className="fixed inset-x-4 top-[10%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-[70]"
+                        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-md max-h-[90vh] z-[70] flex flex-col"
                     >
-                        <div className="bg-white dark:bg-[#111111] border border-neutral-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden">
-                            {}
-                            <div className="flex items-center justify-between p-6 border-b border-neutral-100 dark:border-white/5">
+                        <div className="bg-white dark:bg-[#111111] border border-neutral-200 dark:border-white/10 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-full">
+                            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 shrink-0">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-[#34A853]/10 flex items-center justify-center">
+                                    <div className="w-10 h-10 rounded-full bg-[#34A853]/10 flex items-center justify-center shrink-0">
                                         <FileDown className="w-5 h-5 text-[#34A853]" />
                                     </div>
                                     <div>
@@ -112,13 +111,13 @@ export default function ExportModal({ isOpen, onClose }: ExportModalProps) {
                                         <p className="text-[12px] text-neutral-500 dark:text-white/40">Download attendance to CSV</p>
                                     </div>
                                 </div>
-                                <button onClick={onClose} className="p-2 text-neutral-400 dark:text-white/40 hover:text-neutral-800 dark:hover:text-white transition-colors rounded-full hover:bg-neutral-100 dark:hover:bg-white/5">
+                                <button onClick={onClose} className="p-1.5 sm:p-2 text-neutral-400 dark:text-white/40 hover:text-neutral-800 dark:hover:text-white transition-colors rounded-full hover:bg-neutral-100 dark:hover:bg-white/5 shrink-0">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
 
-                            {}
-                            <div className="p-6">
+                            {/* Modal Body */}
+                            <div className="p-4 sm:p-6 overflow-y-auto flex-1">
                                 <AnimatePresence mode="wait">
                                     {isSuccess ? (
                                         <motion.div

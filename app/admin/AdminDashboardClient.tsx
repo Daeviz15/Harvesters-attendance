@@ -301,37 +301,37 @@ export default function AdminDashboardClient({
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-lg bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[90vh] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
                         >
-                            <div className="p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between">
-                                <h2 className="text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                                    <UserPlus className="w-5 h-5 text-[#34A853]" />
+                            <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between shrink-0">
+                                <h2 className="text-base sm:text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                                    <UserPlus className="w-5 h-5 text-[#34A853] shrink-0" />
                                     Register Worker Account
                                 </h2>
-                                <button onClick={closeRegisterModal} className="p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors">
+                                <button onClick={closeRegisterModal} className="p-1.5 sm:p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors shrink-0">
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <form onSubmit={handleRegisterSubmit} className="p-6 space-y-4">
-                                <p className="text-sm text-neutral-500 dark:text-neutral-400 -mt-1 mb-2">
+                            <form onSubmit={handleRegisterSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                                <p className="text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 -mt-1 mb-2">
                                     Create a worker profile for individuals without smartphones or email access. A unique Worker ID (HRV-XXXX) will be auto-assigned.
                                 </p>
 
                                 {registerError && (
-                                    <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-sm p-3 rounded-xl">
+                                    <div className="bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 text-xs sm:text-sm p-3 rounded-xl">
                                         {registerError}
                                     </div>
                                 )}
                                 {registerSuccess && (
-                                    <div className="bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-sm p-3 rounded-xl flex items-center gap-2">
+                                    <div className="bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs sm:text-sm p-3 rounded-xl flex items-center gap-2">
                                         <Check className="w-4 h-4" />
                                         {registerSuccess}
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                             First Name <span className="text-red-500">*</span>
                                         </label>
                                         <input
@@ -341,7 +341,7 @@ export default function AdminDashboardClient({
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                             Last Name <span className="text-red-500">*</span>
                                         </label>
                                         <input
@@ -352,9 +352,9 @@ export default function AdminDashboardClient({
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                             Phone Number (Optional)
                                         </label>
                                         <input
@@ -364,7 +364,7 @@ export default function AdminDashboardClient({
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                             Department
                                         </label>
                                         <select
@@ -381,13 +381,13 @@ export default function AdminDashboardClient({
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                    <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                         Email Address (Optional)
                                     </label>
                                     <input
                                         type="email" name="email"
                                         className="w-full px-3 py-2.5 border border-neutral-200 dark:border-white/10 rounded-xl bg-neutral-50 dark:bg-white/5 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#34A853]/30 focus:border-[#34A853]"
-                                        placeholder="Leave blank to auto-generate worker identity email"
+                                        placeholder="Leave blank for auto identity email"
                                     />
                                     <p className="text-xs text-neutral-400 dark:text-neutral-500 mt-1">
                                         If left empty, a secure system identity email will be assigned automatically.
@@ -397,7 +397,7 @@ export default function AdminDashboardClient({
                                 {/* Instant Check-In to Active Session */}
                                 {activeSessions.length > 0 && (
                                     <div>
-                                        <label className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                                             Instant Check-In to Session (Optional)
                                         </label>
                                         <select
@@ -412,14 +412,14 @@ export default function AdminDashboardClient({
                                     </div>
                                 )}
 
-                                <div className="flex items-center gap-3 pt-2">
-                                    <button type="button" onClick={closeRegisterModal} className="flex-1 py-2.5 border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-white/70 hover:bg-neutral-50 dark:hover:bg-white/5 rounded-xl font-medium transition-colors text-sm">
+                                <div className="flex flex-col-reverse sm:flex-row items-center gap-2 sm:gap-3 pt-2">
+                                    <button type="button" onClick={closeRegisterModal} className="w-full sm:flex-1 py-2.5 border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-white/70 hover:bg-neutral-50 dark:hover:bg-white/5 rounded-xl font-medium transition-colors text-sm">
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
                                         disabled={isRegistering}
-                                        className="flex-1 py-2.5 bg-[#34A853] hover:bg-[#2e9347] text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                                        className="w-full sm:flex-1 py-2.5 bg-[#34A853] hover:bg-[#2e9347] text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                                     >
                                         {isRegistering ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                                         Register Worker
