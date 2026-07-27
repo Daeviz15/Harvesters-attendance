@@ -14,7 +14,7 @@ export default function ThemeToggle() {
     }, []);
 
     if (!mounted) {
-        // Fallback placeholder during SSR/hydration to avoid layout shift
+        
         return (
             <div className="w-[100px] h-8 bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-full animate-pulse" />
         );

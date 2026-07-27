@@ -7,7 +7,6 @@ export const metadata = {
 
 const WORKERS_PAGE_SIZE = 20;
 
-// Next.js 15 requires searchParams to be a Promise.
 export default async function WorkersPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
     const searchParams = await props.searchParams;
     const parsedPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
@@ -17,10 +16,10 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
 
     const supabase = await createClient();
 
-    // Sanitize search string to prevent PostgREST syntax errors (e.g. from commas or parenthesis)
+    
     const sanitizedSearch = search.replace(/[,()]/g, ' ').trim();
 
-    // Prepare workers query
+    
     let query = supabase
         .from('profiles')
         .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id', { count: 'exact' });

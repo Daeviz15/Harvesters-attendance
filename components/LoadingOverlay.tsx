@@ -19,7 +19,7 @@ export default function LoadingOverlay({ isOpen, text = "Authenticating" }: Load
                     transition={{ duration: 0.4, ease: "easeInOut" }}
                     className="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-black/40 backdrop-blur-xl"
                 >
-                    {/* Animated glowing backdrop for the logo */}
+                    {}
                     <motion.div
                         animate={{ 
                             scale: [1, 1.2, 1],
@@ -33,7 +33,7 @@ export default function LoadingOverlay({ isOpen, text = "Authenticating" }: Load
                         className="absolute w-40 h-40 bg-[#34A853]/20 rounded-full blur-3xl pointer-events-none"
                     />
 
-                    {/* Logo Container */}
+                    {}
                     <motion.div
                         animate={{ 
                             y: [0, -10, 0],
@@ -55,7 +55,7 @@ export default function LoadingOverlay({ isOpen, text = "Authenticating" }: Load
                         />
                     </motion.div>
                     
-                    {/* Minimalist text */}
+                    {}
                     <motion.p
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}

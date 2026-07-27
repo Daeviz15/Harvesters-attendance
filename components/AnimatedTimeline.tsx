@@ -11,7 +11,7 @@ export default function AnimatedTimeline() {
         offset: ["start center", "end center"]
     });
 
-    // Smooth out the scroll progress for the tracing beam
+    
     const beamProgress = useSpring(scrollYProgress, {
         stiffness: 400,
         damping: 40,
@@ -39,18 +39,18 @@ export default function AnimatedTimeline() {
                 </motion.h2>
 
                 <div className="relative max-w-5xl mx-auto">
-                    {/* Background Track (Dotted Spine) */}
+                    {}
                     <div className="hidden md:block absolute left-1/2 top-0 bottom-0 w-[3px] border-l-[4px] border-dotted border-neutral-300 dark:border-neutral-800 -translate-x-1/2" />
 
-                    {/* Aceternity Tracing Beam */}
+                    {}
                     <motion.div 
                         style={{ scaleY: beamProgress }}
                         className="hidden md:block absolute left-1/2 top-0 bottom-0 w-[4px] -translate-x-1/2 origin-top bg-gradient-to-b from-transparent via-[#34A853] to-[#34A853] rounded-full z-0 shadow-[0_0_30px_rgba(52,168,83,1)]" 
                     />
 
-                    {/* STEP 01 */}
+                    {}
                     <div className="relative flex flex-col md:flex-row items-center justify-between mb-24 md:mb-32">
-                        {/* Central Step Marker */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center bg-neutral-50 dark:bg-background py-6 px-4 z-10"
@@ -59,13 +59,13 @@ export default function AnimatedTimeline() {
                             <span className="text-6xl font-black text-neutral-800 dark:text-white leading-none">01</span>
                         </motion.div>
 
-                        {/* Mobile Step Marker */}
+                        {}
                         <div className="md:hidden flex flex-col items-center justify-center mb-8">
                             <span className="text-[12px] font-bold tracking-[0.25em] text-neutral-400 uppercase mb-1">Step</span>
                             <span className="text-6xl font-black text-neutral-800 dark:text-white leading-none">01</span>
                         </div>
 
-                        {/* Text (Left) */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             transition={{ ...cinematicReveal.transition, delay: 0.1 }}
@@ -82,7 +82,7 @@ export default function AnimatedTimeline() {
                             </div>
                         </motion.div>
 
-                        {/* Image (Right) */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             transition={{ ...cinematicReveal.transition, delay: 0.2 }}
@@ -95,9 +95,9 @@ export default function AnimatedTimeline() {
                         </motion.div>
                     </div>
 
-                    {/* STEP 02 */}
+                    {}
                     <div className="relative flex flex-col md:flex-row-reverse items-center justify-between mb-24 md:mb-32">
-                        {/* Central Step Marker */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center bg-neutral-50 dark:bg-background py-6 px-4 z-10"
@@ -106,13 +106,13 @@ export default function AnimatedTimeline() {
                             <span className="text-6xl font-black text-neutral-800 dark:text-white leading-none">02</span>
                         </motion.div>
 
-                        {/* Mobile Step Marker */}
+                        {}
                         <div className="md:hidden flex flex-col items-center justify-center mb-8">
                             <span className="text-[12px] font-bold tracking-[0.25em] text-neutral-400 uppercase mb-1">Step</span>
                             <span className="text-6xl font-black text-neutral-800 dark:text-white leading-none">02</span>
                         </div>
 
-                        {/* Text (Right) */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             transition={{ ...cinematicReveal.transition, delay: 0.1 }}
@@ -129,7 +129,7 @@ export default function AnimatedTimeline() {
                             </div>
                         </motion.div>
 
-                        {/* Image (Left) */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             transition={{ ...cinematicReveal.transition, delay: 0.2 }}
@@ -142,9 +142,9 @@ export default function AnimatedTimeline() {
                         </motion.div>
                     </div>
 
-                    {/* STEP 03 */}
+                    {}
                     <div className="relative flex flex-col md:flex-row items-center justify-between">
-                        {/* Central Step Marker */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             className="hidden md:flex absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center bg-neutral-50 dark:bg-background py-6 px-4 z-10"
@@ -153,13 +153,13 @@ export default function AnimatedTimeline() {
                             <span className="text-6xl font-black text-neutral-800 dark:text-white leading-none">03</span>
                         </motion.div>
 
-                        {/* Mobile Step Marker */}
+                        {}
                         <div className="md:hidden flex flex-col items-center justify-center mb-8">
                             <span className="text-[12px] font-bold tracking-[0.25em] text-neutral-400 uppercase mb-1">Step</span>
                             <span className="text-6xl font-black text-neutral-800 dark:text-white leading-none">03</span>
                         </div>
 
-                        {/* Text (Left) */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             transition={{ ...cinematicReveal.transition, delay: 0.1 }}
@@ -176,7 +176,7 @@ export default function AnimatedTimeline() {
                             </div>
                         </motion.div>
 
-                        {/* Image (Right) */}
+                        {}
                         <motion.div 
                             {...cinematicReveal}
                             transition={{ ...cinematicReveal.transition, delay: 0.2 }}

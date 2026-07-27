@@ -15,7 +15,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const [theme, setThemeState] = useState<Theme>("system");
 
     useEffect(() => {
-        // Read theme choice on mount (safe from hydration errors)
+        
         const savedTheme = (localStorage.getItem("theme") as Theme) || "system";
         setThemeState(savedTheme);
     }, []);
@@ -40,7 +40,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
         applyTheme(theme);
 
-        // Listen for system changes if system theme is selected
+        
         if (theme === "system") {
             const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
             const handleMediaChange = () => applyTheme("system");

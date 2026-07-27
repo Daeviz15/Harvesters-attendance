@@ -61,14 +61,14 @@ export default function AdminDashboardClient({
 }: AdminDashboardClientProps) {
     const router = useRouter();
 
-    // ---- Register Worker Modal State ----
+    
     const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
     const [selectedDeptId, setSelectedDeptId] = useState<string>("");
 
-    // ---- Sign In Worker Modal State ----
+    
     const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
     const [selectedSessionId, setSelectedSessionId] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState("");
@@ -79,7 +79,7 @@ export default function AdminDashboardClient({
     const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null);
     const [checkInNote, setCheckInNote] = useState("");
 
-    // ---- Register Worker Handler ----
+    
     const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setIsRegistering(true);

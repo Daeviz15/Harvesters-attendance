@@ -46,14 +46,14 @@ export default function TeamStrip() {
                             transition={{ duration: 0.5, delay: idx * 0.1 }}
                             className="flex items-center gap-3 group"
                         >
-                            {/* Initials Avatar */}
+                            {}
                             <div className="w-10 h-10 rounded-full bg-[#0a0a0a] dark:bg-white/10 border border-neutral-200 dark:border-white/10 flex items-center justify-center group-hover:border-[#34A853]/50 group-hover:shadow-[0_0_15px_rgba(52,168,83,0.15)] transition-all duration-300">
                                 <span className="text-xs font-bold text-neutral-500 dark:text-white/50 group-hover:text-[#34A853] transition-colors duration-300">
                                     {member.initials}
                                 </span>
                             </div>
 
-                            {/* Name & Role */}
+                            {}
                             <div className="flex flex-col">
                                 <span className="text-sm font-semibold text-neutral-800 dark:text-white/80 leading-tight">
                                     {member.name}

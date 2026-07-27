@@ -16,7 +16,7 @@ export default async function AdminLayout({
         redirect('/auth/login');
     }
 
-    // Verify admin role
+    
     const { data: profile } = await supabase
         .from('profiles')
         .select('role, first_name, last_name')
@@ -24,7 +24,7 @@ export default async function AdminLayout({
         .single();
 
     if (!profile || profile.role !== 'admin') {
-        // Redirect non-admins to the standard dashboard
+        
         redirect('/dashboard');
     }
 

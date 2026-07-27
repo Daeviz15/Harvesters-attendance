@@ -29,7 +29,7 @@ function AdminSidebarContent({
 }) {
     return (
         <>
-            {/* Logo */}
+            {}
             <div className="h-20 flex items-center gap-3 px-6 border-b border-neutral-200 dark:border-white/10 shrink-0">
                 <div className="relative h-8 w-8">
                     <Image
@@ -45,7 +45,7 @@ function AdminSidebarContent({
                 </span>
             </div>
 
-            {/* Navigation Links */}
+            {}
             <nav className="flex-1 py-8 px-4 flex flex-col gap-2 overflow-y-auto">
                 {navLinks.map((link) => {
                     const isActive = pathname === link.href;

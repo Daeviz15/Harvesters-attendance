@@ -81,8 +81,8 @@ export default function LocationsClient({ initialLocations }: { initialLocations
             return;
         }
 
-        // We could just reload or rely on Next.js revalidatePath, but manually updating state makes it snappy.
-        // Actually, since revalidatePath triggers a re-render from server, we can just let it reload the page data.
+        
+        
         window.location.reload();
     };
 
@@ -102,7 +102,7 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                 </button>
             </div>
 
-            {/* Locations Grid */}
+            {}
             {locations.length === 0 ? (
                 <div className="bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl p-12 text-center flex flex-col items-center justify-center">
                     <div className="w-16 h-16 rounded-full bg-neutral-100 dark:bg-white/5 flex items-center justify-center text-neutral-400 mb-4">

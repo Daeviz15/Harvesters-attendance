@@ -60,13 +60,13 @@ export function SheetContent({
 
   return (
     <div className="fixed inset-0 z-50 flex">
-      {/* Backdrop */}
+      {}
       <div
         className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-300"
         onClick={() => setOpen(false)}
       />
 
-      {/* Sheet Content */}
+      {}
       <div
         className={`relative z-50 ml-auto h-full w-72 max-w-full bg-[#0d0d12] text-white border-l border-white/10 p-6 shadow-2xl transition-transform duration-300 ${
           side === "right" ? "right-0" : "left-0"

@@ -36,7 +36,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
     const [isSearching, setIsSearching] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
-    // Debounce search
+    
     useEffect(() => {
         const timer = setTimeout(() => {
             if (searchTerm !== initialSearch) {
@@ -47,7 +47,7 @@ export default function HistoryClient({ logs, currentPage, totalPages, totalCoun
                 } else {
                     params.delete('search');
                 }
-                params.set('page', '1'); // Reset to page 1 on new search
+                params.set('page', '1'); 
                 
                 router.push(`${pathname}?${params.toString()}`);
             }

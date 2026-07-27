@@ -9,7 +9,7 @@ const features = [
         id: "location",
         title: "Location Verified", 
         description: "GPS-powered geofencing ensures you're physically present at the church premises before checking in. No spoofing.", 
-        className: "md:col-span-2 bg-[#0a0a0a] border-neutral-800", // Dark Wide Card
+        className: "md:col-span-2 bg-[#0a0a0a] border-neutral-800", 
         textClass: "text-white",
         descClass: "text-neutral-400",
         highlightClass: "bg-white/10 text-white",
@@ -19,7 +19,7 @@ const features = [
         id: "tracking",
         title: "Real-Time Tracking", 
         description: "Instant check-in and check-out with precise timestamps.", 
-        className: "md:col-span-1 md:row-span-2 bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-neutral-800", // Light Tall Card
+        className: "md:col-span-1 md:row-span-2 bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-neutral-800", 
         textClass: "text-neutral-900 dark:text-white",
         descClass: "text-neutral-500 dark:text-neutral-400",
         highlightClass: "bg-[#34A853]/20 text-[#34A853] dark:bg-[#34A853]/20 dark:text-[#34A853]",
@@ -29,7 +29,7 @@ const features = [
         id: "feed",
         title: "Live Feed", 
         description: "See who's checking in across all departments in real-time.", 
-        className: "md:col-span-1 bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-neutral-800", // Light Square Card
+        className: "md:col-span-1 bg-white dark:bg-[#1a1a1a] border-neutral-200 dark:border-neutral-800", 
         textClass: "text-neutral-900 dark:text-white",
         descClass: "text-neutral-500 dark:text-neutral-400",
         highlightClass: "bg-[#34A853]/20 text-[#34A853] dark:bg-[#34A853]/20 dark:text-[#34A853]",
@@ -39,7 +39,7 @@ const features = [
         id: "security",
         title: "Enterprise Security", 
         description: "Built on Supabase with end-to-end encryption.", 
-        className: "md:col-span-1 bg-[#0a0a0a] border-neutral-800", // Dark Square Card
+        className: "md:col-span-1 bg-[#0a0a0a] border-neutral-800", 
         textClass: "text-white",
         descClass: "text-neutral-400",
         highlightClass: "bg-white/10 text-white",

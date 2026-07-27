@@ -9,12 +9,12 @@ export default function InteractiveHero() {
     const [isCheckedIn, setIsCheckedIn] = useState(false);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-    // High-performance scroll tracking via Framer Motion (doesn't trigger React renders on every pixel)
+    
     const { scrollY } = useScroll();
     const [isLeaving, setIsLeaving] = useState(false);
     const [isOutside, setIsOutside] = useState(false);
 
-    // Mock timer logic
+    
     useEffect(() => {
         let interval: NodeJS.Timeout;
         if (isCheckedIn && !isOutside) {
@@ -29,7 +29,7 @@ export default function InteractiveHero() {
 
     useEffect(() => {
         return scrollY.on("change", (latest) => {
-            // Only trigger state updates (re-renders) when crossing thresholds
+            
             setIsLeaving(latest > 330);
             setIsOutside(latest > 530);
         });

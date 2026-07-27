@@ -20,13 +20,13 @@ type ActiveSession = {
 export default async function AdminSessionsPage() {
     const supabase = await createClient();
 
-    // Verify authentication
+    
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
         redirect("/auth/login");
     }
 
-    // Verify admin role
+    
     const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -37,7 +37,7 @@ export default async function AdminSessionsPage() {
         redirect("/dashboard");
     }
 
-    // Fetch all events
+    
     const { data: events, error: eventsError } = await supabase
         .from('events')
         .select('*')
@@ -47,7 +47,7 @@ export default async function AdminSessionsPage() {
         console.error("Failed to fetch events:", eventsError);
     }
 
-    // Fetch active sessions joined with event titles
+    
     const { data: activeSessions, error: sessionsError } = await supabase
         .from('attendance_sessions')
         .select(`
@@ -68,7 +68,7 @@ export default async function AdminSessionsPage() {
         console.error("Failed to fetch active sessions:", sessionsError);
     }
 
-    // Transform nested event relation
+    
     const formattedSessions: ActiveSession[] = (activeSessions || []).map(session => ({
         ...session,
         event: Array.isArray(session.event) ? session.event[0] : session.event,

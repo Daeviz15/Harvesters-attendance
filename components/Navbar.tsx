@@ -15,14 +15,14 @@ export default function Navbar() {
     const [isOpen, setIsOpen] = useState(false);
     const [scrolled, setScrolled] = useState(false);
 
-    // Track scroll for enhanced navbar styling
+    
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
         window.addEventListener("scroll", handleScroll, { passive: true });
         return () => window.removeEventListener("scroll", handleScroll);
     }, []);
 
-    // Lock body scroll when menu is open
+    
     useEffect(() => {
         if (isOpen) {
             document.body.style.overflow = "hidden";
@@ -35,11 +35,11 @@ export default function Navbar() {
     const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
         e.preventDefault();
         setIsOpen(false);
-        // Small delay to let menu close before scrolling
+        
         setTimeout(() => {
             const target = document.querySelector(href);
             if (target) {
-                const navHeight = 72; // approx navbar height
+                const navHeight = 72; 
                 const targetPosition = target.getBoundingClientRect().top + window.scrollY - navHeight;
                 window.scrollTo({ top: targetPosition, behavior: "smooth" });
             }

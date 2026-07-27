@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 export default function WorkersAttendancePage() {
     return (
         <main className="min-h-screen bg-background text-foreground relative overflow-hidden pt-[72px]">
-            {/* Ambient Glows */}
+            {}
             <div className="absolute inset-0 pointer-events-none">
                 <div className="absolute -top-60 -right-60 w-[600px] h-[600px] bg-[#34A853]/15 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[180px]" />
                 <div className="absolute top-1/2 -left-40 w-[500px] h-[500px] bg-[#34A853]/8 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[150px]" />
@@ -41,18 +41,18 @@ export default function WorkersAttendancePage() {
                 <VisitUs />
             </div>
 
-            {/* CTA Section */}
+            {}
             <ScrollReveal>
                 <section className="relative z-10 max-w-6xl mx-auto px-6 py-20">
                 <div className="relative rounded-[2rem] bg-[#0a0a0a] border border-white/10 p-12 md:p-16 text-center overflow-hidden shadow-2xl">
-                    {/* Abstract Background Elements */}
+                    {}
                     <div className="absolute inset-0 pointer-events-none">
-                        {/* Dot Grid */}
+                        {}
                         <div className="absolute inset-0 opacity-30" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.1) 1px, transparent 0)', backgroundSize: '24px 24px' }} />
-                        {/* Glowing Orbs */}
+                        {}
                         <div className="absolute -top-20 -right-20 w-60 h-60 bg-[#34A853]/20 rounded-full filter blur-[100px]" />
                         <div className="absolute -bottom-20 -left-20 w-48 h-48 bg-[#34A853]/10 rounded-full filter blur-[80px]" />
-                        {/* Concentric Rings */}
+                        {}
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] border border-white/[0.03] rounded-full" />
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] border border-white/[0.05] rounded-full" />
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[200px] h-[200px] border border-white/[0.07] rounded-full" />
@@ -78,7 +78,7 @@ export default function WorkersAttendancePage() {
 
             <TeamStrip />
 
-            {/* Footer */}
+            {}
             <ScrollReveal delay={0.2}>
                 <footer className="relative z-10 border-t border-neutral-200 dark:border-white/5 mt-10">
                 <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6">

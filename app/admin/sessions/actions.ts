@@ -7,7 +7,6 @@ function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "An unexpected error occurred.";
 }
 
-// Helper to securely verify admin role
 async function verifyAdminServer() {
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -86,7 +85,7 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
         const { supabase } = await verifyAdminServer();
         const cleanQuery = query.trim().replace(/[,()]/g, ' ').trim();
 
-        // 1. Get already checked-in workers for this session
+        
         const { data: existingLogs } = await supabase
             .from("attendance_logs")
             .select("user_id")
@@ -95,7 +94,7 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
 
         const checkedInUserIds = new Set((existingLogs || []).map((log) => log.user_id));
 
-        // 2. Query profiles
+        
         let profilesQuery = supabase
             .from("profiles")
             .select("id, first_name, last_name, phone, department, avatar_url, role, worker_id")

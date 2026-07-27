@@ -4,7 +4,7 @@ import AdminDashboardClient from "./AdminDashboardClient";
 export default async function AdminDashboardPage() {
     const supabase = await createClient();
 
-    // Get basic stats
+    
     const { count: workerCount } = await supabase
         .from('profiles')
         .select('*', { count: 'exact', head: true });
@@ -18,14 +18,14 @@ export default async function AdminDashboardPage() {
         .from('events')
         .select('*', { count: 'exact', head: true });
 
-    // Fetch departments for the Register Worker modal
+    
     const { data: departments } = await supabase
         .from('departments')
         .select('id, name, is_active')
         .eq('is_active', true)
         .order('name', { ascending: true });
 
-    // Fetch active sessions for the Sign In Worker modal
+    
     const { data: activeSessions } = await supabase
         .from('attendance_sessions')
         .select('id, event:events(title)')

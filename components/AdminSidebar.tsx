@@ -28,7 +28,7 @@ export default function AdminSidebar() {
 
     return (
         <aside className="fixed inset-y-0 left-0 w-64 bg-background border-r border-neutral-200 dark:border-white/10 hidden md:flex flex-col z-50">
-            {/* Logo */}
+            {}
             <div className="h-20 flex items-center gap-3 px-6 border-b border-neutral-200 dark:border-white/10">
                 <div className="relative h-8 w-8">
                     <Image
@@ -44,7 +44,7 @@ export default function AdminSidebar() {
                 </span>
             </div>
 
-            {/* Navigation */}
+            {}
             <nav className="flex-1 py-8 px-4 flex flex-col gap-2">
                 {navLinks.map((link) => {
                     const isActive = pathname === link.href;

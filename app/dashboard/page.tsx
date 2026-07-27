@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 import DashboardClient from './DashboardClient';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
-import type { AttendanceLog } from '@/lib/types'; // LiveFeedEvent import commented out: Live Feed disabled per team request
+import type { AttendanceLog } from '@/lib/types'; 
 
 type BroadcastEventJoin = { title: string } | { title: string }[] | null;
 
@@ -19,27 +19,27 @@ export default async function DashboardServerPage() {
         redirect('/auth/login');
     }
 
-    // Fetch the production profile data from the database
+    
     const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
-    // Default values
+    
     let username = "User";
     let initials = "U";
     let department = "Worker";
     let team: string | null = null;
 
     if (profile) {
-        // Use true database profile data (where first_name now stores the username)
+        
         username = profile.first_name || "User";
         department = profile.department || "Worker";
         team = profile.team || null;
         initials = username.substring(0, 2).toUpperCase();
     } else {
-        // Fallback for legacy test accounts created before the trigger existed
+        
         if (user.user_metadata?.department) department = user.user_metadata.department;
         if (user.email) {
             username = user.email.split('@')[0];
@@ -47,7 +47,7 @@ export default async function DashboardServerPage() {
         }
     }
 
-    // Check if the user has an active session
+    
     const { data: activeSession } = await supabase
         .from('attendance_logs')
         .select('id, check_in_time')
@@ -55,7 +55,7 @@ export default async function DashboardServerPage() {
         .eq('status', 'active')
         .maybeSingle();
 
-    // Fetch the global active broadcast session
+    
     const { data: activeBroadcastSession } = await supabase
         .from('attendance_sessions')
         .select('id, event:events(title)')
@@ -67,7 +67,7 @@ export default async function DashboardServerPage() {
         title: getBroadcastTitle(activeBroadcastSession.event)
     } : null;
 
-    // Fetch initial attendance history (server-side, zero client latency)
+    
     const { data: historyData } = await supabase
         .from('attendance_logs')
         .select('id, check_in_time, check_out_time, status')
@@ -85,15 +85,15 @@ export default async function DashboardServerPage() {
             check_out_time: row.check_out_time,
             status: row.status,
         }));
-    // COMMENTED OUT: Live Feed disabled per team request
-    // const { data: initialLiveFeedData } = await supabase
-    //     .from('live_feed_events')
-    //     .select('*')
-    //     .order('created_at', { ascending: false })
-    //     .limit(10);
-    // const initialLiveFeed: LiveFeedEvent[] = initialLiveFeedData || [];
+    
+    
+    
+    
+    
+    
+    
 
-    // Fetch active locations for geofencing
+    
     const { data: activeLocations } = await supabase
         .from('locations')
         .select('id, name, latitude, longitude, radius')

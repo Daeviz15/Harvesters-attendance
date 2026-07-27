@@ -256,7 +256,6 @@ export default function SessionsClient({
         };
     }, [refreshSessions, supabase]);
 
-
     const handleBeginSession = async (eventId: string) => {
         setIsSubmitting(eventId);
         const result = await beginSession(eventId);

@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
-// Escapes CSV values to prevent CSV Injection (Formula Injection) and handles commas/newlines
 function escapeCSVValue(value: any): string {
     if (value === null || value === undefined) return "";
     let str = String(value);
     
-    // Prevent CSV Injection
+    
     if (/^[=+\-@]/.test(str)) {
         str = "'" + str;
     }
 
-    // Escape quotes and wrap in quotes if it contains commas, newlines, or quotes
+    
     if (str.includes(",") || str.includes("\"") || str.includes("\n") || str.includes("\r")) {
         str = `"${str.replace(/"/g, '""')}"`;
     }
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        // 2. Verify Admin Role (Strict Security Check)
+        // 2. Verify Admin Role (Strict Server-Side Authorization Check)
         const { data: profile } = await supabase
             .from('profiles')
             .select('role')
@@ -55,27 +54,45 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: "Forbidden. Admin access required." }, { status: 403 });
         }
 
-        // 3. Parse Query Parameters
+        // 3. Parse and Validate Query Parameters
         const searchParams = req.nextUrl.searchParams;
-        const type = searchParams.get('type'); // 'date', 'session', 'all'
+        const type = searchParams.get('type'); // 'date', 'range', 'session', 'all'
         const value = searchParams.get('value');
+        const startDateParam = searchParams.get('startDate') || value;
+        const endDateParam = searchParams.get('endDate') || value || startDateParam;
 
-        const tzOffset = parseInt(searchParams.get('tzOffset') || '0', 10); // Offset in minutes
+        const tzOffsetRaw = parseInt(searchParams.get('tzOffset') || '0', 10);
+        const tzOffset = Number.isFinite(tzOffsetRaw) && Math.abs(tzOffsetRaw) <= 840 ? tzOffsetRaw : 0;
 
-        // 4. Calculate Date Range with Timezone Safety
+        // 4. Calculate Date Range with Strict Format Validation & Timezone Alignment
         let startTime = "";
         let endTime = "";
 
-        if (type === 'date' && value) {
-            // "value" is YYYY-MM-DD
-            // Create a date representing midnight in the user's local timezone
-            const localDate = new Date(`${value}T00:00:00.000`);
+        const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+        if ((type === 'date' || type === 'range') && (startDateParam || endDateParam)) {
+            const sDate = startDateParam || endDateParam;
+            const eDate = endDateParam || startDateParam;
+
+            if (sDate && !DATE_REGEX.test(sDate)) {
+                return NextResponse.json({ error: "Invalid start date format. Expected YYYY-MM-DD." }, { status: 400 });
+            }
+            if (eDate && !DATE_REGEX.test(eDate)) {
+                return NextResponse.json({ error: "Invalid end date format. Expected YYYY-MM-DD." }, { status: 400 });
+            }
+
+            const localStart = new Date(`${sDate}T00:00:00.000`);
+            const localEnd = new Date(`${eDate}T23:59:59.999`);
+
+            if (isNaN(localStart.getTime()) || isNaN(localEnd.getTime())) {
+                return NextResponse.json({ error: "Invalid date values provided." }, { status: 400 });
+            }
+
             // Adjust to UTC
-            const startUtc = new Date(localDate.getTime() + tzOffset * 60000);
+            const startUtc = new Date(localStart.getTime() + tzOffset * 60000);
             startTime = startUtc.toISOString();
-            
-            // End of day is 23:59:59.999
-            const endUtc = new Date(startUtc.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+            const endUtc = new Date(localEnd.getTime() + tzOffset * 60000);
             endTime = endUtc.toISOString();
         }
 
@@ -100,7 +117,7 @@ export async function GET(req: NextRequest) {
         let hasMore = true;
 
         while (hasMore) {
-            // Step A: Fetch attendance logs (with session/event join only)
+            // Step A: Fetch attendance logs (with session/event join)
             let query = supabase
                 .from('attendance_logs')
                 .select(`
@@ -117,7 +134,7 @@ export async function GET(req: NextRequest) {
                 .order('check_in_time', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
 
-            if (type === 'date' && value) {
+            if ((type === 'date' || type === 'range') && (startDateParam || endDateParam)) {
                 query = query
                     .gte('check_in_time', startTime)
                     .lte('check_in_time', endTime);
@@ -179,12 +196,17 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        // 6. Return standard CSV Response
-        const filename = type === 'date' 
-            ? `attendance-${value}.csv` 
-            : type === 'session' 
-                ? `attendance-session-${value}.csv` 
-                : `attendance-all-${new Date().toISOString().split('T')[0]}.csv`;
+        // 7. Return standard CSV Response
+        const finalEnd = endDateParam || startDateParam;
+        let filename = `attendance-all-${new Date().toISOString().split('T')[0]}.csv`;
+        
+        if ((type === 'date' || type === 'range') && startDateParam) {
+            filename = startDateParam === finalEnd 
+                ? `attendance-${startDateParam}.csv` 
+                : `attendance-${startDateParam}-to-${finalEnd}.csv`;
+        } else if (type === 'session' && value) {
+            filename = `attendance-session-${value}.csv`;
+        }
 
         return new NextResponse(csvContent, {
             status: 200,

@@ -10,19 +10,19 @@ export default async function OnboardingPage() {
         redirect('/auth/login');
     }
 
-    // Double check if onboarding is already complete
+    
     if (user.user_metadata?.onboarding_complete) {
         redirect('/dashboard');
     }
 
-    // Fetch existing profile if present
+    
     const { data: profile } = await supabase
         .from('profiles')
         .select('id, first_name, last_name, worker_id, avatar_url, phone, department_id')
         .eq('id', user.id)
         .maybeSingle();
 
-    // Determine initial first and last names from profile or user metadata
+    
     let initialFirstName = profile?.first_name || user.user_metadata?.first_name || (user.user_metadata?.full_name?.split(' ')[0]) || '';
     let initialLastName = profile?.last_name || user.user_metadata?.last_name || (user.user_metadata?.full_name?.split(' ').slice(1).join(' ')) || '';
     
@@ -31,7 +31,7 @@ export default async function OnboardingPage() {
         initialFirstName = emailName.charAt(0).toUpperCase() + emailName.slice(1);
     }
 
-    // Determine or generate unique Worker ID (HRV-XXXX)
+    
     let workerId = profile?.worker_id || '';
     if (!workerId) {
         const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";

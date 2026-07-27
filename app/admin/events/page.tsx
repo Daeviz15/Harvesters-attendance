@@ -9,13 +9,13 @@ export const metadata = {
 export default async function AdminEventsPage() {
     const supabase = await createClient();
 
-    // Verify authentication
+    
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
         redirect("/auth/login");
     }
 
-    // Verify admin role
+    
     const { data: profile } = await supabase
         .from('profiles')
         .select('role')
@@ -26,7 +26,7 @@ export default async function AdminEventsPage() {
         redirect("/dashboard");
     }
 
-    // Fetch all events, ordered by newest first
+    
     const { data: events, error } = await supabase
         .from('events')
         .select('*')
@@ -36,7 +36,7 @@ export default async function AdminEventsPage() {
         console.error("Failed to fetch events:", error);
     }
     
-    // Fetch all active locations
+    
     const { data: locations, error: locationsError } = await supabase
         .from('locations')
         .select('id, name')

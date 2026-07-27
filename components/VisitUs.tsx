@@ -35,7 +35,7 @@ export default function VisitUs() {
         <section className="relative z-10 w-full py-24 overflow-hidden">
             <div className="max-w-6xl mx-auto px-6">
 
-                {/* Header Section */}
+                {}
                 <div className="mb-16 md:mb-24 max-w-2xl">
                     <motion.h2
                         initial={{ opacity: 0, y: 20 }}
@@ -57,7 +57,7 @@ export default function VisitUs() {
                     </motion.p>
                 </div>
 
-                {/* Desktop Interactive Expanding Gallery */}
+                {}
                 <div className="hidden md:flex h-[500px] w-full gap-4">
                     {campuses.map((campus) => {
                         const isActive = hoveredId === campus.id;
@@ -73,7 +73,7 @@ export default function VisitUs() {
                                     flex: isActive ? 3 : 1
                                 }}
                             >
-                                {/* Pre-loaded Google Map — always mounted, visibility toggled via CSS */}
+                                {}
                                 <div
                                     className="absolute inset-0 z-0 pointer-events-none transition-opacity duration-700"
                                     style={{ opacity: isActive ? 1 : 0 }}

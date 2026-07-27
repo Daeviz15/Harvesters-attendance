@@ -47,7 +47,7 @@ const CustomCursor = () => {
 
     return (
         <>
-            {/* Outer cursor */}
+            {}
             <motion.div
                 className="fixed top-0 left-0 w-10 h-10 rounded-full pointer-events-none z-[9999] hidden md:block"
                 style={{
@@ -66,7 +66,7 @@ const CustomCursor = () => {
                 }}
             />
 
-            {/* Inner cursor - brand dot */}
+            {}
             <motion.div
                 className="fixed top-0 left-0 w-1.5 h-1.5 rounded-full pointer-events-none z-[9999] hidden md:block"
                 style={{

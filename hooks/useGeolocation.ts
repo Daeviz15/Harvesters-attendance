@@ -34,7 +34,7 @@ export function useGeolocation(activeLocations: { id: string, name: string, lati
             (position) => {
                 const { latitude, longitude, accuracy } = position.coords;
                 
-                // Find the closest location and check if we are within ANY perimeter
+                
                 let minDistance = Infinity;
                 let isWithinPerimeter = false;
                 let locationName: string | null = null;
@@ -53,10 +53,10 @@ export function useGeolocation(activeLocations: { id: string, name: string, lati
                     }
                 }
 
-                // If no active locations are found, distance remains null
+                
                 const finalDistance = minDistance === Infinity ? null : minDistance;
 
-                // Debug logging — remove after testing
+                
                 console.log(`[GEO DEBUG] Your GPS: ${latitude}, ${longitude}`);
                 console.log(`[GEO DEBUG] Distance: ${finalDistance?.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Within: ${isWithinPerimeter}`);
 

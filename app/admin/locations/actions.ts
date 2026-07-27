@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 export async function createLocation(formData: FormData) {
     const supabase = await createClient();
 
-    // Verify admin
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
@@ -52,7 +52,7 @@ export async function createLocation(formData: FormData) {
 export async function updateLocation(formData: FormData) {
     const supabase = await createClient();
 
-    // Verify admin
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
@@ -99,7 +99,7 @@ export async function updateLocation(formData: FormData) {
 export async function toggleLocationActive(id: string, currentStatus: boolean) {
     const supabase = await createClient();
 
-    // Verify admin
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
@@ -131,7 +131,7 @@ export async function toggleLocationActive(id: string, currentStatus: boolean) {
 export async function deleteLocation(id: string) {
     const supabase = await createClient();
 
-    // Verify admin
+    
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 

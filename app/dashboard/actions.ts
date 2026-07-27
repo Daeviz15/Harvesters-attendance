@@ -7,7 +7,6 @@ import { revalidatePath } from 'next/cache';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog, AttendanceHistoryResponse } from '@/lib/types';
 
-// Strict Zod schema for ensuring valid coordinates
 const locationSchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180)
@@ -22,7 +21,7 @@ export async function verifyAndCheckIn(formData: FormData) {
     const latStr = formData.get('lat');
     const lngStr = formData.get('lng');
 
-    // Prevent silent coercion bugs where missing values become 0 (in the ocean off Africa)
+    
     if (latStr === null || lngStr === null || latStr === '' || lngStr === '') {
         return { error: 'Missing GPS coordinates. Please ensure location services are enabled.' };
     }
@@ -34,13 +33,13 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const { lat, lng } = parsed.data;
 
-    // Parse GPS accuracy (sent from the client's navigator.geolocation)
+    
     const accuracyStr = formData.get('accuracy');
-    const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0; // Cap at 300m to prevent abuse
+    const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0; 
 
     const supabase = await createClient();
 
-    // 1. Verify session and fetch associated event location IDs in a single optimized query
+    
     const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_sessions')
         .select('id, status, events(location_ids)')
@@ -51,16 +50,15 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: 'This attendance session is no longer active or could not be found.' };
     }
 
-    // Safely extract the linked locations from the joined events table
-    // @ts-ignore - Supabase types might not immediately reflect the join structure deeply
-    const eventLocationIds = sessionData.events?.location_ids as string[] | undefined;
+    const eventObj: any = Array.isArray(sessionData.events) ? sessionData.events[0] : sessionData.events;
+    const eventLocationIds = eventObj?.location_ids as string[] | undefined;
     const allowedLocationIds: string[] = eventLocationIds || [];
 
     if (allowedLocationIds.length === 0) {
         return { error: 'Security constraint: This event has no branch locations assigned. Please contact an administrator to update the event.' };
     }
 
-    // 2. Fetch ONLY the allowed active locations for this event
+    
     const { data: activeLocations, error: locError } = await supabase
         .from('locations')
         .select('latitude, longitude, radius, name, id')
@@ -71,7 +69,7 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: 'The locations assigned to this event are currently inactive or invalid. Check-in is disabled.' };
     }
 
-    // 4. Validate GPS against allowed locations
+    
     let isWithinAnyPerimeter = false;
     let closestDistance = Infinity;
 
@@ -199,8 +197,6 @@ export async function manualCheckOut(formData: FormData) {
     revalidatePath('/dashboard');
     return { success: true };
 }
-
-
 
 /**
  * Cursor-based paginated fetch for attendance history.

@@ -27,8 +27,8 @@ export async function updateSession(request: NextRequest) {
     }
   )
 
-  // IMPORTANT: Avoid writing any logic between createServerClient and
-  // supabase.auth.getUser().
+  
+  
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -40,13 +40,13 @@ export async function updateSession(request: NextRequest) {
   const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding');
   const isPublicPage = request.nextUrl.pathname === '/' || request.nextUrl.pathname.startsWith('/privacy') || request.nextUrl.pathname.startsWith('/terms');
 
-  // Never interfere with the OAuth callback or public legal pages
+  
   if (isAuthCallback || isPublicPage) {
     return supabaseResponse;
   }
 
   if (!user && (isDashboardPage || isOnboardingPage)) {
-    // no user, redirect to login page
+    
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
     return NextResponse.redirect(url)
@@ -54,21 +54,21 @@ export async function updateSession(request: NextRequest) {
 
   if (user) {
     if (!isOnboardingComplete && !isOnboardingPage && !isAuthPage) {
-        // Enforce onboarding
+        
         const url = request.nextUrl.clone()
         url.pathname = '/onboarding'
         return NextResponse.redirect(url)
     }
 
     if (isOnboardingComplete && (isAuthPage || isOnboardingPage)) {
-        // Redirect authenticated users with complete onboarding away from auth and onboarding pages
+        
         const url = request.nextUrl.clone()
         url.pathname = '/dashboard'
         return NextResponse.redirect(url)
     }
 
     if (!isOnboardingComplete && isAuthPage) {
-        // Redirect to onboarding if not complete
+        
         const url = request.nextUrl.clone()
         url.pathname = '/onboarding'
         return NextResponse.redirect(url)

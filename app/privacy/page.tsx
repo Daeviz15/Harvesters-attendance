@@ -10,13 +10,13 @@ export const metadata: Metadata = {
 export default function PrivacyPolicyPage() {
     return (
         <main className="min-h-screen bg-background text-foreground relative overflow-hidden">
-            {/* Ambient Glow */}
+            {}
             <div className="absolute inset-0 pointer-events-none opacity-15">
                 <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-[#34A853]/20 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[150px]" />
                 <div className="absolute -bottom-40 -left-40 w-[400px] h-[400px] bg-[#34A853]/10 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-[150px]" />
             </div>
 
-            {/* Navigation */}
+            {}
             <nav className="sticky top-0 z-50 backdrop-blur-2xl bg-background/70 border-b border-neutral-200/60 dark:border-white/5">
                 <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
                     <Link href="/" className="flex items-center gap-2 group">
@@ -42,9 +42,9 @@ export default function PrivacyPolicyPage() {
                 </div>
             </nav>
 
-            {/* Content */}
+            {}
             <div className="relative z-10 max-w-4xl mx-auto px-6 pt-16 pb-24">
-                {/* Header */}
+                {}
                 <div className="mb-16">
                     <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#34A853]/10 border border-[#34A853]/20 mb-6">
                         <div className="w-1.5 h-1.5 rounded-full bg-[#34A853] animate-pulse" />
@@ -58,7 +58,7 @@ export default function PrivacyPolicyPage() {
                     </p>
                 </div>
 
-                {/* Policy Content */}
+                {}
                 <div className="space-y-12">
                     <Section title="1. Introduction">
                         <p>
@@ -184,7 +184,7 @@ export default function PrivacyPolicyPage() {
                     </Section>
                 </div>
 
-                {/* Footer Link */}
+                {}
                 <div className="mt-20 pt-8 border-t border-neutral-200 dark:border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <p className="text-xs text-neutral-400 dark:text-white/30">
                         © {new Date().getFullYear()} Harvesters Globe Attendance. All rights reserved.

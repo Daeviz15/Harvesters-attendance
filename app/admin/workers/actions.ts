@@ -106,11 +106,6 @@ const registerWorkerSchema = z.object({
     checkInNote: z.string().trim().optional(),
 });
 
-/**
- * Generates a unique Worker ID in format HRV-XXXX (4-char alphanumeric).
- * Uses a collision-safe retry loop — with 36^4 = ~1.68M possible values,
- * collisions are statistically near-impossible at typical org sizes.
- */
 async function generateUniqueWorkerId(supabaseClient: Awaited<ReturnType<typeof createClient>>): Promise<string> {
     const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const ID_LENGTH = 4;

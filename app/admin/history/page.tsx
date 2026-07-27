@@ -1,7 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import HistoryClient from "./HistoryClient";
 
-
 export const metadata = {
     title: "Global Attendance History | Admin Portal",
 };
@@ -23,7 +22,7 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
 
     const supabase = await createClient();
 
-    // 1. If there's a search term, first find the matching user profiles
+    
     let matchingUserIds: string[] | null = null;
     if (search) {
         const { data: matchedProfiles } = await supabase

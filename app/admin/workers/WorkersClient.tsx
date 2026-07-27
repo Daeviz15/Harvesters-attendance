@@ -65,7 +65,7 @@ export default function WorkersClient({
     const [busyWorkerId, setBusyWorkerId] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Register worker modal state
+    
     const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
     const [isRegistering, setIsRegistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);

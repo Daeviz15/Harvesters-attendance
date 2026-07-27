@@ -103,7 +103,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
     return { error: 'Please select an active department.' }
   }
 
-  // Update the user profile
+  
   const { error: dbError } = await supabase
     .from('profiles')
     .update({

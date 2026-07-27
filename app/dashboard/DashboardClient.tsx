@@ -18,7 +18,6 @@ import ThemeToggle from "@/components/ThemeToggle";
 import type { AttendanceLog, LiveFeedEvent } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
 
-/** Formats an ISO timestamp into relative time (e.g., "Just now", "5 mins ago") */
 function formatTimeAgo(isoString: string): string {
     const diffMs = Date.now() - new Date(isoString).getTime();
     const diffMins = Math.floor(diffMs / 60000);

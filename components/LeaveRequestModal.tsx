@@ -24,7 +24,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
     const [isSubmitted, setIsSubmitted] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
     
-    // Server data state
+    
     const [history, setHistory] = useState<LeaveRequest[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
         e.preventDefault();
         setErrorMsg(null);
         
-        // Logical date validation
+        
         if (new Date(startDate) < new Date(new Date().setHours(0, 0, 0, 0))) {
             setErrorMsg("Start Date cannot be in the past.");
             return;
@@ -135,7 +135,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
         <AnimatePresence>
             {isOpen && (
                 <>
-                    {/* Backdrop */}
+                    {}
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -144,7 +144,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                         className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60]"
                     />
 
-                    {/* Modal */}
+                    {}
                     <motion.div
                         initial={{ opacity: 0, y: 40, scale: 0.95 }}
                         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -153,7 +153,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                         className="fixed inset-x-4 top-[10%] sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-md z-[70] max-h-[80vh] overflow-y-auto no-scrollbar"
                     >
                         <div className="bg-[#111111] border border-white/10 rounded-3xl shadow-2xl overflow-hidden">
-                            {/* Modal Header */}
+                            {}
                             <div className="flex items-center justify-between p-6 border-b border-white/5">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-full bg-[#34A853]/10 flex items-center justify-center">
@@ -169,7 +169,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                 </button>
                             </div>
 
-                            {/* Tabs */}
+                            {}
                             <div className="flex border-b border-white/5">
                                 <button
                                     onClick={() => setActiveTab("new")}
