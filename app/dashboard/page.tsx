@@ -31,12 +31,14 @@ export default async function DashboardServerPage() {
     let initials = "U";
     let department = "Worker";
     let team: string | null = null;
+    let workerId: string | null = null;
 
     if (profile) {
         
         username = profile.first_name || "User";
         department = profile.department || "Worker";
         team = profile.team || null;
+        workerId = profile.worker_id || null;
         initials = username.substring(0, 2).toUpperCase();
     } else {
         
@@ -113,6 +115,7 @@ export default async function DashboardServerPage() {
             initials={initials}
             department={department}
             team={team}
+            workerId={workerId}
             initialIsCheckedIn={!!activeSession}
             checkInTime={activeSession?.check_in_time || null}
             serverTime={new Date().toISOString()}
