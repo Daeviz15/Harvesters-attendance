@@ -4,11 +4,12 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { z } from 'zod'
+import { generateTeamWorkerId } from '@/lib/workerId'
 
 type ActionState = { error?: string } | null
 
 const onboardingSchema = z.object({
-  workerId: z.string().trim().regex(/^HRV-[A-Z0-9]{4,8}$/, 'Invalid Worker ID format.'),
+  workerId: z.string().trim().optional(),
   firstName: z.string().trim()
     .min(2, 'First name is required (at least 2 characters).')
     .max(50, 'First name cannot exceed 50 characters.')
@@ -104,6 +105,18 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
   }
 
   
+  // Check if user already has a assigned worker_id
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('worker_id')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  let finalWorkerId = existingProfile?.worker_id || workerId || ''
+  if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
+    finalWorkerId = await generateTeamWorkerId(supabase, department.team)
+  }
+
   const { error: dbError } = await supabase
     .from('profiles')
     .update({
@@ -114,7 +127,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
       team: department.team,
       phone: `+234${phone}`,
       avatar_url: avatarUrl || null,
-      worker_id: workerId,
+      worker_id: finalWorkerId,
       onboarding_complete: true,
       updated_at: new Date().toISOString()
     })

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
+import { generateTeamWorkerId } from "@/lib/workerId";
 
 async function requireAdmin() {
     const supabase = await createClient();
@@ -106,31 +107,6 @@ const registerWorkerSchema = z.object({
     checkInNote: z.string().trim().optional(),
 });
 
-async function generateUniqueWorkerId(supabaseClient: Awaited<ReturnType<typeof createClient>>): Promise<string> {
-    const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    const ID_LENGTH = 4;
-    const MAX_RETRIES = 5;
-
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-        let code = "";
-        for (let i = 0; i < ID_LENGTH; i++) {
-            code += CHARSET[Math.floor(Math.random() * CHARSET.length)];
-        }
-        const candidateId = `HRV-${code}`;
-
-        const { data: existing } = await supabaseClient
-            .from("profiles")
-            .select("id")
-            .eq("worker_id", candidateId)
-            .maybeSingle();
-
-        if (!existing) return candidateId;
-    }
-
-    // Fallback: use timestamp-based ID if all retries collide (extremely unlikely)
-    return `HRV-${Date.now().toString(36).toUpperCase().slice(-5)}`;
-}
-
 export async function createWorkerAccount(formData: FormData) {
     const { supabase, adminUser, error: authError } = await requireAdmin();
     if (authError || !adminUser) return { error: authError || "Unauthorized." };
@@ -164,8 +140,19 @@ export async function createWorkerAccount(formData: FormData) {
         checkInNote,
     } = parsed.data;
 
-    // Auto-generate unique Worker ID (HRV-XXXX)
-    const workerId = await generateUniqueWorkerId(supabase);
+    // Fetch team name from department if available
+    let teamName = "GENERAL";
+    if (departmentId) {
+        const { data: deptData } = await supabase
+            .from("departments")
+            .select("team")
+            .eq("id", departmentId)
+            .maybeSingle();
+        if (deptData?.team) teamName = deptData.team;
+    }
+
+    // Auto-generate sequential team Worker ID (GLOBE/{TEAM}/26/XXXX)
+    const workerId = await generateTeamWorkerId(supabase, teamName);
 
     // Fallback identity email generation for workers without smartphones or email addresses
     const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
@@ -189,6 +176,7 @@ export async function createWorkerAccount(formData: FormData) {
                 last_name: lastName,
                 phone: phone || null,
                 department: department || null,
+                team: teamName,
                 role: role,
             },
         });
@@ -210,6 +198,7 @@ export async function createWorkerAccount(formData: FormData) {
                 phone: phone || null,
                 department: department || null,
                 department_id: departmentId || null,
+                team: teamName,
                 role: role,
                 worker_id: workerId,
                 updated_at: new Date().toISOString(),
@@ -222,7 +211,6 @@ export async function createWorkerAccount(formData: FormData) {
 
         // 3. Optional Instant Check-In if an active session was passed
         if (checkInSessionId) {
-            // Verify session is active
             const { data: session } = await supabase
                 .from("attendance_sessions")
                 .select("id, status")
@@ -237,6 +225,7 @@ export async function createWorkerAccount(formData: FormData) {
                         user_id: userId,
                         session_id: session.id,
                         department: department || "General",
+                        team: teamName,
                         status: "active",
                         check_in_lat: 0.0,
                         check_in_lng: 0.0,
@@ -258,3 +247,73 @@ export async function createWorkerAccount(formData: FormData) {
     }
 }
 
+/**
+ * Admin action to edit worker profile including Worker ID modification
+ */
+export async function updateWorkerProfile(formData: FormData) {
+    const { supabase, error: authError } = await requireAdmin();
+    if (authError) return { error: authError };
+
+    const targetUserId = formData.get("targetUserId")?.toString();
+    const firstName = formData.get("firstName")?.toString()?.trim();
+    const lastName = formData.get("lastName")?.toString()?.trim();
+    const workerId = formData.get("workerId")?.toString()?.trim();
+    const departmentId = formData.get("departmentId")?.toString() || null;
+    const departmentName = formData.get("department")?.toString() || null;
+    const role = formData.get("role")?.toString() || "worker";
+
+    if (!targetUserId) return { error: "Target worker user ID is missing." };
+    if (!firstName || firstName.length < 2) return { error: "First Name must be at least 2 characters." };
+    if (!workerId || workerId.length < 3) return { error: "Worker ID cannot be empty." };
+
+    // Verify Worker ID uniqueness against other workers
+    const { data: existingWorker } = await supabase
+        .from("profiles")
+        .select("id")
+        .eq("worker_id", workerId)
+        .neq("id", targetUserId)
+        .maybeSingle();
+
+    if (existingWorker) {
+        return { error: `Worker ID "${workerId}" is already assigned to another worker.` };
+    }
+
+    // Fetch department's team if departmentId is provided
+    let teamName: string | undefined = undefined;
+    if (departmentId) {
+        const { data: dept } = await supabase
+            .from("departments")
+            .select("team")
+            .eq("id", departmentId)
+            .maybeSingle();
+        if (dept?.team) teamName = dept.team;
+    }
+
+    const updatePayload: Record<string, unknown> = {
+        first_name: firstName,
+        last_name: lastName || "",
+        worker_id: workerId,
+        role: role,
+        updated_at: new Date().toISOString(),
+    };
+
+    if (departmentId !== null) updatePayload.department_id = departmentId;
+    if (departmentName !== null) updatePayload.department = departmentName;
+    if (teamName) updatePayload.team = teamName;
+
+    const { error: updateError } = await supabase
+        .from("profiles")
+        .update(updatePayload)
+        .eq("id", targetUserId);
+
+    if (updateError) {
+        console.error("Error updating worker profile:", updateError);
+        return { error: updateError.message || "Failed to update worker profile." };
+    }
+
+    revalidatePath("/admin/workers");
+    revalidatePath("/admin/sessions");
+    revalidatePath("/dashboard");
+
+    return { success: true };
+}

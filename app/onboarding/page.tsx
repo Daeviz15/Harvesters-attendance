@@ -32,29 +32,7 @@ export default async function OnboardingPage() {
     }
 
     
-    let workerId = profile?.worker_id || '';
-    if (!workerId) {
-        const CHARSET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        for (let attempt = 0; attempt < 5; attempt++) {
-            let code = "";
-            for (let i = 0; i < 4; i++) {
-                code += CHARSET[Math.floor(Math.random() * CHARSET.length)];
-            }
-            const candidateId = `HRV-${code}`;
-            const { data: existing } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('worker_id', candidateId)
-                .maybeSingle();
-            if (!existing) {
-                workerId = candidateId;
-                break;
-            }
-        }
-        if (!workerId) {
-            workerId = `HRV-${Date.now().toString(36).toUpperCase().slice(-5)}`;
-        }
-    }
+    const workerId = profile?.worker_id || '';
 
     const { data: departments, error: departmentsError } = await supabase
         .from('departments')

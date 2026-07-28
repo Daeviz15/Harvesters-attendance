@@ -8,6 +8,7 @@ import { completeOnboarding } from "@/app/auth/actions";
 import { createClient } from "@/utils/supabase/client";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import ThemeToggle from "@/components/ThemeToggle";
+import { getTeamCode } from "@/lib/workerId";
 
 interface OnboardingClientProps {
     initialFirstName: string;
@@ -167,14 +168,24 @@ export default function OnboardingClient({
 
                         <div className="mt-3 flex items-center justify-between bg-white dark:bg-black/40 border border-neutral-300 dark:border-white/15 rounded-xl px-4 py-3 shadow-inner">
                             <span className="font-mono text-[18px] font-bold text-[#34A853] tracking-widest">
-                                {workerId}
+                                {workerId ? (
+                                    workerId
+                                ) : selectedTeam ? (
+                                    `GLOBE/${getTeamCode(selectedTeam)}/${new Date().getFullYear().toString().slice(-2)}/••••`
+                                ) : (
+                                    `GLOBE/---/${new Date().getFullYear().toString().slice(-2)}/••••`
+                                )}
                             </span>
                             <span className="text-[11px] uppercase font-semibold tracking-wider text-neutral-400 dark:text-white/40 bg-neutral-100 dark:bg-white/5 px-2.5 py-1 rounded-md">
-                                Read Only
+                                {workerId ? "Read Only" : selectedTeam ? "Format Preview" : "Pending Team"}
                             </span>
                         </div>
                         <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2.5 font-medium">
-                            This unique Worker ID is permanently assigned to your profile for attendance tracking.
+                            {workerId
+                                ? "This unique Worker ID is permanently assigned to your profile for attendance tracking."
+                                : selectedTeam
+                                    ? `Your Worker ID format is set to GLOBE/${getTeamCode(selectedTeam)}/${new Date().getFullYear().toString().slice(-2)}/XXXX. Sequential sequence assigned on setup.`
+                                    : "Select your Ministry Team below to generate your team-scoped Worker ID."}
                         </p>
                         <input type="hidden" name="workerId" value={workerId} />
                     </div>

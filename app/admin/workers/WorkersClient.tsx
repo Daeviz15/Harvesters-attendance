@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Plus, Check } from "lucide-react";
+import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Plus, Check, Edit3 } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount } from "./actions";
+import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount, updateWorkerProfile } from "./actions";
 
 interface Profile {
     id: string;
@@ -71,6 +71,54 @@ export default function WorkersClient({
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
     const [selectedDeptId, setSelectedDeptId] = useState<string>("");
+
+    // Edit Worker Modal state
+    const [editingWorker, setEditingWorker] = useState<Profile | null>(null);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editError, setEditError] = useState<string | null>(null);
+    const [editSuccess, setEditSuccess] = useState<string | null>(null);
+    const [editDeptId, setEditDeptId] = useState<string>("");
+
+    const handleOpenEditModal = (worker: Profile) => {
+        setEditingWorker(worker);
+        setEditDeptId(worker.department_id || "");
+        setEditError(null);
+        setEditSuccess(null);
+    };
+
+    const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        if (!editingWorker) return;
+
+        setIsEditing(true);
+        setEditError(null);
+        setEditSuccess(null);
+
+        const formData = new FormData(e.currentTarget);
+        formData.set("targetUserId", editingWorker.id);
+
+        if (editDeptId) {
+            const match = departments.find(d => d.id === editDeptId);
+            if (match) {
+                formData.set("department", match.name);
+                formData.set("departmentId", match.id);
+            }
+        }
+
+        const res = await updateWorkerProfile(formData);
+        setIsEditing(false);
+
+        if (res.error) {
+            setEditError(res.error);
+        } else {
+            setEditSuccess("Worker details & ID updated successfully!");
+            setTimeout(() => {
+                setEditingWorker(null);
+                setEditSuccess(null);
+                router.refresh();
+            }, 1200);
+        }
+    };
 
     const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -329,25 +377,34 @@ export default function WorkersClient({
                                                 })}
                                             </td>
                                             <td className="px-6 py-4 text-right">
-                                                {worker.head_department_id ? (
+                                                <div className="flex items-center justify-end gap-2">
                                                     <button
-                                                        onClick={() => handleRemoveHead(worker)}
-                                                        disabled={busyWorkerId === worker.id}
-                                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300"
+                                                        onClick={() => handleOpenEditModal(worker)}
+                                                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] dark:border-white/10 dark:bg-white/5 dark:text-white/70 transition-colors"
                                                     >
-                                                        {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
-                                                        Remove Head
+                                                        <Edit3 className="w-3.5 h-3.5" />
+                                                        Edit
                                                     </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => handleAssignHead(worker)}
-                                                        disabled={busyWorkerId === worker.id || !worker.department_id}
-                                                        className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/60"
-                                                    >
-                                                        {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
-                                                        Make Head
-                                                    </button>
-                                                )}
+                                                    {worker.head_department_id ? (
+                                                        <button
+                                                            onClick={() => handleRemoveHead(worker)}
+                                                            disabled={busyWorkerId === worker.id}
+                                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300 transition-colors"
+                                                        >
+                                                            {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                                                            Remove Head
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleAssignHead(worker)}
+                                                            disabled={busyWorkerId === worker.id || !worker.department_id}
+                                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/60 transition-colors"
+                                                        >
+                                                            {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                                                            Make Head
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
@@ -558,6 +615,161 @@ export default function WorkersClient({
                                             </>
                                         ) : (
                                             "Register Worker"
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* EDIT WORKER MODAL */}
+            <AnimatePresence>
+                {editingWorker && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => !isEditing && setEditingWorker(null)}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[90vh] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+                        >
+                            <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between shrink-0">
+                                <div>
+                                    <h2 className="text-base sm:text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                                        <Edit3 className="w-5 h-5 text-[#34A853] shrink-0" />
+                                        Edit Worker Profile & ID
+                                    </h2>
+                                    <p className="text-xs text-neutral-500 dark:text-neutral-400 mt-0.5">
+                                        Update worker details, assigned department, and Worker ID.
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={() => setEditingWorker(null)}
+                                    disabled={isEditing}
+                                    className="p-1.5 sm:p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors shrink-0"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleEditSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                                {editError && (
+                                    <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-xs text-red-600 dark:text-red-300 font-medium">
+                                        {editError}
+                                    </div>
+                                )}
+                                {editSuccess && (
+                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-xl text-xs text-emerald-600 dark:text-emerald-300 font-medium">
+                                        {editSuccess}
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            First Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="firstName"
+                                            required
+                                            defaultValue={editingWorker.first_name}
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Last Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            name="lastName"
+                                            defaultValue={editingWorker.last_name || ""}
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1 flex items-center justify-between">
+                                        <span>Assigned Worker ID <span className="text-red-500">*</span></span>
+                                        <span className="text-[11px] font-mono text-[#34A853]">Format: GLOBE/TEAM/YY/SEQ</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="workerId"
+                                        required
+                                        defaultValue={editingWorker.worker_id || ""}
+                                        placeholder="e.g. GLOBE/MIN/26/0001"
+                                        className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm font-mono text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 font-bold"
+                                    />
+                                    <p className="text-[11px] text-neutral-400 mt-1">
+                                        Admins can change or reformat a worker&apos;s unique ID here.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Department
+                                        </label>
+                                        <select
+                                            value={editDeptId}
+                                            onChange={(e) => setEditDeptId(e.target.value)}
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        >
+                                            <option value="">General / Unassigned</option>
+                                            {departments.map((dept) => (
+                                                <option key={dept.id} value={dept.id}>
+                                                    {dept.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Role
+                                        </label>
+                                        <select
+                                            name="role"
+                                            defaultValue={editingWorker.role}
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        >
+                                            <option value="worker">Worker</option>
+                                            <option value="admin">Admin</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">
+                                    <button
+                                        type="button"
+                                        onClick={() => setEditingWorker(null)}
+                                        disabled={isEditing}
+                                        className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-xl transition-colors border border-neutral-200 dark:border-white/10 sm:border-0"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isEditing}
+                                        className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-5 py-2.5 text-sm font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50"
+                                    >
+                                        {isEditing ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Saving Changes...
+                                            </>
+                                        ) : (
+                                            "Save Changes"
                                         )}
                                     </button>
                                 </div>
