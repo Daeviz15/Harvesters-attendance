@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { z } from 'zod'
 import { generateTeamWorkerId } from '@/lib/workerId'
+import { sendWelcomeEmail } from '@/lib/email'
 
 type ActionState = { error?: string } | null
 
@@ -150,6 +151,18 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   if (error) {
     return { error: error.message }
+  }
+
+  // Send personalized welcome email asynchronously (non-blocking)
+  if (user.email) {
+    sendWelcomeEmail({
+      toEmail: user.email,
+      firstName,
+      lastName: lastName || '',
+      workerId: finalWorkerId,
+      department: department.name,
+      team: department.team,
+    }).catch(err => console.error('[AuthAction] Welcome email error:', err));
   }
 
   revalidatePath('/', 'layout')
