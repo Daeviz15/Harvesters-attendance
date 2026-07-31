@@ -1,10 +1,10 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Phone, Users, CheckCircle2, Lock, User, ShieldCheck } from "lucide-react";
 import Image from "next/image";
-import { completeOnboarding } from "@/app/auth/actions";
+import { completeOnboarding, getUpcomingWorkerIdPreview } from "@/app/auth/actions";
 import { createClient } from "@/utils/supabase/client";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -55,6 +55,19 @@ export default function OnboardingClient({
         initialDept ? initialDept.teamNormalized : null
     );
     const [selectedDepartmentId, setSelectedDepartmentId] = useState(initialDepartmentId || "");
+    const [previewWorkerId, setPreviewWorkerId] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!selectedTeam) {
+            setPreviewWorkerId(null);
+            return;
+        }
+        let isMounted = true;
+        getUpcomingWorkerIdPreview(selectedTeam).then(id => {
+            if (isMounted && id) setPreviewWorkerId(id);
+        }).catch(err => console.error("Error fetching preview ID:", err));
+        return () => { isMounted = false; };
+    }, [selectedTeam]);
 
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
@@ -170,6 +183,8 @@ export default function OnboardingClient({
                             <span className="font-mono text-[18px] font-bold text-[#34A853] tracking-widest">
                                 {workerId ? (
                                     workerId
+                                ) : previewWorkerId ? (
+                                    previewWorkerId
                                 ) : selectedTeam ? (
                                     `GLOBE/${getTeamCode(selectedTeam)}/${new Date().getFullYear().toString().slice(-2)}/••••`
                                 ) : (
@@ -177,15 +192,17 @@ export default function OnboardingClient({
                                 )}
                             </span>
                             <span className="text-[11px] uppercase font-semibold tracking-wider text-neutral-400 dark:text-white/40 bg-neutral-100 dark:bg-white/5 px-2.5 py-1 rounded-md">
-                                {workerId ? "Read Only" : selectedTeam ? "Format Preview" : "Pending Team"}
+                                {workerId ? "Read Only" : previewWorkerId ? "Assigned Preview" : selectedTeam ? "Format Preview" : "Pending Team"}
                             </span>
                         </div>
                         <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2.5 font-medium">
                             {workerId
                                 ? "This unique Worker ID is permanently assigned to your profile for attendance tracking."
-                                : selectedTeam
-                                    ? `Your Worker ID format is set to GLOBE/${getTeamCode(selectedTeam)}/${new Date().getFullYear().toString().slice(-2)}/XXXX. Sequential sequence assigned on setup.`
-                                    : "Select your Ministry Team below to generate your team-scoped Worker ID."}
+                                : previewWorkerId
+                                    ? `Your assigned Worker ID will be ${previewWorkerId} upon completing setup.`
+                                    : selectedTeam
+                                        ? `Your Worker ID format is set to GLOBE/${getTeamCode(selectedTeam)}/${new Date().getFullYear().toString().slice(-2)}/XXXX.`
+                                        : "Select your Ministry Team below to generate your team-scoped Worker ID."}
                         </p>
                         <input type="hidden" name="workerId" value={workerId} />
                     </div>

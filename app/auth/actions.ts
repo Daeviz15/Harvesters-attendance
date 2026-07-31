@@ -178,3 +178,9 @@ export async function logout() {
   revalidatePath('/', 'layout')
   redirect('/auth/login')
 }
+
+export async function getUpcomingWorkerIdPreview(teamName: string) {
+  if (!teamName) return null;
+  const adminClient = createAdminClient();
+  return await generateTeamWorkerId(adminClient, teamName);
+}
