@@ -62,3 +62,6 @@ BEGIN
     RETURN v_new_worker_id;
 END;
 $$;
+
+-- Grant execution permissions
+GRANT EXECUTE ON FUNCTION generate_next_worker_id(text) TO authenticated, service_role, anon;

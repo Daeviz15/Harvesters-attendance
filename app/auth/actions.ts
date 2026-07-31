@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
+import { createAdminClient } from '@/utils/supabase/admin'
 import { z } from 'zod'
 import { generateTeamWorkerId } from '@/lib/workerId'
 import { sendWelcomeEmail } from '@/lib/email'
@@ -115,7 +116,8 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   let finalWorkerId = existingProfile?.worker_id || workerId || ''
   if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
-    finalWorkerId = await generateTeamWorkerId(supabase, department.team)
+    const adminSupabase = createAdminClient()
+    finalWorkerId = await generateTeamWorkerId(adminSupabase, department.team)
   }
 
   const { error: dbError } = await supabase

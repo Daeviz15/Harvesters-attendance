@@ -151,8 +151,10 @@ export async function createWorkerAccount(formData: FormData) {
         if (deptData?.team) teamName = deptData.team;
     }
 
+    const adminClient = createAdminClient();
+
     // Auto-generate sequential team Worker ID (GLOBE/{TEAM}/26/XXXX)
-    const workerId = await generateTeamWorkerId(supabase, teamName);
+    const workerId = await generateTeamWorkerId(adminClient, teamName);
 
     // Fallback identity email generation for workers without smartphones or email addresses
     const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
@@ -164,7 +166,6 @@ export async function createWorkerAccount(formData: FormData) {
     const randomPassword = `H@rvest_${Math.random().toString(36).slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
 
     try {
-        const adminClient = createAdminClient();
         
         // 1. Create Auth user via Supabase Service Role (does not log out current admin)
         const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
