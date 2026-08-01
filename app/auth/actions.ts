@@ -159,7 +159,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
       if (rpcError.code === "23505" && (rpcError.message?.includes('profiles_first_name_lower_unique') || rpcError.message?.includes('first_name'))) {
         return { error: 'This first name is already registered. Please include your last name or an initial.' }
       }
-      return { error: 'System is experiencing exceptionally high load. Please try submitting again.' }
+      return { error: rpcError.message || 'System is experiencing exceptionally high load. Please try submitting again.' }
     }
     
     finalWorkerId = generatedId
