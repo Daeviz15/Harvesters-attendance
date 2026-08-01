@@ -116,38 +116,53 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   let finalWorkerId = existingProfile?.worker_id || workerId || ''
   
-  if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
-    const adminSupabase = createAdminClient()
-    finalWorkerId = await generateTeamWorkerId(adminSupabase, department.team)
-  }
+  // If the user already has a valid ID, we just do a normal update
+  if (finalWorkerId && !finalWorkerId.startsWith('HRV-')) {
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .update({
+        first_name: firstName,
+        last_name: lastName || '',
+        department_id: department.id,
+        department: department.name,
+        team: department.team,
+        phone: `+234${phone}`,
+        avatar_url: avatarUrl || null,
+        onboarding_complete: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id)
 
-  const { error: dbError } = await supabase
-    .from('profiles')
-    .update({
-      first_name: firstName,
-      last_name: lastName || '',
-      department_id: department.id,
-      department: department.name,
-      team: department.team,
-      phone: `+234${phone}`,
-      avatar_url: avatarUrl || null,
-      worker_id: finalWorkerId,
-      onboarding_complete: true,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', user.id)
-
-  if (dbError) {
-    console.error("Profile update error:", dbError)
-    // 23505 = Unique constraint violation
-    if (dbError.code === "23505") {
-      // Tell the user if they hit the old first_name constraint (before running the hotfix SQL)
-      if (dbError.message?.includes('profiles_first_name_lower_unique') || dbError.message?.includes('first_name')) {
+    if (dbError) {
+      console.error("Profile update error:", dbError)
+      if (dbError.code === "23505" && (dbError.message?.includes('profiles_first_name_lower_unique') || dbError.message?.includes('first_name'))) {
         return { error: 'This first name is already registered. Please include your last name or an initial.' }
       }
-      return { error: 'A user with these details already exists. Please check your inputs.' }
+      return { error: 'Failed to save profile data.' }
     }
-    return { error: 'Failed to save profile data.' }
+  } else {
+    // We need to generate a new ID atomically
+    const adminSupabase = createAdminClient()
+    const { data: generatedId, error: rpcError } = await adminSupabase.rpc('register_worker_atomic', {
+      p_user_id: user.id,
+      p_team: department.team,
+      p_first_name: firstName,
+      p_last_name: lastName || '',
+      p_department_id: department.id,
+      p_department_name: department.name,
+      p_phone: phone,
+      p_avatar_url: avatarUrl || ''
+    })
+
+    if (rpcError) {
+      console.error("Atomic registration error:", rpcError)
+      if (rpcError.code === "23505" && (rpcError.message?.includes('profiles_first_name_lower_unique') || rpcError.message?.includes('first_name'))) {
+        return { error: 'This first name is already registered. Please include your last name or an initial.' }
+      }
+      return { error: 'System is experiencing exceptionally high load. Please try submitting again.' }
+    }
+    
+    finalWorkerId = generatedId
   }
 
   // Update user_metadata ONLY with the onboarding flag for Edge Middleware checks
