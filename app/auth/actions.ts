@@ -116,53 +116,38 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   let finalWorkerId = existingProfile?.worker_id || workerId || ''
   
-  let success = false;
-  let attempts = 0;
-  const maxAttempts = 5;
-
-  while (!success && attempts < maxAttempts) {
-    // If we need a new ID or regeneration due to collision
-    if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
-      const adminSupabase = createAdminClient()
-      finalWorkerId = await generateTeamWorkerId(adminSupabase, department.team)
-    }
-
-    const { error: dbError } = await supabase
-      .from('profiles')
-      .update({
-        first_name: firstName,
-        last_name: lastName || '',
-        department_id: department.id,
-        department: department.name,
-        team: department.team,
-        phone: `+234${phone}`,
-        avatar_url: avatarUrl || null,
-        worker_id: finalWorkerId,
-        onboarding_complete: true,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', user.id)
-
-    if (!dbError) {
-      success = true;
-      break;
-    }
-
-    // 23505 = Unique constraint violation (worker_id collision)
-    if (dbError.code === "23505") {
-      attempts++;
-      finalWorkerId = ''; // Reset to force a fresh generation on next loop
-      // Add exponential backoff jitter to prevent thundering herd
-      await new Promise(resolve => setTimeout(resolve, 100 * attempts + Math.random() * 50));
-      continue;
-    }
-
-    console.error("Profile update error:", dbError)
-    return { error: 'Failed to save profile data.' }
+  if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
+    const adminSupabase = createAdminClient()
+    finalWorkerId = await generateTeamWorkerId(adminSupabase, department.team)
   }
 
-  if (!success) {
-    return { error: 'System is experiencing exceptionally high load. Please try submitting again.' }
+  const { error: dbError } = await supabase
+    .from('profiles')
+    .update({
+      first_name: firstName,
+      last_name: lastName || '',
+      department_id: department.id,
+      department: department.name,
+      team: department.team,
+      phone: `+234${phone}`,
+      avatar_url: avatarUrl || null,
+      worker_id: finalWorkerId,
+      onboarding_complete: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', user.id)
+
+  if (dbError) {
+    console.error("Profile update error:", dbError)
+    // 23505 = Unique constraint violation
+    if (dbError.code === "23505") {
+      // Tell the user if they hit the old first_name constraint (before running the hotfix SQL)
+      if (dbError.message?.includes('profiles_first_name_lower_unique') || dbError.message?.includes('first_name')) {
+        return { error: 'This first name is already registered. Please include your last name or an initial.' }
+      }
+      return { error: 'A user with these details already exists. Please check your inputs.' }
+    }
+    return { error: 'Failed to save profile data.' }
   }
 
   // Update user_metadata ONLY with the onboarding flag for Edge Middleware checks
