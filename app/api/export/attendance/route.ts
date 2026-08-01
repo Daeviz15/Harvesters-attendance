@@ -1,16 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { requireAdminAuth } from "@/lib/rbac";
 
 function escapeCSVValue(value: any): string {
     if (value === null || value === undefined) return "";
     let str = String(value);
     
-    
     if (/^[=+\-@]/.test(str)) {
         str = "'" + str;
     }
 
-    
     if (str.includes(",") || str.includes("\"") || str.includes("\n") || str.includes("\r")) {
         str = `"${str.replace(/"/g, '""')}"`;
     }
@@ -18,7 +17,6 @@ function escapeCSVValue(value: any): string {
     return str;
 }
 
-// Calculate duration in a human readable format
 function calculateDuration(checkIn: string, checkOut: string | null): string {
     if (!checkOut) return "Ongoing";
     
@@ -35,28 +33,13 @@ function calculateDuration(checkIn: string, checkOut: string | null): string {
 
 export async function GET(req: NextRequest) {
     try {
+        // 1. Zero-Trust RBAC Verification
+        const { isSuperAdmin, managedDepartmentIds } = await requireAdminAuth();
         const supabase = await createClient();
 
-        // 1. Authenticate user
-        const { data: { user }, error: authError } = await supabase.auth.getUser();
-        if (authError || !user) {
-            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-        }
-
-        // 2. Verify Admin Role (Strict Server-Side Authorization Check)
-        const { data: profile } = await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', user.id)
-            .single();
-
-        if (!profile || profile.role !== 'admin') {
-            return NextResponse.json({ error: "Forbidden. Admin access required." }, { status: 403 });
-        }
-
-        // 3. Parse and Validate Query Parameters
+        // 2. Parse and Validate Query Parameters
         const searchParams = req.nextUrl.searchParams;
-        const type = searchParams.get('type'); // 'date', 'range', 'session', 'all'
+        const type = searchParams.get('type');
         const value = searchParams.get('value');
         const startDateParam = searchParams.get('startDate') || value;
         const endDateParam = searchParams.get('endDate') || value || startDateParam;
@@ -66,7 +49,21 @@ export async function GET(req: NextRequest) {
         const tzOffsetRaw = parseInt(searchParams.get('tzOffset') || '0', 10);
         const tzOffset = Number.isFinite(tzOffsetRaw) && Math.abs(tzOffsetRaw) <= 840 ? tzOffsetRaw : 0;
 
-        // 4. Calculate Date Range with Strict Format Validation & Timezone Alignment
+        // 3. Pre-fetch worker IDs for Department Heads to enforce zero-trust data isolation
+        let deptWorkerIds: string[] | null = null;
+        if (!isSuperAdmin) {
+            const { data: deptWorkers } = await supabase
+                .from('profiles')
+                .select('id')
+                .in('department_id', managedDepartmentIds);
+
+            deptWorkerIds = (deptWorkers || []).map((w) => w.id);
+            if (deptWorkerIds.length === 0) {
+                deptWorkerIds = ['00000000-0000-0000-0000-000000000000'];
+            }
+        }
+
+        // 4. Calculate Date Range
         let startTime = "";
         let endTime = "";
 
@@ -90,7 +87,6 @@ export async function GET(req: NextRequest) {
                 return NextResponse.json({ error: "Invalid date values provided." }, { status: 400 });
             }
 
-            // Adjust to UTC
             const startUtc = new Date(localStart.getTime() + tzOffset * 60000);
             startTime = startUtc.toISOString();
 
@@ -113,7 +109,7 @@ export async function GET(req: NextRequest) {
 
         let csvContent = headers.map(escapeCSVValue).join(",") + "\n";
 
-        // 6. Fetch Data in Batches to bypass Supabase's default 1000 row limit (Scalability)
+        // 6. Batch Fetching for High Performance & Scalability
         const PAGE_SIZE = 1000;
         let offset = 0;
         let hasMore = true;
@@ -135,6 +131,11 @@ export async function GET(req: NextRequest) {
                 `)
                 .order('check_in_time', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
+
+            // Zero-Trust Isolation: Department Heads only export logs for their department workers
+            if (!isSuperAdmin && deptWorkerIds) {
+                query = query.in('user_id', deptWorkerIds);
+            }
 
             if ((type === 'date' || type === 'range') && (startDateParam || endDateParam)) {
                 query = query
@@ -164,7 +165,6 @@ export async function GET(req: NextRequest) {
                 break;
             }
 
-            // Step B: Fetch profiles for this batch of logs
             const userIds = Array.from(new Set(logs.map(log => log.user_id)));
             const { data: profiles } = await supabase
                 .from('profiles')
@@ -178,7 +178,6 @@ export async function GET(req: NextRequest) {
                 }
             }
 
-            // Step C: Append rows to CSV string
             for (const log of logs) {
                 const prof = profilesMap[log.user_id];
                 const sess = Array.isArray(log.session) ? log.session[0] : log.session;
@@ -206,7 +205,6 @@ export async function GET(req: NextRequest) {
             }
         }
 
-        // 7. Return standard CSV Response
         const finalEnd = endDateParam || startDateParam;
         let filename = `attendance-all-${new Date().toISOString().split('T')[0]}.csv`;
         

@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { requireAdminAuth } from "@/lib/rbac";
 import WorkersClient from "./WorkersClient";
 
 export const metadata = {
@@ -8,6 +9,9 @@ export const metadata = {
 const WORKERS_PAGE_SIZE = 20;
 
 export default async function WorkersPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+    // Zero-Trust Server-Side RBAC Scope Retrieval
+    const { isSuperAdmin, managedDepartmentIds } = await requireAdminAuth();
+
     const searchParams = await props.searchParams;
     const parsedPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
     const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
@@ -16,13 +20,16 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
 
     const supabase = await createClient();
 
-    
     const sanitizedSearch = search.replace(/[,()]/g, ' ').trim();
 
-    
     let query = supabase
         .from('profiles')
         .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id', { count: 'exact' });
+
+    // Zero-Trust Scope Isolation: If Department Head, restrict to managed department(s)
+    if (!isSuperAdmin) {
+        query = query.in('department_id', managedDepartmentIds);
+    }
 
     if (sanitizedSearch) {
         query = query.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%,worker_id.ilike.%${sanitizedSearch}%`);
@@ -36,7 +43,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     const from = (page - 1) * WORKERS_PAGE_SIZE;
     const to = from + WORKERS_PAGE_SIZE - 1;
 
-    // Parallelize all independent DB queries to eliminate server waterfalls and maximize response speed
+    // Parallelize all independent DB queries to eliminate server waterfalls
     const [departmentsRes, workersRes, activeSessionsRes] = await Promise.all([
         supabase
             .from('departments')
@@ -55,18 +62,27 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
         console.error("Error fetching departments:", departmentsRes.error);
     }
 
-    const departmentOptions = departmentsRes.data || [];
-    const selectedDepartment = departmentOptions.some((dept) => dept.id === department) ? department : 'all';
+    let rawDepartments = departmentsRes.data || [];
+    // Filter department dropdown options for Department Heads
+    if (!isSuperAdmin) {
+        rawDepartments = rawDepartments.filter((d) => managedDepartmentIds.includes(d.id));
+    }
+
+    const selectedDepartment = rawDepartments.some((dept) => dept.id === department) ? department : 'all';
 
     let workers = workersRes.data;
     let count = workersRes.count;
     let error = workersRes.error;
 
-    // Robust production fallback: If worker_id column does not exist yet, fallback to standard selection
+    // Fallback for worker_id column if needed
     if (error && (error.code === '42703' || error.message?.toLowerCase().includes('worker_id'))) {
         let fallbackQuery = supabase
             .from('profiles')
             .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at', { count: 'exact' });
+
+        if (!isSuperAdmin) {
+            fallbackQuery = fallbackQuery.in('department_id', managedDepartmentIds);
+        }
 
         if (sanitizedSearch) {
             fallbackQuery = fallbackQuery.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%`);
@@ -89,7 +105,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     }
 
     const headByUserId = new Map(
-        departmentOptions
+        rawDepartments
             .filter((dept: any) => dept.head_user_id)
             .map((dept: any) => [dept.head_user_id as string, { id: dept.id, name: dept.name }])
     );
@@ -119,9 +135,10 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             totalCount={count || 0}
             initialSearch={search}
             selectedDepartment={selectedDepartment}
-            departments={departmentOptions}
+            departments={rawDepartments}
             pageSize={WORKERS_PAGE_SIZE}
             activeSessions={formattedActiveSessions}
+            isSuperAdmin={isSuperAdmin}
         />
     );
 }

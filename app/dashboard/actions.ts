@@ -40,9 +40,14 @@ export async function verifyAndCheckIn(formData: FormData) {
     const supabase = await createClient();
 
 
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        return { error: 'Authentication required. Please log in.' };
+    }
+
     const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_sessions')
-        .select('id, status, events(location_ids)')
+        .select('id, status, created_by, events(location_ids, department_id, created_by)')
         .eq('id', sessionId)
         .single();
 
@@ -51,6 +56,44 @@ export async function verifyAndCheckIn(formData: FormData) {
     }
 
     const eventObj: any = Array.isArray(sessionData.events) ? sessionData.events[0] : sessionData.events;
+    const eventDeptId = eventObj?.department_id as string | undefined;
+
+    // Fetch the user's profile once — used for department authorization AND check-in record
+    const { data: workerProfile } = await supabase
+        .from('profiles')
+        .select('department_id, department, team')
+        .eq('id', user.id)
+        .single();
+
+    // Defense-in-depth: If the session is department-scoped, verify worker's department membership
+    if (eventDeptId) {
+        let isAuthorized = false;
+
+        if (sessionData.created_by === user.id || eventObj?.created_by === user.id) {
+            isAuthorized = true;
+        } else if (workerProfile?.department_id && workerProfile.department_id === eventDeptId) {
+            isAuthorized = true;
+        } else if (workerProfile?.department) {
+            const { data: targetDept } = await supabase
+                .from('departments')
+                .select('name')
+                .eq('id', eventDeptId)
+                .maybeSingle();
+
+            if (targetDept?.name) {
+                const cleanUserDept = workerProfile.department.toLowerCase().trim();
+                const cleanTargetDept = targetDept.name.toLowerCase().trim();
+                if (cleanUserDept === cleanTargetDept) {
+                    isAuthorized = true;
+                }
+            }
+        }
+
+        if (!isAuthorized) {
+            return { error: 'Unauthorized: This live session is restricted to members of a different department.' };
+        }
+    }
+
     const eventLocationIds = eventObj?.location_ids as string[] | undefined;
     const allowedLocationIds: string[] = eventLocationIds || [];
 
@@ -88,22 +131,9 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: `Verification failed: You are approximately ${Math.round(closestDistance)} meters away from the nearest allowed event location.` };
     }
 
-    // 5. Verify User
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-        return { error: 'Unauthorized request.' };
-    }
-
-    // Fetch the true department from the profiles table (Production Database)
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('department, team')
-        .eq('id', user.id)
-        .single();
-
-    const department = profile?.department || user.user_metadata?.department || 'Unknown';
-    const team = profile?.team || user.user_metadata?.team || null;
+    // 5. Use the profile already fetched above for the check-in record
+    const department = workerProfile?.department || user.user_metadata?.department || 'Unknown';
+    const team = workerProfile?.team || user.user_metadata?.team || null;
 
     // 6. Check if the user is already checked in to THIS session
     const { data: activeSession } = await supabase

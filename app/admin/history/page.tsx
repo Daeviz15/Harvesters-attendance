@@ -1,9 +1,10 @@
 import { createClient } from "@/utils/supabase/server";
+import { requireAdminAuth } from "@/lib/rbac";
 import HistoryClient from "./HistoryClient";
 import { getAttendanceAnalytics } from "../sessions/actions";
 
 export const metadata = {
-    title: "Global Attendance History | Admin Portal",
+    title: "Attendance History | Admin Portal",
 };
 
 const HISTORY_PAGE_SIZE = 20;
@@ -16,6 +17,9 @@ type HistoryProfile = {
 };
 
 export default async function HistoryPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
+    // Zero-Trust Server-Side RBAC
+    const { isSuperAdmin, managedDepartmentIds } = await requireAdminAuth();
+
     const searchParams = await props.searchParams;
     const parsedPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
     const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
@@ -23,18 +27,37 @@ export default async function HistoryPage(props: { searchParams: Promise<{ [key:
 
     const supabase = await createClient();
 
+    // If Department Head, pre-fetch worker IDs belonging to their managed department(s)
+    let deptWorkerIds: string[] | null = null;
+    if (!isSuperAdmin) {
+        const { data: deptWorkers } = await supabase
+            .from('profiles')
+            .select('id')
+            .in('department_id', managedDepartmentIds);
+
+        deptWorkerIds = (deptWorkers || []).map((w) => w.id);
+    }
+
     let matchingUserIds: string[] | null = null;
     if (search) {
-        const { data: matchedProfiles } = await supabase
+        let profileSearchQuery = supabase
             .from('profiles')
             .select('id')
             .or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%`);
+
+        if (!isSuperAdmin && deptWorkerIds) {
+            profileSearchQuery = profileSearchQuery.in('id', deptWorkerIds);
+        }
+
+        const { data: matchedProfiles } = await profileSearchQuery;
 
         if (matchedProfiles && matchedProfiles.length > 0) {
             matchingUserIds = matchedProfiles.map(p => p.id);
         } else {
             matchingUserIds = [];
         }
+    } else if (!isSuperAdmin) {
+        matchingUserIds = deptWorkerIds;
     }
 
     let query = supabase

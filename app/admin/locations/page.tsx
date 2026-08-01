@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { requireSuperAdminAuth } from "@/lib/rbac";
 import LocationsClient from "./LocationsClient";
 
 export const metadata = {
@@ -6,6 +7,9 @@ export const metadata = {
 };
 
 export default async function LocationsPage() {
+    // Strict Super Admin Access Gatekeeper
+    await requireSuperAdminAuth();
+
     const supabase = await createClient();
 
     const { data: locations, error } = await supabase

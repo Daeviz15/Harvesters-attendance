@@ -221,6 +221,12 @@ export default function DashboardClient({
 
     const [isCheckedIn, setIsCheckedIn] = useState(initialIsCheckedIn);
     const [broadcastSession, setBroadcastSession] = useState<{ id: string, title: string } | null>(initialBroadcastSession);
+
+    // Sync broadcast session state when server revalidates or passes updated prop
+    useEffect(() => {
+        setBroadcastSession(initialBroadcastSession);
+    }, [initialBroadcastSession]);
+
     const [actionError, setActionError] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);

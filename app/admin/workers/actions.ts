@@ -5,33 +5,18 @@ import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { generateTeamWorkerId } from "@/lib/workerId";
-
-async function requireAdmin() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) return { supabase, adminUser: null, error: "Not authenticated." };
-
-    const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-    if (profile?.role !== "admin") {
-        return { supabase, adminUser: null, error: "Unauthorized." };
-    }
-
-    return { supabase, adminUser: user, error: null };
-}
+import { requireAdminAuth } from "@/lib/rbac";
 
 export async function assignDepartmentHead(workerId: string) {
-    const { supabase, error: authError } = await requireAdmin();
-    if (authError) return { error: authError };
+    const scope = await requireAdminAuth();
+    if (!scope.isSuperAdmin) {
+        return { error: "Forbidden: Only Super Admins can assign Department Heads." };
+    }
 
     const workerIdResult = z.string().uuid().safeParse(workerId);
     if (!workerIdResult.success) return { error: "Invalid worker selected." };
 
+    const supabase = await createClient();
     const { data: worker, error: workerError } = await supabase
         .from("profiles")
         .select("id, department_id, department")
@@ -73,12 +58,15 @@ export async function assignDepartmentHead(workerId: string) {
 }
 
 export async function removeDepartmentHead(departmentId: string) {
-    const { supabase, error: authError } = await requireAdmin();
-    if (authError) return { error: authError };
+    const scope = await requireAdminAuth();
+    if (!scope.isSuperAdmin) {
+        return { error: "Forbidden: Only Super Admins can remove Department Heads." };
+    }
 
     const departmentIdResult = z.string().uuid().safeParse(departmentId);
     if (!departmentIdResult.success) return { error: "Invalid department selected." };
 
+    const supabase = await createClient();
     const { error } = await supabase
         .from("departments")
         .update({ head_user_id: null })
@@ -108,8 +96,9 @@ const registerWorkerSchema = z.object({
 });
 
 export async function createWorkerAccount(formData: FormData) {
-    const { supabase, adminUser, error: authError } = await requireAdmin();
-    if (authError || !adminUser) return { error: authError || "Unauthorized." };
+    const scope = await requireAdminAuth();
+    const { isSuperAdmin, managedDepartmentIds, user: adminUser } = scope;
+    const supabase = await createClient();
 
     const rawData = {
         firstName: formData.get("firstName")?.toString() || "",
@@ -118,37 +107,39 @@ export async function createWorkerAccount(formData: FormData) {
         phone: formData.get("phone")?.toString() || "",
         department: formData.get("department")?.toString() || "",
         departmentId: formData.get("departmentId")?.toString() || undefined,
-        role: (formData.get("role")?.toString() as "worker" | "admin") || "worker",
+        role: formData.get("role")?.toString() || "worker",
         checkInSessionId: formData.get("checkInSessionId")?.toString() || undefined,
         checkInNote: formData.get("checkInNote")?.toString() || undefined,
     };
 
     const parsed = registerWorkerSchema.safeParse(rawData);
     if (!parsed.success) {
-        return { error: parsed.error.issues[0]?.message || "Invalid worker details." };
+        const firstError = parsed.error.issues[0]?.message || "Invalid input data.";
+        return { error: firstError };
     }
 
-    const {
-        firstName,
-        lastName,
-        email: userEmail,
-        phone,
-        department,
-        departmentId,
-        role,
-        checkInSessionId,
-        checkInNote,
-    } = parsed.data;
+    let { firstName, lastName, email: userEmail, phone, department, departmentId, role, checkInSessionId, checkInNote } = parsed.data;
 
-    // Fetch team name from department if available
-    let teamName = "GENERAL";
+    // Zero-Trust Rule: Department Heads can only create workers in their managed department and CANNOT elevate to Admin
+    if (!isSuperAdmin) {
+        if (departmentId && !managedDepartmentIds.includes(departmentId)) {
+            return { error: "Forbidden: You can only create workers in your assigned department." };
+        }
+        if (!departmentId && managedDepartmentIds.length > 0) {
+            departmentId = managedDepartmentIds[0];
+        }
+        role = "worker"; // Force worker role
+    }
+
+    let teamName = "General";
     if (departmentId) {
         const { data: deptData } = await supabase
             .from("departments")
-            .select("team")
+            .select("team, name")
             .eq("id", departmentId)
             .maybeSingle();
         if (deptData?.team) teamName = deptData.team;
+        if (deptData?.name) department = deptData.name;
     }
 
     const adminClient = createAdminClient();
@@ -156,18 +147,14 @@ export async function createWorkerAccount(formData: FormData) {
     // Auto-generate sequential team Worker ID (GLOBE/{TEAM}/26/XXXX)
     const workerId = await generateTeamWorkerId(adminClient, teamName);
 
-    // Fallback identity email generation for workers without smartphones or email addresses
     const cleanPhone = phone ? phone.replace(/\D/g, "") : "";
     const generatedEmail = userEmail && userEmail.length > 0
         ? userEmail
         : `worker.${cleanPhone || Date.now()}.${Math.floor(Math.random() * 1000)}@harvestersng.org`;
 
-    // Secure temporary password for admin-created accounts
     const randomPassword = `H@rvest_${Math.random().toString(36).slice(-8)}${Math.floor(Math.random() * 90 + 10)}`;
 
     try {
-        
-        // 1. Create Auth user via Supabase Service Role (does not log out current admin)
         const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
             email: generatedEmail,
             password: randomPassword,
@@ -189,7 +176,6 @@ export async function createWorkerAccount(formData: FormData) {
 
         const userId = newUser.user.id;
 
-        // 2. Upsert worker details in profiles table with auto-generated worker_id
         const { error: profileError } = await adminClient
             .from("profiles")
             .upsert({
@@ -210,7 +196,6 @@ export async function createWorkerAccount(formData: FormData) {
             return { error: `Failed to save profile: ${profileError.message || profileError.details || "Database error"}` };
         }
 
-        // 3. Optional Instant Check-In if an active session was passed
         if (checkInSessionId) {
             const { data: session } = await supabase
                 .from("attendance_sessions")
@@ -248,12 +233,10 @@ export async function createWorkerAccount(formData: FormData) {
     }
 }
 
-/**
- * Admin action to edit worker profile including Worker ID modification
- */
 export async function updateWorkerProfile(formData: FormData) {
-    const { supabase, error: authError } = await requireAdmin();
-    if (authError) return { error: authError };
+    const scope = await requireAdminAuth();
+    const { isSuperAdmin, managedDepartmentIds } = scope;
+    const supabase = await createClient();
 
     const targetUserId = formData.get("targetUserId")?.toString();
     const firstName = formData.get("firstName")?.toString()?.trim();
@@ -261,13 +244,33 @@ export async function updateWorkerProfile(formData: FormData) {
     const workerId = formData.get("workerId")?.toString()?.trim();
     const departmentId = formData.get("departmentId")?.toString() || null;
     const departmentName = formData.get("department")?.toString() || null;
-    const role = formData.get("role")?.toString() || "worker";
+    let role = formData.get("role")?.toString() || "worker";
 
     if (!targetUserId) return { error: "Target worker user ID is missing." };
     if (!firstName || firstName.length < 2) return { error: "First Name must be at least 2 characters." };
     if (!workerId || workerId.length < 3) return { error: "Worker ID cannot be empty." };
 
-    // Verify Worker ID uniqueness against other workers
+    // Fetch existing target profile to verify department boundaries
+    const { data: targetProfile, error: targetError } = await supabase
+        .from("profiles")
+        .select("id, department_id, role")
+        .eq("id", targetUserId)
+        .single();
+
+    if (targetError || !targetProfile) {
+        return { error: "Target worker profile not found." };
+    }
+
+    // Zero-Trust Boundary Checks for Department Heads
+    if (!isSuperAdmin) {
+        // Must belong to managed department
+        if (targetProfile.department_id && !managedDepartmentIds.includes(targetProfile.department_id)) {
+            return { error: "Forbidden: You can only edit workers in your assigned department." };
+        }
+        // Prevent role elevation
+        role = targetProfile.role; // Maintain original role
+    }
+
     const { data: existingWorker } = await supabase
         .from("profiles")
         .select("id")
@@ -279,7 +282,6 @@ export async function updateWorkerProfile(formData: FormData) {
         return { error: `Worker ID "${workerId}" is already assigned to another worker.` };
     }
 
-    // Fetch department's team if departmentId is provided
     let teamName: string | undefined = undefined;
     if (departmentId) {
         const { data: dept } = await supabase

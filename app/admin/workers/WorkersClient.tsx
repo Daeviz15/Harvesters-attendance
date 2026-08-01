@@ -43,6 +43,7 @@ interface WorkersClientProps {
     departments: DepartmentOption[];
     pageSize: number;
     activeSessions?: ActiveSessionOption[];
+    isSuperAdmin: boolean;
 }
 
 export default function WorkersClient({
@@ -55,6 +56,7 @@ export default function WorkersClient({
     departments,
     pageSize,
     activeSessions = [],
+    isSuperAdmin,
 }: WorkersClientProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -310,7 +312,7 @@ export default function WorkersClient({
                                 <th className="px-6 py-4">Department</th>
                                 <th className="px-6 py-4">Role</th>
                                 <th className="px-6 py-4">Registered On</th>
-                                <th className="px-6 py-4 text-right">Department Head</th>
+                                {isSuperAdmin && <th className="px-6 py-4 text-right">Department Head</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
@@ -385,24 +387,26 @@ export default function WorkersClient({
                                                         <Edit3 className="w-3.5 h-3.5" />
                                                         Edit
                                                     </button>
-                                                    {worker.head_department_id ? (
-                                                        <button
-                                                            onClick={() => handleRemoveHead(worker)}
-                                                            disabled={busyWorkerId === worker.id}
-                                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300 transition-colors"
-                                                        >
-                                                            {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
-                                                            Remove Head
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => handleAssignHead(worker)}
-                                                            disabled={busyWorkerId === worker.id || !worker.department_id}
-                                                            className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/60 transition-colors"
-                                                        >
-                                                            {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
-                                                            Make Head
-                                                        </button>
+                                                    {isSuperAdmin && (
+                                                        worker.head_department_id ? (
+                                                            <button
+                                                                onClick={() => handleRemoveHead(worker)}
+                                                                disabled={busyWorkerId === worker.id}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300 transition-colors"
+                                                            >
+                                                                {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                                                                Remove Head
+                                                            </button>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => handleAssignHead(worker)}
+                                                                disabled={busyWorkerId === worker.id || !worker.department_id}
+                                                                className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/60 transition-colors"
+                                                            >
+                                                                {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                                                                Make Head
+                                                            </button>
+                                                        )
                                                     )}
                                                 </div>
                                             </td>
@@ -734,19 +738,23 @@ export default function WorkersClient({
                                             ))}
                                         </select>
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                                            Role
-                                        </label>
-                                        <select
-                                            name="role"
-                                            defaultValue={editingWorker.role}
-                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
-                                        >
-                                            <option value="worker">Worker</option>
-                                            <option value="admin">Admin</option>
-                                        </select>
-                                    </div>
+                                    {isSuperAdmin ? (
+                                        <div>
+                                            <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                                Role
+                                            </label>
+                                            <select
+                                                name="role"
+                                                defaultValue={editingWorker.role}
+                                                className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                            >
+                                                <option value="worker">Worker</option>
+                                                <option value="admin">Admin</option>
+                                            </select>
+                                        </div>
+                                    ) : (
+                                        <input type="hidden" name="role" value={editingWorker.role} />
+                                    )}
                                 </div>
 
                                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">

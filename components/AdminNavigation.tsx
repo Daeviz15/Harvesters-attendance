@@ -3,50 +3,70 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2 } from "lucide-react";
+import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import ThemeToggle from "./ThemeToggle";
 
-const navLinks = [
-    { name: "Dashboard", href: "/admin", icon: LayoutDashboard },
-    { name: "Events", href: "/admin/events", icon: Calendar },
-    { name: "Live Session", href: "/admin/sessions", icon: Activity },
-    { name: "Workers", href: "/admin/workers", icon: Users },
-    { name: "Departments", href: "/admin/departments", icon: Building2 },
-    { name: "History", href: "/admin/history", icon: History },
-    { name: "Locations", href: "/admin/locations", icon: MapPin },
+const allNavLinks = [
+    { name: "Dashboard", href: "/admin", icon: LayoutDashboard, superAdminOnly: false },
+    { name: "Events", href: "/admin/events", icon: Calendar, superAdminOnly: false },
+    { name: "Live Session", href: "/admin/sessions", icon: Activity, superAdminOnly: false },
+    { name: "Workers", href: "/admin/workers", icon: Users, superAdminOnly: false },
+    { name: "Departments", href: "/admin/departments", icon: Building2, superAdminOnly: true },
+    { name: "History", href: "/admin/history", icon: History, superAdminOnly: false },
+    { name: "Locations", href: "/admin/locations", icon: MapPin, superAdminOnly: true },
 ];
+
+interface AdminNavigationProps {
+    initial: string;
+    isSuperAdmin?: boolean;
+    scopeSummary?: string;
+}
 
 function AdminSidebarContent({
     pathname,
     onSignOut,
+    isSuperAdmin = true,
+    scopeSummary = "Admin Portal",
 }: {
     pathname: string;
     onSignOut: () => void;
+    isSuperAdmin?: boolean;
+    scopeSummary?: string;
 }) {
+    const navLinks = allNavLinks.filter((link) => !link.superAdminOnly || isSuperAdmin);
+
     return (
         <>
-            {}
-            <div className="h-20 flex items-center gap-3 px-6 border-b border-neutral-200 dark:border-white/10 shrink-0">
-                <div className="relative h-8 w-8">
-                    <Image
-                        src="/logo.png"
-                        alt="Harvesters Logo"
-                        fill
-                        sizes="32px"
-                        className="object-contain dark:invert-0 invert"
-                    />
+            {/* Header Brand & Scope Badge */}
+            <div className="h-20 flex flex-col justify-center px-6 border-b border-neutral-200 dark:border-white/10 shrink-0">
+                <div className="flex items-center gap-3">
+                    <div className="relative h-7 w-7">
+                        <Image
+                            src="/logo.png"
+                            alt="Harvesters Logo"
+                            fill
+                            sizes="28px"
+                            className="object-contain dark:invert-0 invert"
+                        />
+                    </div>
+                    <span className="font-bold text-sm tracking-wide text-neutral-900 dark:text-white uppercase">
+                        Admin Portal
+                    </span>
                 </div>
-                <span className="font-bold text-sm tracking-wide text-neutral-900 dark:text-white uppercase">
-                    Admin Portal
-                </span>
+
+                {/* Scope Badge */}
+                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-semibold text-[#34A853] bg-[#34A853]/10 dark:bg-[#34A853]/20 px-2.5 py-0.5 rounded-full w-fit max-w-full truncate">
+                    <Shield className="w-3 h-3 shrink-0" />
+                    <span className="truncate">{scopeSummary}</span>
+                </div>
             </div>
 
-            {}
-            <nav className="flex-1 py-8 px-4 flex flex-col gap-2 overflow-y-auto">
+            {/* Navigation Links */}
+            <nav className="flex-1 py-6 px-4 flex flex-col gap-1.5 overflow-y-auto">
                 {navLinks.map((link) => {
                     const isActive = pathname === link.href;
                     const Icon = link.icon;
@@ -68,7 +88,7 @@ function AdminSidebarContent({
                                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
                                 />
                             )}
-                            <Icon className="w-5 h-5 relative z-10" />
+                            <Icon className="w-5 h-5 relative z-10 shrink-0" />
                             <span className="relative z-10">{link.name}</span>
                         </Link>
                     );
@@ -79,9 +99,9 @@ function AdminSidebarContent({
             <div className="p-4 border-t border-neutral-200 dark:border-white/10 shrink-0">
                 <button
                     onClick={onSignOut}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-medium"
+                    className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-medium text-sm"
                 >
-                    <LogOut className="w-5 h-5" />
+                    <LogOut className="w-5 h-5 shrink-0" />
                     Sign Out
                 </button>
             </div>
@@ -90,10 +110,10 @@ function AdminSidebarContent({
 }
 
 export default function AdminNavigation({
-    initial
-}: {
-    initial: string;
-}) {
+    initial,
+    isSuperAdmin = true,
+    scopeSummary = "Admin Portal",
+}: AdminNavigationProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const pathname = usePathname();
     const router = useRouter();
@@ -125,7 +145,12 @@ export default function AdminNavigation({
         <>
             {/* DESKTOP SIDEBAR */}
             <aside className="fixed inset-y-0 left-0 w-64 bg-background border-r border-neutral-200 dark:border-white/10 hidden md:flex flex-col z-50">
-                <AdminSidebarContent pathname={pathname} onSignOut={handleSignOut} />
+                <AdminSidebarContent 
+                    pathname={pathname} 
+                    onSignOut={handleSignOut} 
+                    isSuperAdmin={isSuperAdmin}
+                    scopeSummary={scopeSummary}
+                />
             </aside>
 
             {/* MOBILE HEADER */}
@@ -183,7 +208,12 @@ export default function AdminNavigation({
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <AdminSidebarContent pathname={pathname} onSignOut={handleSignOut} />
+                            <AdminSidebarContent 
+                                pathname={pathname} 
+                                onSignOut={handleSignOut} 
+                                isSuperAdmin={isSuperAdmin}
+                                scopeSummary={scopeSummary}
+                            />
                         </motion.aside>
                     </>
                 )}

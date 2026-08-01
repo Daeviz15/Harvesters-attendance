@@ -19,14 +19,12 @@ export default async function DashboardServerPage() {
         redirect('/auth/login');
     }
 
-    
     const { data: profile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single();
 
-    
     let username = "User";
     let initials = "U";
     let department = "Worker";
@@ -34,14 +32,12 @@ export default async function DashboardServerPage() {
     let workerId: string | null = null;
 
     if (profile) {
-        
         username = profile.first_name || "User";
         department = profile.department || "Worker";
         team = profile.team || null;
         workerId = profile.worker_id || null;
         initials = username.substring(0, 2).toUpperCase();
     } else {
-        
         if (user.user_metadata?.department) department = user.user_metadata.department;
         if (user.email) {
             username = user.email.split('@')[0];
@@ -49,7 +45,6 @@ export default async function DashboardServerPage() {
         }
     }
 
-    
     const { data: activeSession } = await supabase
         .from('attendance_logs')
         .select('id, check_in_time')
@@ -57,19 +52,65 @@ export default async function DashboardServerPage() {
         .eq('status', 'active')
         .maybeSingle();
 
-    
-    const { data: activeBroadcastSession } = await supabase
-        .from('attendance_sessions')
-        .select('id, event:events(title)')
-        .eq('status', 'active')
-        .maybeSingle();
+    // 1. Fetch all active departments to resolve user's department IDs (via profile, headship, or exact name match)
+    const { data: allDepartments } = await supabase
+        .from('departments')
+        .select('id, name, team, head_user_id');
 
-    const formattedBroadcast = activeBroadcastSession ? {
-        id: activeBroadcastSession.id,
-        title: getBroadcastTitle(activeBroadcastSession.event)
+    const userDeptIds = new Set<string>();
+
+    if (profile?.department_id) {
+        userDeptIds.add(profile.department_id);
+    }
+
+    let headDeptName: string | null = null;
+
+    (allDepartments || []).forEach((d) => {
+        // Department Head: always include departments they manage
+        if (d.head_user_id === user.id) {
+            userDeptIds.add(d.id);
+            if (!headDeptName && d.name) headDeptName = d.name;
+        }
+
+        // Exact name match: profile.department === department.name (case-insensitive)
+        if (profile?.department && d.name) {
+            const cleanUserDept = profile.department.toLowerCase().trim();
+            const cleanDeptName = d.name.toLowerCase().trim();
+            if (cleanUserDept === cleanDeptName) {
+                userDeptIds.add(d.id);
+            }
+        }
+    });
+
+    // 2. Fetch active broadcast sessions with event & creator scoping details
+    const { data: activeBroadcastSessions } = await supabase
+        .from('attendance_sessions')
+        .select('id, event_id, created_by, event:events(title, department_id, created_by)')
+        .eq('status', 'active')
+        .order('start_time', { ascending: false });
+
+    // 3. Robust Visibility Filtering:
+    // - Global event (no department_id)
+    // - Session or Event created by this user
+    // - Event department matches user's department/managed departments
+    const visibleSession = (activeBroadcastSessions || []).find((s: any) => {
+        const sessionCreatedBy = s.created_by;
+        const event = Array.isArray(s.event) ? s.event[0] : s.event;
+        const eventCreatedBy = event?.created_by;
+        const eventDeptId = event?.department_id;
+
+        if (!event) return true; // Fallback: show if event join is empty
+        if (!eventDeptId) return true; // Global event
+        if (sessionCreatedBy === user.id || eventCreatedBy === user.id) return true; // User is session/event creator
+        if (userDeptIds.has(eventDeptId)) return true; // User belongs to event's department
+        return false;
+    });
+
+    const formattedBroadcast = visibleSession ? {
+        id: visibleSession.id,
+        title: getBroadcastTitle(visibleSession.event)
     } : null;
 
-    
     const { data: historyData } = await supabase
         .from('attendance_logs')
         .select('id, check_in_time, check_out_time, status')
@@ -87,25 +128,11 @@ export default async function DashboardServerPage() {
             check_out_time: row.check_out_time,
             status: row.status,
         }));
-    
-    
-    
-    
-    
-    
-    
 
-    
     const { data: activeLocations } = await supabase
         .from('locations')
         .select('id, name, latitude, longitude, radius')
         .eq('is_active', true);
-
-    const { data: headedDepartment } = await supabase
-        .from('departments')
-        .select('name')
-        .eq('head_user_id', user.id)
-        .maybeSingle();
 
     return (
         <DashboardClient
@@ -124,7 +151,7 @@ export default async function DashboardServerPage() {
             avatarUrl={profile?.avatar_url || null}
             initialBroadcastSession={formattedBroadcast}
             activeLocations={activeLocations || []}
-            headDepartmentName={headedDepartment?.name || null}
+            headDepartmentName={headDeptName}
         />
     );
 }

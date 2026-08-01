@@ -22,6 +22,8 @@ type EventType = {
     timezone: string | null;
     recurrence_rule: string | null;
     location_ids: string[] | null;
+    department_id: string | null;
+    created_by: string | null;
     created_at: string;
 };
 
@@ -133,12 +135,24 @@ export type LocationBasic = {
     name: string;
 };
 
-export default function EventsClient({ initialEvents, activeLocations }: { initialEvents: EventType[], activeLocations: LocationBasic[] }) {
+type ManagedDepartment = {
+    id: string;
+    name: string;
+};
+
+export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, managedDepartments, activeEventIds = [] }: {
+    initialEvents: EventType[],
+    activeLocations: LocationBasic[],
+    isSuperAdmin: boolean,
+    managedDepartments: ManagedDepartment[],
+    activeEventIds?: string[],
+}) {
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<EventType | null>(null);
     const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("weekly");
     const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>("");
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -175,6 +189,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
         setEditingEvent(null);
         setScheduleFrequency("weekly");
         setSelectedLocations([]);
+        setSelectedDepartmentId(!isSuperAdmin && managedDepartments.length === 1 ? managedDepartments[0].id : "");
         setError(null);
         setIsModalOpen(true);
     };
@@ -183,6 +198,7 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
         setEditingEvent(event);
         setScheduleFrequency(getFrequency(event));
         setSelectedLocations(event.location_ids || []);
+        setSelectedDepartmentId(event.department_id || "");
         setError(null);
         setIsModalOpen(true);
     };
@@ -208,6 +224,10 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
         const formData = new FormData(e.currentTarget);
         // Append selected locations as JSON
         formData.append("location_ids", JSON.stringify(selectedLocations));
+        // Append selected department
+        if (selectedDepartmentId) {
+            formData.append("department_id", selectedDepartmentId);
+        }
 
         let result;
         if (editingEvent) {
@@ -285,63 +305,102 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {initialEvents.map((event) => (
-                        <div
-                            key={event.id}
-                            className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-6 shadow-sm flex flex-col group"
-                        >
-                            <div className="flex-1">
-                                <h3 className="font-semibold text-lg text-neutral-900 dark:text-white mb-2 line-clamp-1">
-                                    {event.title}
-                                </h3>
-                                <p className="text-sm text-neutral-500 dark:text-neutral-400 line-clamp-3">
-                                    {event.description || "No description provided."}
-                                </p>
-                                <div className="mt-5 space-y-3">
-                                    <div className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-                                        <Clock className="w-4 h-4 text-[#34A853]" />
-                                        <span>{formatScheduleDate(event.start_date)} · {formatTimeRange(event)}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
-                                        <Repeat className="w-4 h-4 text-[#34A853]" />
-                                        <span>{getScheduleSummary(event)}</span>
-                                    </div>
-                                    <div className="inline-flex items-center gap-1.5 rounded-full bg-[#34A853]/10 px-3 py-1 text-xs font-semibold text-[#34A853]">
-                                        <Timer className="w-3.5 h-3.5" />
-                                        {frequencyLabels[getFrequency(event)]}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="mt-6 pt-6 border-t border-neutral-100 dark:border-white/5 flex items-center justify-between">
-                                <span className="text-xs text-neutral-400">
-                                    Added {new Date(event.created_at).toLocaleDateString()}
-                                </span>
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button
-                                        onClick={() => openEditModal(event)}
-                                        className="p-2 text-neutral-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10 rounded-lg transition-colors"
-                                        title="Edit Event"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDelete(event)}
-                                        disabled={deletingId === event.id}
-                                        className="p-2 text-neutral-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-                                        title="Delete Event"
-                                        aria-label={`Delete ${event.title}`}
-                                    >
-                                        {deletingId === event.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                            <Trash2 className="w-4 h-4" />
+                    {initialEvents.map((event) => {
+                        const isLive = activeEventIds.includes(event.id);
+                        return (
+                            <div
+                                key={event.id}
+                                className={`bg-white dark:bg-neutral-900 border rounded-2xl p-6 shadow-sm flex flex-col group transition-all ${
+                                    isLive ? "border-red-500/30 dark:border-red-500/30" : "border-neutral-200 dark:border-white/10"
+                                }`}
+                            >
+                                <div className="flex-1">
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                        <h3 className="font-semibold text-lg text-neutral-900 dark:text-white line-clamp-1">
+                                            {event.title}
+                                        </h3>
+                                        {isLive && (
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-0.5 text-xs font-bold text-red-500 shrink-0 animate-pulse">
+                                                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                                                LIVE
+                                            </span>
                                         )}
-                                    </button>
+                                    </div>
+                                    <p className="text-sm text-neutral-500 dark:text-neutral-400 line-clamp-3">
+                                        {event.description || "No description provided."}
+                                    </p>
+                                    <div className="mt-5 space-y-3">
+                                        <div className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                                            <Clock className="w-4 h-4 text-[#34A853]" />
+                                            <span>{formatScheduleDate(event.start_date)} · {formatTimeRange(event)}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+                                            <Repeat className="w-4 h-4 text-[#34A853]" />
+                                            <span>{getScheduleSummary(event)}</span>
+                                        </div>
+                                        <div className="inline-flex items-center gap-1.5 rounded-full bg-[#34A853]/10 px-3 py-1 text-xs font-semibold text-[#34A853]">
+                                            <Timer className="w-3.5 h-3.5" />
+                                            {frequencyLabels[getFrequency(event)]}
+                                        </div>
+                                        {event.department_id && (
+                                            <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-500 dark:text-blue-400 ml-2">
+                                                {managedDepartments.find(d => d.id === event.department_id)?.name || "Dept Event"}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                <div className="mt-6 pt-6 border-t border-neutral-100 dark:border-white/5 flex items-center justify-between">
+                                    <span className="text-xs text-neutral-400">
+                                        Added {new Date(event.created_at).toLocaleDateString()}
+                                    </span>
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={() => {
+                                                if (isLive) {
+                                                    alert("Cannot edit this event while a live session is active. Extend time from the Live Session controller instead.");
+                                                    return;
+                                                }
+                                                openEditModal(event);
+                                            }}
+                                            disabled={isLive}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                isLive
+                                                    ? "text-neutral-300 dark:text-neutral-600 cursor-not-allowed"
+                                                    : "text-neutral-500 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-500/10"
+                                            }`}
+                                            title={isLive ? "Cannot edit event while a live session is active" : "Edit Event"}
+                                        >
+                                            <Edit2 className="w-4 h-4" />
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                if (isLive) {
+                                                    alert("Cannot delete this event while a live session is active. Please end the live session first.");
+                                                    return;
+                                                }
+                                                handleDelete(event);
+                                            }}
+                                            disabled={isLive || deletingId === event.id}
+                                            className={`p-2 rounded-lg transition-colors ${
+                                                isLive
+                                                    ? "text-neutral-300 dark:text-neutral-600 cursor-not-allowed"
+                                                    : "text-neutral-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 disabled:opacity-50"
+                                            }`}
+                                            title={isLive ? "Cannot delete event while a live session is active" : "Delete Event"}
+                                            aria-label={`Delete ${event.title}`}
+                                        >
+                                            {deletingId === event.id ? (
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                            ) : (
+                                                <Trash2 className="w-4 h-4" />
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 
@@ -417,6 +476,31 @@ export default function EventsClient({ initialEvents, activeLocations }: { initi
                                                 className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black border border-neutral-200 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 text-neutral-900 dark:text-white placeholder:text-neutral-400 resize-none"
                                             />
                                         </div>
+
+                                        {/* Department Selector */}
+                                        {managedDepartments.length > 0 && (
+                                            <div>
+                                                <label htmlFor="event_department" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">
+                                                    Department {!isSuperAdmin && <span className="text-red-500">*</span>}
+                                                    {isSuperAdmin && <span className="text-neutral-400 font-normal"> (Optional — leave blank for global event)</span>}
+                                                </label>
+                                                <select
+                                                    id="event_department"
+                                                    value={selectedDepartmentId}
+                                                    onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                                    required={!isSuperAdmin}
+                                                    className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black border border-neutral-200 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 text-neutral-900 dark:text-white"
+                                                >
+                                                    {isSuperAdmin && <option value="">Global Event (All Departments)</option>}
+                                                    {!isSuperAdmin && managedDepartments.length > 1 && <option value="" disabled>-- Select Department --</option>}
+                                                    {managedDepartments.map((dept) => (
+                                                        <option key={dept.id} value={dept.id}>
+                                                            {dept.name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
 
                                         <div className="rounded-2xl border border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-black/40 p-4">
                                             <div className="flex items-center gap-2 mb-4">

@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { requireSuperAdminAuth } from "@/lib/rbac";
 import DepartmentsClient from "./DepartmentsClient";
 
 export const metadata = {
@@ -17,6 +18,9 @@ export type DepartmentRow = {
 };
 
 export default async function DepartmentsPage() {
+    // Strict Super Admin Access Gatekeeper
+    await requireSuperAdminAuth();
+
     const supabase = await createClient();
 
     // Parallelize queries to eliminate waterfalls and speed up tab navigation

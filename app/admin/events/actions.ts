@@ -29,6 +29,7 @@ const eventFormSchema = z.object({
     recurrence_month: z.coerce.number().int().min(1).max(12).optional(),
     recurrence_month_day: z.coerce.number().int().min(1).max(31).optional(),
     location_ids: z.array(z.string().uuid()).min(1, "At least one location is required."),
+    department_id: z.string().uuid("Please select a valid department.").optional().nullable(),
 });
 type EventPayload = {
     title: string;
@@ -43,6 +44,7 @@ type EventPayload = {
     recurrence_month_day: number | null;
     recurrence_rule: string | null;
     location_ids: string[];
+    department_id: string | null;
 };
 type EventFormResult = { data: EventPayload; error?: never } | { error: string; data?: never };
 
@@ -97,6 +99,18 @@ function buildRecurrenceRule(
 }
 
 function parseEventFormData(formData: FormData): EventFormResult {
+    let parsedLocations: unknown = [];
+    const rawLocations = formData.get("location_ids");
+    if (rawLocations && typeof rawLocations === "string") {
+        try {
+            parsedLocations = JSON.parse(rawLocations);
+        } catch {
+            return { error: "Invalid location data payload provided." };
+        }
+    }
+
+    const rawDeptId = formData.get("department_id")?.toString() || null;
+
     const validatedFields = eventFormSchema.safeParse({
         title: formData.get("title"),
         description: formData.get("description")?.toString() || undefined,
@@ -108,7 +122,8 @@ function parseEventFormData(formData: FormData): EventFormResult {
         recurrence_day: formData.get("recurrence_day")?.toString() || undefined,
         recurrence_month: formData.get("recurrence_month")?.toString() || undefined,
         recurrence_month_day: formData.get("recurrence_month_day")?.toString() || undefined,
-        location_ids: formData.get("location_ids") ? JSON.parse(formData.get("location_ids") as string) : [],
+        location_ids: parsedLocations,
+        department_id: rawDeptId || undefined,
     });
 
     if (!validatedFields.success) {
@@ -129,6 +144,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         recurrence_month: recurrenceMonth,
         recurrence_month_day: recurrenceMonthDay,
         location_ids,
+        department_id,
     } = validatedFields.data;
 
     if (endTime <= startTime) {
@@ -172,40 +188,31 @@ function parseEventFormData(formData: FormData): EventFormResult {
                 recurrenceMonthDay || null,
             ),
             location_ids,
+            department_id: department_id || null,
         },
     };
 }
 
-// Industry standard: Verify admin role on EVERY server action securely
-async function verifyAdminServer() {
-    const supabase = await createClient();
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) throw new Error("Unauthorized");
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    if (!profile || profile.role !== 'admin') {
-        throw new Error("Forbidden: Admin access required");
-    }
-
-    return supabase;
-}
+import { requireAdminAuth } from "@/lib/rbac";
 
 export async function createEvent(formData: FormData) {
     try {
-        const supabase = await verifyAdminServer();
+        const scope = await requireAdminAuth();
+        const supabase = await createClient();
 
         const parsed = parseEventFormData(formData);
         if ("error" in parsed) return { error: parsed.error };
 
+        // Department Heads must assign their managed department
+        if (!scope.isSuperAdmin) {
+            if (!parsed.data.department_id || !scope.managedDepartmentIds.includes(parsed.data.department_id)) {
+                return { error: "You can only create events for your managed department." };
+            }
+        }
+
         const { error } = await supabase
             .from('events')
-            .insert([parsed.data]);
+            .insert([{ ...parsed.data, created_by: scope.user.id }]);
 
         if (error) {
             console.error("Create Event Error:", error);
@@ -222,13 +229,47 @@ export async function createEvent(formData: FormData) {
 
 export async function updateEvent(id: string, formData: FormData) {
     try {
-        const supabase = await verifyAdminServer();
+        const scope = await requireAdminAuth();
+        const supabase = await createClient();
 
         const eventId = eventIdSchema.safeParse(id);
         if (!eventId.success) return { error: "Invalid event selected." };
 
+        // Production Lock: Prevent editing events while a live session is active
+        const { data: activeSession } = await supabase
+            .from('attendance_sessions')
+            .select('id')
+            .eq('event_id', eventId.data)
+            .eq('status', 'active')
+            .maybeSingle();
+
+        if (activeSession) {
+            return { error: "Cannot edit this event while a live session is active. Extend time from the Live Session controller instead." };
+        }
+
         const parsed = parseEventFormData(formData);
         if ("error" in parsed) return { error: parsed.error };
+
+        // Department Head boundary: can only update events in their scope
+        if (!scope.isSuperAdmin) {
+            const { data: existing } = await supabase
+                .from('events')
+                .select('department_id, created_by')
+                .eq('id', eventId.data)
+                .maybeSingle();
+
+            if (!existing) return { error: "Event not found." };
+
+            const ownsEvent = existing.created_by === scope.user.id;
+            const managesDept = existing.department_id && scope.managedDepartmentIds.includes(existing.department_id);
+            if (!ownsEvent && !managesDept) {
+                return { error: "You do not have permission to update this event." };
+            }
+
+            if (parsed.data.department_id && !scope.managedDepartmentIds.includes(parsed.data.department_id)) {
+                return { error: "You can only assign events to your managed department." };
+            }
+        }
 
         const { data, error } = await supabase
             .from('events')
@@ -247,6 +288,7 @@ export async function updateEvent(id: string, formData: FormData) {
         }
 
         revalidatePath("/admin/events");
+        revalidatePath("/admin/sessions");
         revalidatePath("/admin");
         return { success: true };
     } catch (e: unknown) {
@@ -256,11 +298,41 @@ export async function updateEvent(id: string, formData: FormData) {
 
 export async function deleteEvent(id: string) {
     try {
-        const supabase = await verifyAdminServer();
+        const scope = await requireAdminAuth();
+        const supabase = await createClient();
 
         const eventId = eventIdSchema.safeParse(id);
         if (!eventId.success) return { error: "Invalid event selected." };
-        
+
+        // Production Lock: Prevent deleting events while a live session is active
+        const { data: activeSession } = await supabase
+            .from('attendance_sessions')
+            .select('id')
+            .eq('event_id', eventId.data)
+            .eq('status', 'active')
+            .maybeSingle();
+
+        if (activeSession) {
+            return { error: "Cannot delete this event while a live session is active. Please end the live session first." };
+        }
+
+        // Department Head boundary: can only delete events in their scope
+        if (!scope.isSuperAdmin) {
+            const { data: existing } = await supabase
+                .from('events')
+                .select('department_id, created_by')
+                .eq('id', eventId.data)
+                .maybeSingle();
+
+            if (!existing) return { error: "Event not found." };
+
+            const ownsEvent = existing.created_by === scope.user.id;
+            const managesDept = existing.department_id && scope.managedDepartmentIds.includes(existing.department_id);
+            if (!ownsEvent && !managesDept) {
+                return { error: "You do not have permission to delete this event." };
+            }
+        }
+
         const { data, error } = await supabase
             .from('events')
             .delete()

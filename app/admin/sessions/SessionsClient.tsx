@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { Activity, Calendar, Play, Square, Clock, Loader2, AlertTriangle, X, UserPlus, UserCheck, Search, User, Check } from "lucide-react";
-import { beginSession, endSession, searchWorkersForCheckIn, manualWorkerCheckIn } from "./actions";
+import { beginSession, endSession, extendSessionTime, searchWorkersForCheckIn, manualWorkerCheckIn } from "./actions";
 import { createClient } from "@/utils/supabase/client";
 
 type EventType = {
@@ -120,6 +120,38 @@ export default function SessionsClient({
     const [customReason, setCustomReason] = useState("");
     const [checkingInWorkerId, setCheckingInWorkerId] = useState<string | null>(null);
     const [checkInMessage, setCheckInMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    // Extend session time modal state
+    const [extendModalSession, setExtendModalSession] = useState<ActiveSessionType | null>(null);
+    const [selectedExtendMins, setSelectedExtendMins] = useState<number>(30);
+    const [customExtendMins, setCustomExtendMins] = useState<string>("");
+    const [isExtendingSession, setIsExtendingSession] = useState(false);
+    const [extendMessage, setExtendMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    const handleExtendSubmit = async () => {
+        if (!extendModalSession) return;
+        const mins = customExtendMins ? parseInt(customExtendMins, 10) : selectedExtendMins;
+        if (isNaN(mins) || mins <= 0 || mins > 1440) {
+            setExtendMessage({ type: 'error', text: 'Please enter a valid duration between 1 and 1440 minutes.' });
+            return;
+        }
+
+        setIsExtendingSession(true);
+        setExtendMessage(null);
+        const res = await extendSessionTime(extendModalSession.id, mins);
+        setIsExtendingSession(false);
+
+        if (res.error) {
+            setExtendMessage({ type: 'error', text: res.error });
+        } else {
+            setExtendMessage({ type: 'success', text: res.message || 'Session extended successfully!' });
+            refreshSessions();
+            setTimeout(() => {
+                setExtendModalSession(null);
+                setExtendMessage(null);
+            }, 1500);
+        }
+    };
 
     const handleSearchWorkers = useCallback(async (query: string, sessionId: string) => {
         setIsSearchingWorkers(true);
@@ -362,29 +394,41 @@ export default function SessionsClient({
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 relative z-10">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 relative z-10">
                                     <button
                                         onClick={() => {
                                             setCheckInModalSession(session);
                                             setSearchQuery("");
                                             setCheckInMessage(null);
                                         }}
-                                        className="flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-3 rounded-xl text-sm font-bold transition-all shadow-sm shadow-[#34A853]/20"
+                                        className="flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-3 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm shadow-[#34A853]/20"
                                     >
-                                        <UserPlus className="w-4 h-4" />
-                                        Sign In Worker
+                                        <UserPlus className="w-4 h-4 shrink-0" />
+                                        <span>Sign In Worker</span>
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            setExtendModalSession(session);
+                                            setSelectedExtendMins(30);
+                                            setCustomExtendMins("");
+                                            setExtendMessage(null);
+                                        }}
+                                        className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm shadow-blue-600/20"
+                                    >
+                                        <Clock className="w-4 h-4 shrink-0" />
+                                        <span>Extend Time</span>
                                     </button>
                                     <button
                                         onClick={() => handleEndSession(session.id)}
                                         disabled={isSubmitting === session.id}
-                                        className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-4 py-3 rounded-xl text-sm font-bold transition-all shadow-sm hover:shadow-[0_0_20px_rgba(239,68,68,0.3)] disabled:opacity-70"
+                                        className="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-3 py-3 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-sm hover:shadow-[0_0_20px_rgba(239,68,68,0.3)] disabled:opacity-70"
                                     >
                                         {isSubmitting === session.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            <Loader2 className="w-4 h-4 animate-spin shrink-0" />
                                         ) : (
-                                            <Square className="w-4 h-4 fill-current" />
+                                            <Square className="w-4 h-4 fill-current shrink-0" />
                                         )}
-                                        {isSubmitting === session.id ? "Ending..." : "End Session"}
+                                        <span>{isSubmitting === session.id ? "Ending..." : "End Session"}</span>
                                     </button>
                                 </div>
                             </motion.div>
@@ -671,6 +715,122 @@ export default function SessionsClient({
                                             ))}
                                         </div>
                                     )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+            {/* Extend Session Time Modal */}
+            <AnimatePresence>
+                {extendModalSession && (
+                    <>
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => !isExtendingSession && setExtendModalSession(null)}
+                            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 pointer-events-auto"
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-md bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden"
+                        >
+                            <div className="p-5 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                        <Clock className="w-4 h-4" />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-base font-bold text-neutral-900 dark:text-white">
+                                            Extend Live Session
+                                        </h2>
+                                        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                                            {extendModalSession.event.title}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setExtendModalSession(null)}
+                                    disabled={isExtendingSession}
+                                    className="p-1.5 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors disabled:opacity-50"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="p-6 space-y-5">
+                                {extendMessage && (
+                                    <div className={`p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2 ${
+                                        extendMessage.type === 'success' 
+                                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' 
+                                            : 'bg-red-50 dark:bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20'
+                                    }`}>
+                                        {extendMessage.type === 'success' ? <Check className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
+                                        <span>{extendMessage.text}</span>
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="block text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 mb-2">
+                                        Select Extension Duration
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[15, 30, 45, 60, 90, 120].map((mins) => (
+                                            <button
+                                                key={mins}
+                                                type="button"
+                                                onClick={() => {
+                                                    setSelectedExtendMins(mins);
+                                                    setCustomExtendMins("");
+                                                }}
+                                                className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all border ${
+                                                    selectedExtendMins === mins && !customExtendMins
+                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-600/30'
+                                                        : 'bg-neutral-50 dark:bg-white/5 text-neutral-700 dark:text-neutral-300 border-neutral-200 dark:border-white/10 hover:border-blue-500/50'
+                                                }`}
+                                            >
+                                                +{mins >= 60 ? `${mins / 60} hr` : `${mins} min`}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5">
+                                        Or enter custom minutes
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="1440"
+                                        placeholder="e.g. 20"
+                                        value={customExtendMins}
+                                        onChange={(e) => setCustomExtendMins(e.target.value)}
+                                        className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-50 dark:bg-white/5 border border-neutral-200 dark:border-white/10 text-sm text-neutral-900 dark:text-white focus:outline-none focus:border-blue-500"
+                                    />
+                                </div>
+
+                                <div className="pt-2 flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setExtendModalSession(null)}
+                                        disabled={isExtendingSession}
+                                        className="flex-1 py-2.5 border border-neutral-200 dark:border-white/10 text-neutral-700 dark:text-white/70 hover:bg-neutral-50 dark:hover:bg-white/5 rounded-xl font-medium text-sm transition-colors disabled:opacity-50"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleExtendSubmit}
+                                        disabled={isExtendingSession}
+                                        className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-sm shadow-blue-600/30 disabled:opacity-50"
+                                    >
+                                        {isExtendingSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Clock className="w-4 h-4" />}
+                                        <span>{isExtendingSession ? "Extending..." : "Confirm Extension"}</span>
+                                    </button>
                                 </div>
                             </div>
                         </motion.div>
