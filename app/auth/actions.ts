@@ -115,33 +115,54 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
     .maybeSingle()
 
   let finalWorkerId = existingProfile?.worker_id || workerId || ''
-  if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
-    const adminSupabase = createAdminClient()
-    finalWorkerId = await generateTeamWorkerId(adminSupabase, department.team)
+  
+  let success = false;
+  let attempts = 0;
+  const maxAttempts = 5;
+
+  while (!success && attempts < maxAttempts) {
+    // If we need a new ID or regeneration due to collision
+    if (!finalWorkerId || finalWorkerId.startsWith('HRV-')) {
+      const adminSupabase = createAdminClient()
+      finalWorkerId = await generateTeamWorkerId(adminSupabase, department.team)
+    }
+
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .update({
+        first_name: firstName,
+        last_name: lastName || '',
+        department_id: department.id,
+        department: department.name,
+        team: department.team,
+        phone: `+234${phone}`,
+        avatar_url: avatarUrl || null,
+        worker_id: finalWorkerId,
+        onboarding_complete: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id)
+
+    if (!dbError) {
+      success = true;
+      break;
+    }
+
+    // 23505 = Unique constraint violation (worker_id collision)
+    if (dbError.code === "23505") {
+      attempts++;
+      finalWorkerId = ''; // Reset to force a fresh generation on next loop
+      // Add exponential backoff jitter to prevent thundering herd
+      await new Promise(resolve => setTimeout(resolve, 100 * attempts + Math.random() * 50));
+      continue;
+    }
+
+    console.error("Profile update error:", dbError)
+    return { error: 'Failed to save profile data.' }
   }
 
-  const { error: dbError } = await supabase
-    .from('profiles')
-    .update({
-      first_name: firstName,
-      last_name: lastName || '',
-      department_id: department.id,
-      department: department.name,
-      team: department.team,
-      phone: `+234${phone}`,
-      avatar_url: avatarUrl || null,
-      worker_id: finalWorkerId,
-      onboarding_complete: true,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', user.id)
-
-  if (dbError) {
-    console.error("Profile update error:", dbError)
-    if (dbError.code === "23505") {
-      return { error: 'This Worker ID is already assigned. Please try again.' }
-    }
-    return { error: 'Failed to save profile data.' }
+  if (!success) {
+    return { error: 'System is experiencing exceptionally high load. Please try submitting again.' }
   }
 
   // Update user_metadata ONLY with the onboarding flag for Edge Middleware checks
