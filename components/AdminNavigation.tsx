@@ -16,7 +16,7 @@ const allNavLinks = [
     { name: "Live Session", href: "/admin/sessions", icon: Activity, superAdminOnly: false },
     { name: "Workers", href: "/admin/workers", icon: Users, superAdminOnly: false },
     { name: "Departments", href: "/admin/departments", icon: Building2, superAdminOnly: true },
-    { name: "History", href: "/admin/history", icon: History, superAdminOnly: false },
+    { name: "Reports", href: "/admin/reports", icon: History, superAdminOnly: false },
     { name: "Locations", href: "/admin/locations", icon: MapPin, superAdminOnly: true },
 ];
 
@@ -75,11 +75,10 @@ function AdminSidebarContent({
                         <Link
                             key={link.name}
                             href={link.href}
-                            className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${
-                                isActive 
-                                    ? "text-[#34A853] font-semibold" 
+                            className={`relative flex items-center gap-3 px-4 py-3 rounded-xl transition-colors ${isActive
+                                    ? "text-[#34A853] font-semibold"
                                     : "text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 dark:text-neutral-400 dark:hover:text-white"
-                            }`}
+                                }`}
                         >
                             {isActive && (
                                 <motion.div
@@ -145,9 +144,9 @@ export default function AdminNavigation({
         <>
             {/* DESKTOP SIDEBAR */}
             <aside className="fixed inset-y-0 left-0 w-64 bg-background border-r border-neutral-200 dark:border-white/10 hidden md:flex flex-col z-50">
-                <AdminSidebarContent 
-                    pathname={pathname} 
-                    onSignOut={handleSignOut} 
+                <AdminSidebarContent
+                    pathname={pathname}
+                    onSignOut={handleSignOut}
                     isSuperAdmin={isSuperAdmin}
                     scopeSummary={scopeSummary}
                 />
@@ -156,7 +155,7 @@ export default function AdminNavigation({
             {/* MOBILE HEADER */}
             <header className="md:hidden h-20 border-b border-neutral-200 dark:border-white/10 bg-white/50 dark:bg-background/50 backdrop-blur-xl sticky top-0 z-40 flex items-center justify-between px-6">
                 <div className="flex items-center gap-3">
-                    <button 
+                    <button
                         onClick={() => setIsMobileMenuOpen(true)}
                         className="p-2 -ml-2 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-lg transition-colors"
                     >
@@ -185,7 +184,7 @@ export default function AdminNavigation({
             <AnimatePresence>
                 {isMobileMenuOpen && (
                     <>
-                        <motion.div 
+                        <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
@@ -201,16 +200,16 @@ export default function AdminNavigation({
                             className="md:hidden fixed inset-y-0 left-0 w-[280px] bg-background border-r border-white/10 flex flex-col z-50 shadow-2xl"
                         >
                             <div className="absolute top-6 right-4 z-50">
-                                <button 
+                                <button
                                     onClick={() => setIsMobileMenuOpen(false)}
                                     className="p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-lg transition-colors"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>
                             </div>
-                            <AdminSidebarContent 
-                                pathname={pathname} 
-                                onSignOut={handleSignOut} 
+                            <AdminSidebarContent
+                                pathname={pathname}
+                                onSignOut={handleSignOut}
                                 isSuperAdmin={isSuperAdmin}
                                 scopeSummary={scopeSummary}
                             />

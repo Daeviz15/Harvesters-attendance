@@ -1,7 +1,17 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resendApiKey = process.env.RESEND_API_KEY;
-const resend = resendApiKey ? new Resend(resendApiKey) : null;
+// Create a reusable transporter — initialized once, reused across all email sends
+const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // STARTTLS on port 587 (industry standard)
+    auth: {
+        user: process.env.GOOGLE_EMAIL_ADDRESS,
+        pass: process.env.GOOGLE_APP_PASSWORD,
+    },
+});
+
+const SENDER_ADDRESS = '"Harvesters Globe Attendance" <admin@globeattendance.org>';
 
 export interface SendWelcomeEmailParams {
     toEmail: string;
@@ -20,9 +30,9 @@ export async function sendWelcomeEmail({
     department,
     team,
 }: SendWelcomeEmailParams) {
-    if (!resend) {
-        console.warn('[Email] RESEND_API_KEY is not configured in .env. Skipping welcome email.');
-        return { success: false, error: 'Resend API key missing' };
+    if (!process.env.GOOGLE_EMAIL_ADDRESS || !process.env.GOOGLE_APP_PASSWORD) {
+        console.warn('[Email] GOOGLE_EMAIL_ADDRESS or GOOGLE_APP_PASSWORD is not configured. Skipping welcome email.');
+        return { success: false, error: 'Gmail SMTP credentials missing' };
     }
 
     const fullName = `${firstName} ${lastName}`.trim();
@@ -43,7 +53,7 @@ export async function sendWelcomeEmail({
     <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #000000; padding: 40px 16px;">
         <tr>
             <td align="center">
-                <!-- Main Email Outer Container (Solid Dark, No Glows) -->
+                <!-- Main Email Outer Container -->
                 <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 560px; background-color: #0a0a0a; border-radius: 16px; border: 1px solid #1f1f1f; overflow: hidden;">
                     
                     <!-- Header Section with Official Harvesters Logo -->
@@ -69,7 +79,7 @@ export async function sendWelcomeEmail({
                                 Thank you for your commitment to serving with excellence. Below are your official worker credentials:
                             </p>
 
-                            <!-- Credentials Box (Solid Dark background, No Glows) -->
+                            <!-- Credentials Box -->
                             <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #141414; border-radius: 12px; border: 1px solid #262626; padding: 20px; margin-bottom: 28px;">
                                 <tr>
                                     <td>
@@ -98,11 +108,11 @@ export async function sendWelcomeEmail({
                                 </tr>
                             </table>
 
-                            <!-- CTA Button (Solid Green, No Shadows or Glows) -->
+                            <!-- CTA Button -->
                             <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 28px;">
                                 <tr>
                                     <td align="center">
-                                        <a href="${appDashboardUrl}" target="_blank" style="display: inline-block; width: 100%; max-width: 320px; background-color: #34A853; color: #ffffff; font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 700; text-align: center; text-decoration: none; padding: 14px 24px; border-radius: 8px; box-sizing: border-border-box;">
+                                        <a href="${appDashboardUrl}" target="_blank" style="display: inline-block; width: 100%; max-width: 320px; background-color: #34A853; color: #ffffff; font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 700; text-align: center; text-decoration: none; padding: 14px 24px; border-radius: 8px; box-sizing: border-box;">
                                             Go to Attendance Dashboard &rarr;
                                         </a>
                                     </td>
@@ -136,22 +146,18 @@ export async function sendWelcomeEmail({
     `;
 
     try {
-        const { data, error } = await resend.emails.send({
-            from: 'Harvesters Attendance <welcome@globeattendance.org>',
-            to: [toEmail],
+        const info = await transporter.sendMail({
+            from: SENDER_ADDRESS,
+            to: toEmail,
             subject: `Welcome to the Team, ${firstName}! | Harvesters Globe Attendance`,
             html: htmlContent,
         });
 
-        if (error) {
-            console.error('[Email] Failed to send welcome email via Resend:', error);
-            return { success: false, error: error.message };
-        }
-
-        console.log('[Email] Welcome email sent successfully:', data?.id);
-        return { success: true, emailId: data?.id };
-    } catch (err: any) {
-        console.error('[Email] Exception during email dispatch:', err);
-        return { success: false, error: err.message || 'Email dispatch failed' };
+        console.log('[Email] Welcome email sent successfully:', info.messageId);
+        return { success: true, emailId: info.messageId };
+    } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Email dispatch failed';
+        console.error('[Email] Exception during email dispatch:', message);
+        return { success: false, error: message };
     }
 }
