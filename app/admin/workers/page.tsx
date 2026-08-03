@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminAuth } from "@/lib/rbac";
 import WorkersClient from "./WorkersClient";
 
@@ -24,7 +25,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
 
     let query = supabase
         .from('profiles')
-        .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id', { count: 'exact' });
+        .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id, phone', { count: 'exact' });
 
     // Zero-Trust Scope Isolation: If Department Head, restrict to managed department(s)
     if (!isSuperAdmin) {
@@ -78,7 +79,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     if (error && (error.code === '42703' || error.message?.toLowerCase().includes('worker_id'))) {
         let fallbackQuery = supabase
             .from('profiles')
-            .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at', { count: 'exact' });
+            .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, phone', { count: 'exact' });
 
         if (!isSuperAdmin) {
             fallbackQuery = fallbackQuery.in('department_id', managedDepartmentIds);
@@ -110,11 +111,31 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             .map((dept: any) => [dept.head_user_id as string, { id: dept.id, name: dept.name }])
     );
 
+    // Batch-fetch emails from auth.admin for all worker IDs on the page
+    const workerIds = (workers || []).map((w) => w.id);
+    let emailMap = new Map<string, string>();
+    if (workerIds.length > 0) {
+        try {
+            const adminSupabase = createAdminClient();
+            const userResults = await Promise.all(
+                workerIds.map((id) => adminSupabase.auth.admin.getUserById(id))
+            );
+            for (const res of userResults) {
+                if (res.data?.user?.id && res.data.user.email) {
+                    emailMap.set(res.data.user.id, res.data.user.email);
+                }
+            }
+        } catch (e) {
+            console.error("Error fetching auth emails:", e);
+        }
+    }
+
     const formattedWorkers = (workers || []).map((worker) => {
         const headDepartment = headByUserId.get(worker.id);
 
         return {
             ...worker,
+            email: emailMap.get(worker.id) || null,
             head_department_id: headDepartment?.id || null,
             head_department_name: headDepartment?.name || null,
         };

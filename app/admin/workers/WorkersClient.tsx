@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Plus, Check, Edit3 } from "lucide-react";
+import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Plus, Check, Edit3, Mail, Phone } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount, updateWorkerProfile } from "./actions";
@@ -19,6 +19,8 @@ interface Profile {
     head_department_id: string | null;
     head_department_name: string | null;
     worker_id?: string | null;
+    email?: string | null;
+    phone?: string | null;
 }
 
 interface DepartmentOption {
@@ -353,6 +355,29 @@ export default function WorkersClient({
                                                                 Department Head
                                                             </div>
                                                         )}
+                                                        {/* Contact Info */}
+                                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1">
+                                                            {worker.email && (
+                                                                <a
+                                                                    href={`mailto:${worker.email}`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="inline-flex items-center gap-1 text-[11px] text-neutral-400 dark:text-white/35 hover:text-[#34A853] dark:hover:text-[#34A853] transition-colors"
+                                                                >
+                                                                    <Mail className="w-3 h-3 shrink-0" />
+                                                                    <span className="truncate max-w-[180px]">{worker.email}</span>
+                                                                </a>
+                                                            )}
+                                                            {worker.phone && (
+                                                                <a
+                                                                    href={`tel:${worker.phone}`}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="inline-flex items-center gap-1 text-[11px] text-neutral-400 dark:text-white/35 hover:text-[#34A853] dark:hover:text-[#34A853] transition-colors"
+                                                                >
+                                                                    <Phone className="w-3 h-3 shrink-0" />
+                                                                    <span>{worker.phone}</span>
+                                                                </a>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </td>
