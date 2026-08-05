@@ -12,4 +12,35 @@ export async function register() {
             "VipsForeignLoadVips",
         ],
     });
+
+    // Production-Grade Dev Cron Runner for Localhost Testing
+    // Automatically runs the outbox email processor every 60 seconds when running dev server
+    if (process.env.NODE_ENV === "development" || process.env.ENABLE_DEV_EMAIL_CRON === "true") {
+        console.info("[DevCron] Starting automatic background email ticker (every 60s)...");
+        
+        // Initial tick after 5 seconds to catch any immediately due jobs
+        setTimeout(async () => {
+            try {
+                const { processDueEmailNotifications } = await import("@/lib/email-notification-processor");
+                const summary = await processDueEmailNotifications();
+                if (summary.sent > 0 || summary.claimed > 0) {
+                    console.info("[DevCron] Automatic email processor run completed:", summary);
+                }
+            } catch (err) {
+                console.error("[DevCron] Ticker run error:", err instanceof Error ? err.message : err);
+            }
+        }, 5_000);
+
+        setInterval(async () => {
+            try {
+                const { processDueEmailNotifications } = await import("@/lib/email-notification-processor");
+                const summary = await processDueEmailNotifications();
+                if (summary.sent > 0 || summary.claimed > 0) {
+                    console.info("[DevCron] Automatic email processor run completed:", summary);
+                }
+            } catch (err) {
+                console.error("[DevCron] Ticker run error:", err instanceof Error ? err.message : err);
+            }
+        }, 60_000);
+    }
 }

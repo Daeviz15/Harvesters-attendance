@@ -59,3 +59,21 @@ export async function sendReminderTestEmail(
         };
     }
 }
+
+import { processDueEmailNotifications } from "@/lib/email-notification-processor";
+
+export async function triggerScheduledEmailProcessorAction() {
+    try {
+        await requireSuperAdminAuth();
+        const summary = await processDueEmailNotifications();
+        return {
+            success: true,
+            summary,
+            message: `Scheduler completed successfully! ${summary.sent} email(s) sent, ${summary.claimed} job(s) claimed.`,
+        };
+    } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Failed to run email scheduler.";
+        return { error: msg };
+    }
+}
+

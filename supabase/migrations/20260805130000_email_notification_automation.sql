@@ -261,6 +261,11 @@ BEGIN
         AND profile_row.email_notifications_enabled = TRUE
     JOIN auth.users auth_user ON auth_user.id = profile_row.id
     WHERE event_row.email_notifications_enabled = TRUE
+        AND (
+            event_row.email_target_worker_ids IS NULL
+            OR CARDINALITY(event_row.email_target_worker_ids) = 0
+            OR profile_row.id = ANY(event_row.email_target_worker_ids)
+        )
         AND occurrence.scheduled_start_at > scheduler_time
         AND occurrence.scheduled_start_at <= scheduler_time + reminder_lead
         AND auth_user.email IS NOT NULL
@@ -295,6 +300,11 @@ BEGIN
         AND profile_row.email_notifications_enabled = TRUE
     JOIN auth.users auth_user ON auth_user.id = profile_row.id
     WHERE event_row.email_notifications_enabled = TRUE
+        AND (
+            event_row.email_target_worker_ids IS NULL
+            OR CARDINALITY(event_row.email_target_worker_ids) = 0
+            OR profile_row.id = ANY(event_row.email_target_worker_ids)
+        )
         AND session_row.started_by_mode = 'auto'
         AND session_row.occurrence_key IS NOT NULL
         AND session_row.scheduled_start_at IS NOT NULL
@@ -352,6 +362,11 @@ BEGIN
         ON recipient.event_id = event_row.id
         AND recipient.occurrence_key = occurrence.occurrence_key
     WHERE event_row.email_notifications_enabled = TRUE
+        AND (
+            event_row.email_target_worker_ids IS NULL
+            OR CARDINALITY(event_row.email_target_worker_ids) = 0
+            OR recipient.user_id = ANY(event_row.email_target_worker_ids)
+        )
         AND occurrence.scheduled_start_at > scheduler_time
         AND occurrence.scheduled_start_at <= scheduler_time + reminder_lead
     ON CONFLICT (notification_type, occurrence_key, recipient_user_id) DO NOTHING;
@@ -424,6 +439,11 @@ BEGIN
         ON recipient.event_id = event_row.id
         AND recipient.occurrence_key = session_row.occurrence_key
     WHERE event_row.email_notifications_enabled = TRUE
+        AND (
+            event_row.email_target_worker_ids IS NULL
+            OR CARDINALITY(event_row.email_target_worker_ids) = 0
+            OR recipient.user_id = ANY(event_row.email_target_worker_ids)
+        )
         AND session_row.started_by_mode = 'auto'
         AND session_row.status = 'ended'
         AND session_row.occurrence_key IS NOT NULL

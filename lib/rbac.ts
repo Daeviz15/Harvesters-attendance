@@ -33,7 +33,11 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
 
-  if (error || !user) {
+  if (error) {
+    throw new Error(`Authentication check failed: ${error.message}`);
+  }
+
+  if (!user) {
     redirect("/auth/login");
   }
 

@@ -371,8 +371,17 @@ async function sendEmail(
             ? { "Resend-Idempotency-Key": notificationId }
             : undefined;
         const messageIdDomain = getMessageIdDomain();
+
+        // Real delivery to actual worker recipients
+        const finalTo = options.to;
+        const finalCc = options.cc;
+        const finalBcc = options.bcc;
+
         const info = await config.transporter.sendMail({
             ...options,
+            to: finalTo,
+            cc: finalCc,
+            bcc: finalBcc,
             from: config.from,
             replyTo: process.env.EMAIL_REPLY_TO
                 || process.env.GOOGLE_EMAIL_ADDRESS
@@ -507,14 +516,19 @@ export async function sendEventReminderEmail({
     const subjectEventTitle = sanitizeHeaderText(eventTitle, "Upcoming event");
 
     const html = renderEmailShell({
-        preheader: `${isTest ? "Test reminder: " : "Reminder: "}${eventTitle} starts in ${reminderLeadMinutes} minutes.`,
+        preheader: `Reminder: ${eventTitle} starts in ${reminderLeadMinutes} minutes. Please check in on arrival.`,
         eyebrow: isTest ? "Test Email — No Event Scheduled" : "Event Reminder",
         content: `
-            <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#ffffff;">Your event begins in <span style="color:#34A853;">${reminderLeadMinutes} minutes</span></h1>
-            <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#a1a1aa;">Hello ${safeFirstName}, this is a reminder that you are expected at the following event. Please remember to check in when you arrive.</p>
+            <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#ffffff;">Hello ${safeFirstName},</h1>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;">This <strong style="color:#ffffff;">${safeEventTitle}</strong> is not just another service, it is a prophetic moment. We are gathering as a church family for a powerful time of encounters.</p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;">As a member of the workforce, your service is a vital part of what God is doing. Your dedication makes these encounters possible.</p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;">Come with faith. Come with expectation. Come with gratitude already in your heart.</p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;"><strong style="color:#ffffff;">Please remember to check in on the attendance platform upon arrival.</strong> Your promptness and diligence in checking in helps us coordinate effectively.</p>
+            <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;">We look forward to receiving you as we step into a new wave of testimonies together. See you there.</p>
+            <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#a1a1aa;">Warm Regards,<br/><strong style="color:#ffffff;">Harvesters Workforce Communications</strong></p>
             <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#141414;border-radius:12px;border:1px solid #262626;padding:20px;margin-bottom:28px;">
                 <tr><td>
-                    <div style="font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Event</div>
+                    <div style="font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Event Details</div>
                     <div style="font-size:18px;font-weight:700;color:#ffffff;margin-bottom:16px;">${safeEventTitle}</div>
                     <div style="font-size:13px;line-height:1.6;color:#a1a1aa;"><strong style="color:#ffffff;">Starts:</strong> ${safeFormattedStart}</div>
                     ${safeLocationName ? `<div style="font-size:13px;line-height:1.6;color:#a1a1aa;margin-top:4px;"><strong style="color:#ffffff;">Location:</strong> ${safeLocationName}</div>` : ""}
@@ -529,7 +543,17 @@ export async function sendEventReminderEmail({
         `${isTest ? "TEST — " : ""}Event reminder`,
         "",
         `Hello ${firstName},`,
-        `${eventTitle} begins in ${reminderLeadMinutes} minutes. Please remember to check in when you arrive.`,
+        "",
+        `This ${eventTitle} is not just another service, it is a prophetic moment. We are gathering as a church family for a powerful time of encounters.`,
+        "As a member of the workforce, your service is a vital part of what God is doing. Your dedication makes these encounters possible.",
+        "",
+        "Please remember to check in on the attendance platform upon arrival. Your promptness and diligence in checking in helps us coordinate effectively.",
+        "",
+        "Warm Regards,",
+        "Harvesters Workforce Communications",
+        "",
+        `Event Details:`,
+        `${eventTitle}`,
         `Starts: ${formattedStart}`,
         locationName ? `Location: ${locationName}` : null,
         "",
@@ -630,3 +654,63 @@ export async function sendMissedAttendanceEmail({
         html,
     }, notificationId);
 }
+
+export interface SendCustomBroadcastEmailParams {
+    toEmail: string;
+    firstName: string;
+    subject: string;
+    bodyMarkdownOrText: string;
+    eventTitle?: string;
+    notificationId?: string;
+}
+
+export async function sendCustomBroadcastEmail({
+    toEmail,
+    firstName,
+    subject,
+    bodyMarkdownOrText,
+    eventTitle = "Harvesters Event",
+    notificationId,
+}: SendCustomBroadcastEmailParams): Promise<EmailSendResult> {
+    const safeFirstName = escapeHtml(firstName);
+    const safeEventTitle = escapeHtml(eventTitle);
+    const dashboardUrl = getPublicAssetUrl("/dashboard");
+    const sanitizedSubject = sanitizeHeaderText(subject, "Important Notice");
+
+    // Format newlines into HTML paragraphs and parse markdown bold **text**
+    const formattedParagraphs = escapeHtml(bodyMarkdownOrText)
+        .split("\n\n")
+        .map((p) => {
+            let htmlText = p.replace(/\n/g, "<br/>");
+            htmlText = htmlText.replace(/\*\*(.*?)\*\*/g, '<strong style="color:#ffffff;">$1</strong>');
+            return `<p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;">${htmlText}</p>`;
+        })
+        .join("");
+
+    const html = renderEmailShell({
+        preheader: bodyMarkdownOrText.slice(0, 120),
+        eyebrow: safeEventTitle,
+        content: `
+            <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#ffffff;">Hello ${safeFirstName},</h1>
+            ${formattedParagraphs}
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:24px;">
+                <tr><td align="center"><a href="${dashboardUrl}" target="_blank" style="display:inline-block;width:100%;max-width:320px;background-color:#34A853;color:#ffffff;font-size:15px;font-weight:700;text-align:center;text-decoration:none;padding:14px 24px;border-radius:8px;box-sizing:border-box;">Open Attendance Dashboard &rarr;</a></td></tr>
+            </table>`,
+    });
+
+    const text = [
+        `Hello ${firstName},`,
+        "",
+        bodyMarkdownOrText,
+        "",
+        `Open your attendance dashboard: ${dashboardUrl}`,
+    ].join("\n");
+
+    return sendEmail({
+        to: toEmail,
+        subject: `${sanitizedSubject} | Harvesters Globe Attendance`,
+        text,
+        html,
+    }, notificationId);
+}
+

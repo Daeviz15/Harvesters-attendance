@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff } from "lucide-react";
+import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff, Mail, Send, ShieldCheck } from "lucide-react";
 import { createEvent, updateEvent, deleteEvent } from "./actions";
+import WorkerPicker from "@/components/ui/WorkerPicker";
+import ManualBroadcastModal from "@/components/admin/ManualBroadcastModal";
 
 type ScheduleFrequency = "once" | "daily" | "weekly" | "monthly" | "yearly";
 
@@ -26,6 +28,7 @@ type EventType = {
     created_by: string | null;
     created_at: string;
     email_notifications_enabled: boolean;
+    email_target_worker_ids: string[] | null;
 };
 
 const defaultTimezone = "Africa/Lagos";
@@ -141,12 +144,13 @@ type ManagedDepartment = {
     name: string;
 };
 
-export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, managedDepartments, activeEventIds = [] }: {
+export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, managedDepartments, activeEventIds = [], workers = [] }: {
     initialEvents: EventType[],
     activeLocations: LocationBasic[],
     isSuperAdmin: boolean,
     managedDepartments: ManagedDepartment[],
     activeEventIds?: string[],
+    workers?: { id: string, first_name: string, last_name: string, worker_id: string, department: string }[],
 }) {
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -154,8 +158,18 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
     const [scheduleFrequency, setScheduleFrequency] = useState<ScheduleFrequency>("weekly");
     const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>("");
+    const [targetWorkerIds, setTargetWorkerIds] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Manual Broadcast Email Modal state
+    const [isBroadcastModalOpen, setIsBroadcastModalOpen] = useState(false);
+    const [broadcastEvent, setBroadcastEvent] = useState<EventType | null>(null);
+
+    const openBroadcastModal = (event?: EventType | null) => {
+        setBroadcastEvent(event || null);
+        setIsBroadcastModalOpen(true);
+    };
 
     // For deleting
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -190,6 +204,7 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         setEditingEvent(null);
         setScheduleFrequency("weekly");
         setSelectedLocations([]);
+        setTargetWorkerIds([]);
         setSelectedDepartmentId(!isSuperAdmin && managedDepartments.length === 1 ? managedDepartments[0].id : "");
         setError(null);
         setIsModalOpen(true);
@@ -199,6 +214,7 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         setEditingEvent(event);
         setScheduleFrequency(getFrequency(event));
         setSelectedLocations(event.location_ids || []);
+        setTargetWorkerIds(event.email_target_worker_ids || []);
         setSelectedDepartmentId(event.department_id || "");
         setError(null);
         setIsModalOpen(true);
@@ -225,6 +241,8 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         const formData = new FormData(e.currentTarget);
         // Append selected locations as JSON
         formData.append("location_ids", JSON.stringify(selectedLocations));
+        // Append selected target workers as JSON
+        formData.append("email_target_worker_ids", JSON.stringify(targetWorkerIds));
         // Append selected department
         if (selectedDepartmentId) {
             formData.append("department_id", selectedDepartmentId);
@@ -278,13 +296,22 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                         Manage scheduled events where attendance will be taken.
                     </p>
                 </div>
-                <button
-                    onClick={openCreateModal}
-                    className="flex items-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm"
-                >
-                    <Plus className="w-4 h-4" />
-                    Create Event
-                </button>
+                <div className="flex items-center gap-2.5">
+                    <button
+                        onClick={() => openBroadcastModal(null)}
+                        className="flex items-center gap-2 bg-neutral-100 hover:bg-neutral-200 dark:bg-white/10 dark:hover:bg-white/20 text-neutral-900 dark:text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors border border-neutral-200 dark:border-white/10"
+                    >
+                        <Mail className="w-4 h-4 text-[#34A853]" />
+                        Send Broadcast Email
+                    </button>
+                    <button
+                        onClick={openCreateModal}
+                        className="flex items-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors shadow-sm"
+                    >
+                        <Plus className="w-4 h-4" />
+                        Create Event
+                    </button>
+                </div>
             </div>
 
             {/* Events Grid */}
@@ -366,6 +393,13 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                         Added {new Date(event.created_at).toLocaleDateString()}
                                     </span>
                                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button
+                                            onClick={() => openBroadcastModal(event)}
+                                            className="p-2 rounded-lg text-neutral-500 hover:text-[#34A853] hover:bg-[#34A853]/10 transition-colors"
+                                            title="Send Manual Email for this Event"
+                                        >
+                                            <Mail className="w-4 h-4" />
+                                        </button>
                                         <button
                                             onClick={() => {
                                                 if (isLive) {
@@ -512,6 +546,7 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                                 </select>
                                             </div>
                                         )}
+
 
                                         <div className="rounded-2xl border border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-black/40 p-4">
                                             <div className="flex items-center gap-2 mb-4">
@@ -717,8 +752,23 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                                 <span className="block mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">
                                                     Sends a reminder before the event and follows up after it ends with workers who have no attendance record. Delivery timing is controlled by the secured scheduler.
                                                 </span>
+                                                <span className="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-md bg-[#34A853]/10 border border-[#34A853]/20 text-[11px] font-medium text-[#34A853]">
+                                                    <ShieldCheck className="w-3.5 h-3.5" />
+                                                    Test Protection: All emails strictly send to <strong>daeviz15felix@gmail.com</strong>
+                                                </span>
                                             </span>
                                         </label>
+
+                                        {/* Target Workers Selector */}
+                                        <div className="mt-4 pl-8 border-t border-neutral-200/50 dark:border-white/5 pt-4">
+                                            <WorkerPicker
+                                                workers={workers}
+                                                selectedWorkerIds={targetWorkerIds}
+                                                onChange={setTargetWorkerIds}
+                                                label="Target Specific Workers for Automatic Emails"
+                                                description="Leave blank to automatically deliver reminder and follow-up emails to all eligible workers."
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* Locations Selection (Mandatory) */}
@@ -877,6 +927,16 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                     </>
                 )}
             </AnimatePresence>
+            {/* Manual Broadcast Email Modal */}
+            <ManualBroadcastModal
+                isOpen={isBroadcastModalOpen}
+                onClose={() => {
+                    setIsBroadcastModalOpen(false);
+                    setBroadcastEvent(null);
+                }}
+                event={broadcastEvent}
+                workers={workers}
+            />
         </div>
     );
 }

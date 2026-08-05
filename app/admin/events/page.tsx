@@ -36,7 +36,7 @@ export default async function AdminEventsPage() {
         ? supabase.from('departments').select('id, name').eq('is_active', true).order('name', { ascending: true })
         : null;
 
-    const [eventsRes, locationsRes, departmentsRes, activeSessionsRes] = await Promise.all([
+    const [eventsRes, locationsRes, departmentsRes, activeSessionsRes, workersRes] = await Promise.all([
         eventsQuery,
         supabase
             .from('locations')
@@ -48,6 +48,10 @@ export default async function AdminEventsPage() {
             .from('attendance_sessions')
             .select('event_id')
             .eq('status', 'active'),
+        supabase
+            .from('profiles')
+            .select('id, first_name, last_name, worker_id, department')
+            .order('first_name', { ascending: true }),
     ]);
 
     if (eventsRes.error) {
@@ -56,10 +60,14 @@ export default async function AdminEventsPage() {
     if (locationsRes.error) {
         console.error("Failed to fetch locations:", locationsRes.error);
     }
+    if (workersRes.error) {
+        console.error("Failed to fetch workers:", workersRes.error);
+    }
 
     const events = eventsRes.data || [];
     const locations = locationsRes.data || [];
     const activeEventIds = (activeSessionsRes.data || []).map((s: { event_id: string }) => s.event_id);
+    const workers = (workersRes.data || []) as { id: string, first_name: string, last_name: string, worker_id: string, department: string }[];
 
     // Super Admins get all departments; Dept Heads get their managed departments
     const departmentsForSelector = scope.isSuperAdmin
@@ -73,6 +81,7 @@ export default async function AdminEventsPage() {
             isSuperAdmin={scope.isSuperAdmin}
             managedDepartments={departmentsForSelector}
             activeEventIds={activeEventIds}
+            workers={workers}
         />
     );
 }

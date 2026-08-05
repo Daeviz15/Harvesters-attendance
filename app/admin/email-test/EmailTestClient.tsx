@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState } from "react";
-import { CheckCircle2, Loader2, MailCheck, ShieldCheck, TriangleAlert } from "lucide-react";
+import { useActionState, useState } from "react";
+import { CheckCircle2, Loader2, MailCheck, ShieldCheck, TriangleAlert, Clock } from "lucide-react";
 import { sendReminderTestEmail, type EmailTestState } from "./actions";
 
 const initialState: EmailTestState = {
@@ -110,6 +110,96 @@ export default function EmailTestClient({ maskedRecipient }: { maskedRecipient: 
                     </div>
                 </div>
             </section>
+
+            {/* Scheduler Processor Section */}
+            <SchedulerRunnerSection />
         </div>
     );
 }
+
+function SchedulerRunnerSection() {
+    const [running, setRunning] = useState(false);
+    const [result, setResult] = useState<{
+        success?: boolean;
+        message?: string;
+        error?: string;
+        summary?: { claimed: number; sent: number; remindersQueued: number; followUpsQueued: number };
+    } | null>(null);
+
+    const handleRunScheduler = async () => {
+        setRunning(true);
+        setResult(null);
+
+        const { triggerScheduledEmailProcessorAction } = await import("./actions");
+        const res = await triggerScheduledEmailProcessorAction();
+
+        setRunning(false);
+        setResult(res);
+    };
+
+    return (
+        <section className="bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-6 sm:p-8 border-b border-neutral-100 dark:border-white/5">
+                <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center shrink-0">
+                        <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-semibold text-neutral-900 dark:text-white">
+                            Run Automatic Email Scheduler (Localhost / Testing)
+                        </h2>
+                        <p className="text-sm text-neutral-500 dark:text-white/50 mt-1 leading-6">
+                            On localhost, there is no automated background cron. Click this button to manually trigger the queue processor and send any due reminders (30 mins prior) or follow-ups (60 mins post-event).
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div className="p-6 sm:p-8 space-y-6">
+                <button
+                    type="button"
+                    onClick={handleRunScheduler}
+                    disabled={running}
+                    className="inline-flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-60 text-white px-5 py-3 rounded-xl text-sm font-semibold transition-colors shadow-sm"
+                >
+                    {running ? (
+                        <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Executing queue processor...
+                        </>
+                    ) : (
+                        <>
+                            <Clock className="w-4 h-4" />
+                            Run Email Scheduler Now
+                        </>
+                    )}
+                </button>
+
+                {result && (
+                    <div className={`rounded-xl border p-4 text-sm ${
+                        result.success
+                            ? "bg-green-50 dark:bg-green-500/10 border-green-200 dark:border-green-500/20 text-green-800 dark:text-green-200"
+                            : "bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/20 text-red-800 dark:text-red-200"
+                    }`}>
+                        {result.success ? (
+                            <div className="space-y-2">
+                                <p className="font-bold">{result.message}</p>
+                                {result.summary && (
+                                    <div className="text-xs font-mono bg-black/10 dark:bg-black/40 p-3 rounded-lg space-y-1">
+                                        <p>• Reminder Jobs Queued: {result.summary.remindersQueued}</p>
+                                        <p>• Follow-Up Jobs Queued: {result.summary.followUpsQueued}</p>
+                                        <p>• Jobs Claimed: {result.summary.claimed}</p>
+                                        <p>• Emails Sent: {result.summary.sent}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <p className="font-semibold">{result.error}</p>
+                        )}
+                    </div>
+                )}
+            </div>
+        </section>
+    );
+}
+

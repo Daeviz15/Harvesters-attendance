@@ -34,6 +34,7 @@ const eventFormSchema = z.object({
         (value) => value === "on" || value === "true",
         z.boolean(),
     ),
+    email_target_worker_ids: z.array(z.string().uuid()).nullable().optional(),
 });
 type EventPayload = {
     title: string;
@@ -50,6 +51,7 @@ type EventPayload = {
     location_ids: string[];
     department_id: string | null;
     email_notifications_enabled: boolean;
+    email_target_worker_ids: string[] | null;
 };
 type EventFormResult = { data: EventPayload; error?: never } | { error: string; data?: never };
 
@@ -114,6 +116,19 @@ function parseEventFormData(formData: FormData): EventFormResult {
         }
     }
 
+    let parsedTargetWorkers: unknown = null;
+    const rawTargetWorkers = formData.get("email_target_worker_ids");
+    if (rawTargetWorkers && typeof rawTargetWorkers === "string") {
+        try {
+            const parsed = JSON.parse(rawTargetWorkers);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                parsedTargetWorkers = parsed;
+            }
+        } catch {
+            return { error: "Invalid target workers data payload provided." };
+        }
+    }
+
     const rawDeptId = formData.get("department_id")?.toString() || null;
 
     const validatedFields = eventFormSchema.safeParse({
@@ -130,6 +145,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         location_ids: parsedLocations,
         department_id: rawDeptId || undefined,
         email_notifications_enabled: formData.get("email_notifications_enabled"),
+        email_target_worker_ids: parsedTargetWorkers,
     });
 
     if (!validatedFields.success) {
@@ -152,6 +168,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         location_ids,
         department_id,
         email_notifications_enabled,
+        email_target_worker_ids,
     } = validatedFields.data;
 
     if (endTime <= startTime) {
@@ -197,6 +214,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
             location_ids,
             department_id: department_id || null,
             email_notifications_enabled,
+            email_target_worker_ids: email_target_worker_ids || null,
         },
     };
 }
@@ -364,3 +382,126 @@ export async function deleteEvent(id: string) {
         return { error: getErrorMessage(e) };
     }
 }
+
+import { sendCustomBroadcastEmail } from "@/lib/email";
+
+export async function sendManualBroadcastEmail(payload: {
+    eventTitle?: string;
+    targetWorkerIds?: string[];
+    subject: string;
+    messageBody: string;
+}) {
+    try {
+        const scope = await requireAdminAuth();
+        const supabase = await createClient();
+
+        if (!payload.subject?.trim()) {
+            return { error: "Email subject is required." };
+        }
+        if (!payload.messageBody?.trim()) {
+            return { error: "Email message body is required." };
+        }
+
+        // Fetch recipients based on targeting
+        let profilesQuery = supabase
+            .from("profiles")
+            .select("id, first_name, last_name, department_id")
+            .eq("role", "worker");
+
+        if (!scope.isSuperAdmin) {
+            profilesQuery = profilesQuery.in("department_id", scope.managedDepartmentIds);
+        }
+
+        if (payload.targetWorkerIds && payload.targetWorkerIds.length > 0) {
+            profilesQuery = profilesQuery.in("id", payload.targetWorkerIds);
+        }
+
+        const { data: workerProfiles, error: profilesError } = await profilesQuery;
+
+        if (profilesError || !workerProfiles || workerProfiles.length === 0) {
+            return { error: "No eligible workers found for this email broadcast." };
+        }
+
+        // Fetch emails from auth.users (or profiles if stored there)
+        const workerUserIds = workerProfiles.map((p) => p.id);
+        const { createAdminClient } = await import("@/utils/supabase/admin");
+        const adminSupabase = createAdminClient();
+
+        // Fetch auth emails in a single request
+        const { data: usersData, error: usersError } = await adminSupabase.auth.admin.listUsers({ perPage: 1000 });
+        if (usersError) {
+            console.error("[sendManualBroadcastEmail] Failed to fetch auth users:", usersError);
+            return { error: `Failed to fetch recipient email details: ${usersError.message}` };
+        }
+
+        const emailMap = new Map<string, string>();
+        usersData?.users?.forEach((u) => {
+            if (u.id && u.email) {
+                emailMap.set(u.id, u.email);
+            }
+        });
+
+        // Filter valid workers with real email addresses (excluding system-generated placeholders)
+        const validRecipients = workerProfiles.filter((w) => {
+            const email = emailMap.get(w.id)?.toLowerCase().trim();
+            if (!email) return false;
+            if (email.startsWith("worker.") && email.endsWith("@harvestersng.org")) return false;
+            return true;
+        });
+
+        if (validRecipients.length === 0) {
+            return { error: "No confirmed email addresses found for the selected worker profiles." };
+        }
+
+        let sentCount = 0;
+        let failCount = 0;
+
+        // Process email dispatch in small chunks of 3 to respect Gmail SMTP connection limits and avoid socket timeouts
+        const CHUNK_SIZE = 3;
+        for (let i = 0; i < validRecipients.length; i += CHUNK_SIZE) {
+            const chunk = validRecipients.slice(i, i + CHUNK_SIZE);
+            const results = await Promise.all(
+                chunk.map(async (worker) => {
+                    const recipientEmail = emailMap.get(worker.id)!;
+                    const personalizedBody = payload.messageBody
+                        .replace(/\{\{first_name\}\}/gi, worker.first_name || "Worker")
+                        .replace(/\{\{last_name\}\}/gi, worker.last_name || "")
+                        .replace(/\{\{event_title\}\}/gi, payload.eventTitle || "Harvesters Event");
+
+                    return sendCustomBroadcastEmail({
+                        toEmail: recipientEmail,
+                        firstName: worker.first_name || "Worker",
+                        subject: payload.subject,
+                        bodyMarkdownOrText: personalizedBody,
+                        eventTitle: payload.eventTitle || "Harvesters Event",
+                    });
+                })
+            );
+
+            results.forEach((res) => {
+                if (res.success) {
+                    sentCount++;
+                } else {
+                    failCount++;
+                }
+            });
+        }
+
+        if (sentCount === 0) {
+            return { error: `Failed to send email broadcast. ${failCount > 0 ? `${failCount} delivery attempt(s) failed.` : "No valid email recipients were reached."}` };
+        }
+
+        return {
+            success: true,
+            sentCount,
+            failCount,
+            message: `Successfully sent broadcast to ${sentCount} worker${sentCount === 1 ? "" : "s"}${failCount > 0 ? ` (${failCount} failed)` : ""}.`,
+        };
+    } catch (e: unknown) {
+        if (typeof e === 'object' && e !== null && 'digest' in e && typeof (e as any).digest === 'string' && (e as any).digest.startsWith('NEXT_REDIRECT')) {
+            throw e;
+        }
+        return { error: getErrorMessage(e) };
+    }
+}
+

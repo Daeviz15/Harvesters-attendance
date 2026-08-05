@@ -56,13 +56,13 @@ function getProcessorConfig() {
     return {
         reminderLeadMinutes: parseBoundedInteger(
             process.env.EMAIL_REMINDER_LEAD_MINUTES,
-            30,
+            5,
             1,
             1440,
         ),
         followupDelayMinutes: parseBoundedInteger(
             process.env.EMAIL_FOLLOWUP_DELAY_MINUTES,
-            60,
+            5,
             1,
             1440,
         ),
