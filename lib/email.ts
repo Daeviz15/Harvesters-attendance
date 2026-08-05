@@ -61,6 +61,22 @@ function normalizeGoogleAppPassword(value: string | undefined) {
     return value?.replace(/\s+/g, "");
 }
 
+function getAuthorizedGmailFromAddresses(authenticatedUser: string) {
+    const configuredAliases = (process.env.EMAIL_GMAIL_AUTHORIZED_FROM_ADDRESSES || "")
+        .split(",")
+        .map((address) => address.trim().toLowerCase())
+        .filter(Boolean);
+    const addresses = new Set([authenticatedUser.trim().toLowerCase(), ...configuredAliases]);
+
+    for (const address of addresses) {
+        if (!EMAIL_PATTERN.test(address)) {
+            throw new Error("EMAIL_GMAIL_AUTHORIZED_FROM_ADDRESSES contains an invalid email address.");
+        }
+    }
+
+    return addresses;
+}
+
 function getEmailConfig(): EmailConfig {
     if (emailConfig) return emailConfig;
 
@@ -146,9 +162,12 @@ function getEmailConfig(): EmailConfig {
         : { user, pass: password! };
     const fromAddress = process.env.EMAIL_FROM_ADDRESS?.trim() || user;
 
-    if (provider === "gmail" && fromAddress.toLowerCase() !== user.toLowerCase()) {
+    if (
+        provider === "gmail"
+        && !getAuthorizedGmailFromAddresses(user).has(fromAddress.toLowerCase())
+    ) {
         throw new Error(
-            "Gmail rewrites the From address; EMAIL_FROM_ADDRESS must match the authenticated account.",
+            "EMAIL_FROM_ADDRESS must match the Gmail account or an explicitly authorized Gmail Send As alias.",
         );
     }
 

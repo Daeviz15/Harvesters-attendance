@@ -16,8 +16,9 @@ GOOGLE_EMAIL_ADDRESS=<the Gmail address>
 GOOGLE_APP_PASSWORD=<16-character App Password with spaces removed>
 EMAIL_ALLOW_PERSONAL_GMAIL_AUTOMATION=true
 EMAIL_FROM_NAME=Harvesters Globe Attendance
-EMAIL_FROM_ADDRESS=<the same Gmail address>
-EMAIL_REPLY_TO=<the same monitored Gmail address>
+EMAIL_FROM_ADDRESS=admin@globeattendance.org
+EMAIL_REPLY_TO=admin@globeattendance.org
+EMAIL_GMAIL_AUTHORIZED_FROM_ADDRESSES=admin@globeattendance.org
 SMTP_MAX_CONNECTIONS=1
 SMTP_RATE_LIMIT=1
 ```
