@@ -33,7 +33,7 @@ Deploy the tracked migrations with `supabase db push --linked`. The outbox and V
 
 - `20260805130000_email_notification_automation.sql` installs the private durable outbox and service-role RPCs.
 - `20260805131000_email_notification_vault_secrets.sql` stores the canonical processor origin and generates a 64-character bearer credential directly inside encrypted Supabase Vault.
-- `supabase/deferred/20260805132000_activate_email_notification_cron.sql` is deliberately outside the active migration directory until the protected route is deployed and verified.
+- `20260805132000_activate_email_notification_cron.sql` validates the protected route configuration and activates the one-minute processor schedule after deployment verification.
 
 The migration stores welcome, reminder, and attendance follow-up messages in the same private, service-role-only outbox.
 
@@ -63,7 +63,7 @@ In the Supabase Dashboard, open **Project Settings → Vault** and verify these 
 - `email_processor_base_url`: `https://www.globeattendance.org`.
 - `email_cron_secret`: a generated 64-character value; copy it into the hosting provider as the server-only `EMAIL_CRON_SECRET`.
 
-After the endpoint checks pass, move the deferred SQL into `supabase/migrations` without changing its timestamp, dry-run it, and deploy it with `supabase db push --linked`. It validates the Vault values and schedules the processor once per minute; rerunning its SQL safely replaces the existing Cron job. Never paste the bearer value into a migration, terminal command, issue, or commit.
+After the endpoint checks pass, deploy `20260805132000_activate_email_notification_cron.sql` with `supabase db push --linked`. It validates the Vault values and schedules the processor once per minute; rerunning its SQL safely replaces the existing Cron job. Never paste the bearer value into a migration, terminal command, issue, or commit.
 
 ## 5. Controlled five-minute test
 
