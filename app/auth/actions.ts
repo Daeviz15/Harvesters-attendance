@@ -6,7 +6,6 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { z } from 'zod'
 import { generateTeamWorkerId } from '@/lib/workerId'
-import { sendWelcomeEmail } from '@/lib/email'
 
 type ActionState = { error?: string } | null
 
@@ -19,8 +18,34 @@ const onboardingSchema = z.object({
   lastName: z.string().trim().max(50, 'Last name cannot exceed 50 characters.').optional(),
   departmentId: z.string().uuid({ message: 'Please select a valid department.' }),
   phone: z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits (e.g., 8012345678).'),
-  avatarUrl: z.string().optional().nullable(),
+  avatarUrl: z.string().trim().url('Profile image URL is invalid.').max(2048).optional().nullable(),
 })
+
+function isAllowedAvatarUrl(
+  value: string,
+  userId: string,
+  userMetadata: Record<string, unknown>,
+) {
+  try {
+    const avatarUrl = new URL(value)
+    const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || '')
+    const expectedStoragePrefix = `/storage/v1/object/public/avatars/${userId}/`
+    const metadataAvatar = [userMetadata.avatar_url, userMetadata.picture]
+      .find((candidate): candidate is string => typeof candidate === 'string')
+
+    const isOwnedStorageAvatar = avatarUrl.origin === supabaseUrl.origin
+      && avatarUrl.pathname.startsWith(expectedStoragePrefix)
+    const isOriginalGoogleAvatar = avatarUrl.hostname === 'lh3.googleusercontent.com'
+      && metadataAvatar === value
+
+    return avatarUrl.protocol === 'https:'
+      && !avatarUrl.username
+      && !avatarUrl.password
+      && (isOwnedStorageAvatar || isOriginalGoogleAvatar)
+  } catch {
+    return false
+  }
+}
 
 export async function login(_prevState: ActionState, formData: FormData) {
   const email = formData.get('email') as string
@@ -75,7 +100,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
     lastName: formData.get('lastName') || '',
     departmentId: formData.get('departmentId'),
     phone: ((formData.get('phone') as string | null) || '').replace(/\D/g, ''),
-    avatarUrl: formData.get('avatarUrl'),
+    avatarUrl: formData.get('avatarUrl') || null,
   }
 
   const validatedFields = onboardingSchema.safeParse(rawData)
@@ -93,6 +118,10 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   if (!user) {
     return { error: 'Unauthorized. Please log in again.' }
+  }
+
+  if (avatarUrl && !isAllowedAvatarUrl(avatarUrl, user.id, user.user_metadata)) {
+    return { error: 'Please upload your profile picture through this form.' }
   }
 
   const { data: department, error: departmentError } = await supabase
@@ -114,7 +143,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
     .eq('id', user.id)
     .maybeSingle()
 
-  let finalWorkerId = existingProfile?.worker_id || workerId || ''
+  const finalWorkerId = existingProfile?.worker_id || workerId || ''
   
   // If the user already has a valid ID, we just do a normal update
   if (finalWorkerId && !finalWorkerId.startsWith('HRV-')) {
@@ -143,7 +172,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
   } else {
     // We need to generate a new ID atomically
     const adminSupabase = createAdminClient()
-    const { data: generatedId, error: rpcError } = await adminSupabase.rpc('register_worker_atomic', {
+    const { error: rpcError } = await adminSupabase.rpc('register_worker_atomic', {
       p_user_id: user.id,
       p_team: department.team,
       p_first_name: firstName,
@@ -161,11 +190,21 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
       }
       return { error: rpcError.message || 'System is experiencing exceptionally high load. Please try submitting again.' }
     }
-    
-    finalWorkerId = generatedId
   }
 
-  // Update user_metadata ONLY with the onboarding flag for Edge Middleware checks
+  // Persist the welcome message in the durable outbox before completing the auth
+  // transition. A retry is safe because the database enforces one welcome job.
+  const emailAdminSupabase = createAdminClient()
+  const { error: welcomeQueueError } = await emailAdminSupabase.rpc('enqueue_welcome_email', {
+    p_user_id: user.id,
+  })
+
+  if (welcomeQueueError) {
+    console.error('[AuthAction] Unable to queue welcome email:', welcomeQueueError)
+    return { error: 'Your profile was saved, but setup could not be finalized. Please try again.' }
+  }
+
+  // Update user_metadata ONLY with the onboarding flag for proxy checks
   const { error } = await supabase.auth.updateUser({
     data: {
       onboarding_complete: true,
@@ -174,18 +213,6 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   if (error) {
     return { error: error.message }
-  }
-
-  // Send personalized welcome email asynchronously (non-blocking)
-  if (user.email) {
-    sendWelcomeEmail({
-      toEmail: user.email,
-      firstName,
-      lastName: lastName || '',
-      workerId: finalWorkerId,
-      department: department.name,
-      team: department.team,
-    }).catch(err => console.error('[AuthAction] Welcome email error:', err));
   }
 
   revalidatePath('/', 'layout')

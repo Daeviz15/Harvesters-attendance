@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield } from "lucide-react";
+import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -18,6 +18,7 @@ const allNavLinks = [
     { name: "Departments", href: "/admin/departments", icon: Building2, superAdminOnly: true },
     { name: "Reports", href: "/admin/reports", icon: History, superAdminOnly: false },
     { name: "Locations", href: "/admin/locations", icon: MapPin, superAdminOnly: true },
+    { name: "Email Test", href: "/admin/email-test", icon: MailCheck, superAdminOnly: true },
 ];
 
 interface AdminNavigationProps {

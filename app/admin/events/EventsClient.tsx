@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer } from "lucide-react";
+import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff } from "lucide-react";
 import { createEvent, updateEvent, deleteEvent } from "./actions";
 
 type ScheduleFrequency = "once" | "daily" | "weekly" | "monthly" | "yearly";
@@ -25,6 +25,7 @@ type EventType = {
     department_id: string | null;
     created_by: string | null;
     created_at: string;
+    email_notifications_enabled: boolean;
 };
 
 const defaultTimezone = "Africa/Lagos";
@@ -347,6 +348,16 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                                 {managedDepartments.find(d => d.id === event.department_id)?.name || "Dept Event"}
                                             </div>
                                         )}
+                                        <div className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ml-2 ${
+                                            event.email_notifications_enabled
+                                                ? "bg-green-500/10 text-green-600 dark:text-green-400"
+                                                : "bg-neutral-500/10 text-neutral-500 dark:text-neutral-400"
+                                        }`}>
+                                            {event.email_notifications_enabled
+                                                ? <BellRing className="w-3.5 h-3.5" />
+                                                : <BellOff className="w-3.5 h-3.5" />}
+                                            {event.email_notifications_enabled ? "Emails On" : "Emails Off"}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -690,6 +701,26 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                         </div>
                                     </div>
 
+                                    <div className="mt-8 border-t border-neutral-100 dark:border-white/10 pt-6">
+                                        <label className="flex items-start gap-3 rounded-xl border border-neutral-200 dark:border-white/10 bg-neutral-50 dark:bg-black/40 p-4 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                name="email_notifications_enabled"
+                                                defaultChecked={editingEvent?.email_notifications_enabled || false}
+                                                className="w-4 h-4 mt-0.5 text-[#34A853] rounded border-neutral-300 dark:border-neutral-600 focus:ring-[#34A853]"
+                                            />
+                                            <span>
+                                                <span className="flex items-center gap-2 text-sm font-semibold text-neutral-900 dark:text-white">
+                                                    <BellRing className="w-4 h-4 text-[#34A853]" />
+                                                    Enable automatic attendance emails
+                                                </span>
+                                                <span className="block mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">
+                                                    Sends a reminder before the event and follows up after it ends with workers who have no attendance record. Delivery timing is controlled by the secured scheduler.
+                                                </span>
+                                            </span>
+                                        </label>
+                                    </div>
+
                                     {/* Locations Selection (Mandatory) */}
                                     <div className="mt-8 border-t border-neutral-100 dark:border-white/10 pt-6">
                                         <h3 className="text-sm font-semibold text-neutral-900 dark:text-white mb-3">
@@ -703,7 +734,7 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                             <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-500/10 border border-orange-200 dark:border-orange-500/20 flex gap-3">
                                                 <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400 shrink-0" />
                                                 <p className="text-sm text-orange-800 dark:text-orange-200">
-                                                    You haven't created any active branch locations yet. You must add at least one location before creating an event.
+                                                    You haven&apos;t created any active branch locations yet. You must add at least one location before creating an event.
                                                 </p>
                                             </div>
                                         ) : (

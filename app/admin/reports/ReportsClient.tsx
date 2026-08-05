@@ -156,7 +156,7 @@ function AvatarChip({ name, url }: { name: string; url: string | null }) {
     return (
         <div className="w-9 h-9 rounded-full bg-[#34A853]/10 border border-[#34A853]/20 flex items-center justify-center text-[11px] font-bold text-[#34A853] overflow-hidden relative shrink-0">
             {url ? (
-                <Image src={url} alt={name} fill className="object-cover" sizes="36px" />
+                <Image src={url} alt={name} fill unoptimized className="object-cover" sizes="36px" />
             ) : (
                 initials(name)
             )}

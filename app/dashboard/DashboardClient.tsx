@@ -95,7 +95,7 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, wo
         <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 mb-10 min-w-0">
             <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853] shrink-0 relative overflow-hidden">
                 {avatarUrl ? (
-                    <Image src={avatarUrl} alt={username} fill className="object-cover" sizes="48px" />
+                    <Image src={avatarUrl} alt={username} fill unoptimized className="object-cover" sizes="48px" />
                 ) : (
                     initials
                 )}
@@ -685,7 +685,7 @@ export default function DashboardClient({
                                     <div key={feed.id} className="flex items-start gap-4 group">
                                         <div className="w-10 h-10 rounded-full bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 group-hover:bg-[#34A853]/10 group-hover:text-[#34A853] group-hover:border-[#34A853]/30 transition-colors shrink-0 relative overflow-hidden">
                                             {feed.avatar_url ? (
-                                                <Image src={feed.avatar_url} alt={feed.first_name} fill className="object-cover" sizes="40px" />
+                                                <Image src={feed.avatar_url} alt={feed.first_name} fill unoptimized className="object-cover" sizes="40px" />
                                             ) : (
                                                 init
                                             )}

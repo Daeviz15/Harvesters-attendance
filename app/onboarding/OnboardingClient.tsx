@@ -78,13 +78,23 @@ export default function OnboardingClient({
             return;
         }
 
+        const allowedImageTypes: Record<string, string> = {
+            "image/jpeg": "jpg",
+            "image/png": "png",
+            "image/webp": "webp",
+        };
+        const fileExtension = allowedImageTypes[file.type];
+        if (!fileExtension) {
+            setUploadError("Please choose a JPEG, PNG, or WebP image.");
+            return;
+        }
+
         setUploadError(null);
         setIsUploading(true);
 
         try {
             const supabase = createClient();
-            const fileExt = file.name.split('.').pop();
-            const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
+            const fileName = `${crypto.randomUUID()}.${fileExtension}`;
             const filePath = `${userId}/${fileName}`;
 
             const { error } = await supabase.storage
@@ -257,7 +267,7 @@ export default function OnboardingClient({
                         <div className="flex flex-col sm:flex-row items-center sm:items-center text-center sm:text-left gap-4 sm:gap-6 bg-neutral-50/50 dark:bg-white/[0.02] border border-neutral-200 dark:border-white/5 p-4 rounded-2xl">
                             <div className="relative w-20 h-20 rounded-full bg-neutral-200 dark:bg-white/5 border-2 border-dashed border-neutral-300 dark:border-white/20 flex items-center justify-center overflow-hidden shrink-0">
                                 {avatarUrl ? (
-                                    <Image src={avatarUrl} alt="Avatar" fill className="object-cover" sizes="80px" />
+                                    <Image src={avatarUrl} alt="Avatar" fill unoptimized className="object-cover" sizes="80px" />
                                 ) : (
                                     <span className="text-neutral-400 dark:text-white/30 text-[10px] uppercase font-bold tracking-widest">Upload</span>
                                 )}

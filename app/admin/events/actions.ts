@@ -30,6 +30,10 @@ const eventFormSchema = z.object({
     recurrence_month_day: z.coerce.number().int().min(1).max(31).optional(),
     location_ids: z.array(z.string().uuid()).min(1, "At least one location is required."),
     department_id: z.string().uuid("Please select a valid department.").optional().nullable(),
+    email_notifications_enabled: z.preprocess(
+        (value) => value === "on" || value === "true",
+        z.boolean(),
+    ),
 });
 type EventPayload = {
     title: string;
@@ -45,6 +49,7 @@ type EventPayload = {
     recurrence_rule: string | null;
     location_ids: string[];
     department_id: string | null;
+    email_notifications_enabled: boolean;
 };
 type EventFormResult = { data: EventPayload; error?: never } | { error: string; data?: never };
 
@@ -124,6 +129,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         recurrence_month_day: formData.get("recurrence_month_day")?.toString() || undefined,
         location_ids: parsedLocations,
         department_id: rawDeptId || undefined,
+        email_notifications_enabled: formData.get("email_notifications_enabled"),
     });
 
     if (!validatedFields.success) {
@@ -145,6 +151,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         recurrence_month_day: recurrenceMonthDay,
         location_ids,
         department_id,
+        email_notifications_enabled,
     } = validatedFields.data;
 
     if (endTime <= startTime) {
@@ -189,6 +196,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
             ),
             location_ids,
             department_id: department_id || null,
+            email_notifications_enabled,
         },
     };
 }

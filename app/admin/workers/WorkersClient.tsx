@@ -333,7 +333,7 @@ export default function WorkersClient({
                                                 <div className="flex items-center gap-3">
                                                     <div className="w-10 h-10 rounded-full bg-neutral-100 dark:bg-white/5 border border-neutral-200 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 overflow-hidden relative shrink-0">
                                                         {worker.avatar_url ? (
-                                                            <Image src={worker.avatar_url} alt={worker.first_name} fill className="object-cover" sizes="40px" />
+                                                            <Image src={worker.avatar_url} alt={worker.first_name} fill unoptimized className="object-cover" sizes="40px" />
                                                         ) : (
                                                             init
                                                         )}

@@ -193,6 +193,7 @@ export default function DepartmentAttendanceBreakdown({
                                                                                 alt=""
                                                                                 width={32}
                                                                                 height={32}
+                                                                                unoptimized
                                                                                 className="rounded-full object-cover shrink-0"
                                                                             />
                                                                         ) : (

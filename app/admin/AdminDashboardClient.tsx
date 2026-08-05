@@ -563,7 +563,7 @@ export default function AdminDashboardClient({
                                                     >
                                                         <div className="flex items-center gap-3 min-w-0">
                                                             {worker.avatar_url ? (
-                                                                <Image src={worker.avatar_url} alt="" width={36} height={36} className="rounded-full object-cover" />
+                                                                <Image src={worker.avatar_url} alt="" width={36} height={36} unoptimized className="rounded-full object-cover" />
                                                             ) : (
                                                                 <div className="w-9 h-9 rounded-full bg-neutral-200 dark:bg-white/10 flex items-center justify-center">
                                                                     <User className="w-4 h-4 text-neutral-500" />
