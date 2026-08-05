@@ -1,10 +1,12 @@
 import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
+import type SMTPPool from "nodemailer/lib/smtp-pool";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 587;
-const DEFAULT_APP_URL = "https://globeattendance.org";
+const DEFAULT_APP_URL = "https://www.globeattendance.org";
+const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
 type EmailSendResult =
     | { success: true; emailId: string }
@@ -13,6 +15,9 @@ type EmailSendResult =
 type EmailConfig = {
     from: { name: string; address: string };
     transporter: Transporter;
+    provider: "gmail" | "google_workspace_relay" | "resend" | "generic";
+    authenticatedUser: string;
+    authMode: "oauth2" | "password";
     isResendSmtp: boolean;
 };
 
@@ -40,56 +45,155 @@ function parseBoolean(value: string | undefined, fallback: boolean) {
     throw new Error("SMTP_SECURE must be either true or false.");
 }
 
+function getSmtpProvider(host: string): EmailConfig["provider"] {
+    if (host === "smtp.gmail.com") return "gmail";
+    if (host === "smtp-relay.gmail.com") return "google_workspace_relay";
+    if (host === "smtp.resend.com") return "resend";
+    return "generic";
+}
+
+function isPersonalGoogleAddress(value: string) {
+    const domain = value.trim().toLowerCase().split("@").at(-1);
+    return domain === "gmail.com" || domain === "googlemail.com";
+}
+
+function normalizeGoogleAppPassword(value: string | undefined) {
+    return value?.replace(/\s+/g, "");
+}
+
 function getEmailConfig(): EmailConfig {
     if (emailConfig) return emailConfig;
 
     const host = (process.env.SMTP_HOST || DEFAULT_SMTP_HOST).trim().toLowerCase();
-    const isResendSmtp = host === "smtp.resend.com";
+    const provider = getSmtpProvider(host);
+    const isResendSmtp = provider === "resend";
+    const googleSmtp = provider === "gmail" || provider === "google_workspace_relay";
     const user = process.env.SMTP_USER
-        || (isResendSmtp ? "resend" : process.env.GOOGLE_EMAIL_ADDRESS);
+        || (isResendSmtp ? "resend" : process.env.GOOGLE_EMAIL_ADDRESS?.trim());
+    const googleAppPassword = normalizeGoogleAppPassword(process.env.GOOGLE_APP_PASSWORD);
     const password = process.env.SMTP_PASSWORD
-        || (isResendSmtp ? process.env.RESEND_API_KEY : process.env.GOOGLE_APP_PASSWORD);
+        || (isResendSmtp
+            ? process.env.RESEND_API_KEY
+            : googleAppPassword);
+    const oauthValues = [
+        process.env.GOOGLE_CLIENT_ID,
+        process.env.GOOGLE_CLIENT_SECRET,
+        process.env.GOOGLE_REFRESH_TOKEN,
+    ];
+    const oauthValueCount = oauthValues.filter(Boolean).length;
 
-    if (!user || !password) {
+    if (!user) {
+        throw new Error("SMTP username is not configured.");
+    }
+
+    if (googleSmtp && oauthValueCount > 0 && oauthValueCount < oauthValues.length) {
+        throw new Error("Google OAuth2 SMTP configuration is incomplete.");
+    }
+
+    const usesGoogleOauth = googleSmtp && oauthValueCount === oauthValues.length;
+    if (!usesGoogleOauth && !password) {
         throw new Error("SMTP credentials are not configured.");
+    }
+
+    if (googleSmtp && !EMAIL_PATTERN.test(user)) {
+        throw new Error("Google SMTP requires the complete authenticated email address.");
+    }
+
+    if (
+        googleSmtp
+        && !usesGoogleOauth
+        && !process.env.SMTP_PASSWORD
+        && (googleAppPassword?.length !== 16 || !/^[A-Za-z0-9]+$/.test(googleAppPassword))
+    ) {
+        throw new Error("GOOGLE_APP_PASSWORD must contain exactly 16 characters without spaces.");
     }
 
     const port = parsePositiveInteger(process.env.SMTP_PORT, DEFAULT_SMTP_PORT);
     const secure = parseBoolean(process.env.SMTP_SECURE, port === 465);
 
-    if (isResendSmtp) {
+    if (port === 465 && !secure) {
+        throw new Error("SMTP port 465 requires implicit TLS (SMTP_SECURE=true).");
+    }
+
+    if (port === 587 && secure) {
+        throw new Error("SMTP port 587 requires STARTTLS (SMTP_SECURE=false).");
+    }
+
+    if (process.env.NODE_ENV === "production" && port === 25) {
+        throw new Error("SMTP port 25 is not allowed for the production sender.");
+    }
+
+    if (provider === "gmail" || provider === "google_workspace_relay") {
+        if (port !== 465 && port !== 587) {
+            throw new Error("Google SMTP must use TLS port 465 or STARTTLS port 587.");
+        }
+    } else if (isResendSmtp) {
         const implicitTls = port === 465 || port === 2465;
-        const startTls = port === 25 || port === 587 || port === 2587;
+        const startTls = port === 587 || port === 2587;
         if ((!implicitTls && !startTls) || secure !== implicitTls) {
             throw new Error("Resend SMTP port and SMTP_SECURE settings do not match its TLS requirements.");
         }
     }
 
-    const transporter = nodemailer.createTransport({
+    const auth = usesGoogleOauth
+        ? {
+            type: "OAuth2" as const,
+            user,
+            clientId: process.env.GOOGLE_CLIENT_ID!,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+            refreshToken: process.env.GOOGLE_REFRESH_TOKEN!,
+        }
+        : { user, pass: password! };
+    const fromAddress = process.env.EMAIL_FROM_ADDRESS?.trim() || user;
+
+    if (provider === "gmail" && fromAddress.toLowerCase() !== user.toLowerCase()) {
+        throw new Error(
+            "Gmail rewrites the From address; EMAIL_FROM_ADDRESS must match the authenticated account.",
+        );
+    }
+
+    const transportOptions = {
         host,
         port,
         secure,
         requireTLS: !secure,
-        auth: { user, pass: password },
+        auth,
         pool: true,
-        maxConnections: parsePositiveInteger(process.env.SMTP_MAX_CONNECTIONS, 3),
+        maxConnections: parsePositiveInteger(
+            process.env.SMTP_MAX_CONNECTIONS,
+            googleSmtp ? 1 : 3,
+        ),
         maxMessages: parsePositiveInteger(process.env.SMTP_MAX_MESSAGES, 50),
+        // Let the durable database outbox own retries. In-memory SMTP pool
+        // requeues can outlive a serverless invocation and make delivery ambiguous.
+        maxRequeues: 0,
         rateDelta: 1_000,
-        rateLimit: parsePositiveInteger(process.env.SMTP_RATE_LIMIT, 5),
+        rateLimit: parsePositiveInteger(
+            process.env.SMTP_RATE_LIMIT,
+            googleSmtp ? 1 : 5,
+        ),
         connectionTimeout: 15_000,
         greetingTimeout: 15_000,
         socketTimeout: 30_000,
         disableFileAccess: true,
         disableUrlAccess: true,
-    });
+        tls: {
+            minVersion: "TLSv1.2",
+            rejectUnauthorized: true,
+            servername: host,
+        },
+    } as SMTPPool.Options & { maxRequeues: number };
+    const transporter = nodemailer.createTransport(transportOptions);
 
     emailConfig = {
         transporter,
+        provider,
+        authenticatedUser: user,
+        authMode: usesGoogleOauth ? "oauth2" : "password",
         isResendSmtp,
         from: {
             name: process.env.EMAIL_FROM_NAME || "Harvesters Globe Attendance",
-            // A custom address must be configured as an authorized SMTP alias.
-            address: process.env.EMAIL_FROM_ADDRESS || user,
+            address: fromAddress,
         },
     };
 
@@ -97,26 +201,37 @@ function getEmailConfig(): EmailConfig {
 }
 
 export function assertAutomaticEmailDeliveryIsProductionSafe() {
-    const host = (process.env.SMTP_HOST || DEFAULT_SMTP_HOST).trim().toLowerCase();
-
     if (process.env.NODE_ENV !== "production") return;
 
-    if (host !== "smtp.resend.com") {
-        throw new Error(
-            "Automatic production email requires Resend SMTP so delivery retries use provider idempotency.",
-        );
-    }
-
-    const fromAddress = process.env.EMAIL_FROM_ADDRESS?.trim();
-    const replyTo = process.env.EMAIL_REPLY_TO?.trim();
-    const emailPattern = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
-
-    if (!fromAddress || !emailPattern.test(fromAddress)) {
+    const config = getEmailConfig();
+    const fromAddress = config.from.address;
+    const replyTo = (
+        process.env.EMAIL_REPLY_TO
+        || process.env.GOOGLE_EMAIL_ADDRESS
+    )?.trim();
+    if (!fromAddress || !EMAIL_PATTERN.test(fromAddress)) {
         throw new Error("EMAIL_FROM_ADDRESS must be an authorized sender address.");
     }
 
-    if (!replyTo || !emailPattern.test(replyTo)) {
+    if (!replyTo || !EMAIL_PATTERN.test(replyTo)) {
         throw new Error("EMAIL_REPLY_TO must be a monitored email address.");
+    }
+
+    if (
+        config.provider === "gmail"
+        && isPersonalGoogleAddress(config.authenticatedUser)
+        && process.env.EMAIL_ALLOW_PERSONAL_GMAIL_AUTOMATION !== "true"
+    ) {
+        throw new Error(
+            "Personal Gmail automation is limited to controlled testing. Set up Google Workspace SMTP Relay for production.",
+        );
+    }
+
+    if (
+        config.provider === "google_workspace_relay"
+        && isPersonalGoogleAddress(config.authenticatedUser)
+    ) {
+        throw new Error("Google Workspace SMTP Relay requires a Workspace-domain account.");
     }
 
     const configuredAppUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
@@ -125,7 +240,6 @@ export function assertAutomaticEmailDeliveryIsProductionSafe() {
     }
 
     getMessageIdDomain();
-    getEmailConfig();
 }
 
 function escapeHtml(value: string) {
@@ -241,7 +355,9 @@ async function sendEmail(
         const info = await config.transporter.sendMail({
             ...options,
             from: config.from,
-            replyTo: process.env.EMAIL_REPLY_TO || options.replyTo,
+            replyTo: process.env.EMAIL_REPLY_TO
+                || process.env.GOOGLE_EMAIL_ADDRESS
+                || options.replyTo,
             messageId: notificationId ? `<${notificationId}@${messageIdDomain}>` : options.messageId,
             headers: {
                 ...options.headers,

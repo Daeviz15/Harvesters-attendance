@@ -1,13 +1,13 @@
 -- ==================================================================================
 -- EMAIL PROCESSOR CRON ACTIVATION
 -- Run this only after:
--- 1. supabase_email_notification_automation.sql has completed successfully.
+-- 1. 20260805130000_email_notification_automation.sql has completed successfully.
 -- 2. The application containing /api/internal/email-scheduler is deployed publicly.
 -- 3. EMAIL_CRON_SECRET is configured in that deployed application.
 --
--- First create the two named values in the Supabase Vault dashboard. Do not paste
--- the bearer secret into SQL, where it may be retained in query history or logs.
--- This script validates the Vault configuration and is safe to rerun.
+-- The preceding Vault migration creates both named values without placing the
+-- bearer secret in source control or SQL history. This migration validates that
+-- configuration and is safe to rerun.
 -- ==================================================================================
 
 BEGIN;

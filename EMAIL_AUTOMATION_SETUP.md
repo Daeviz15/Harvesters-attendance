@@ -4,29 +4,35 @@ The email processor is intentionally split into a durable database outbox and a 
 
 ## 1. Configure an authenticated sending domain
 
-For production automation, use a verified Resend sending domain rather than a personal Gmail mailbox. The processor requires Resend SMTP in production so retries use the provider's idempotency key and cannot duplicate a message during the retry window.
+Nodemailer is the SMTP client, not the email provider. Personal Gmail is supported only for the controlled test because Google limits it to 500 recipients per rolling 24 hours, can block server logins it considers suspicious, and rewrites the sender to the authenticated Gmail address. DNS records for `globeattendance.org` do not authenticate an `@gmail.com` From address.
 
-Recommended Resend SMTP settings:
+Controlled personal-Gmail test settings:
 
 ```dotenv
-SMTP_HOST=smtp.resend.com
+SMTP_HOST=smtp.gmail.com
 SMTP_PORT=465
 SMTP_SECURE=true
-SMTP_USER=resend
-SMTP_PASSWORD=<Resend API key>
+GOOGLE_EMAIL_ADDRESS=<the Gmail address>
+GOOGLE_APP_PASSWORD=<16-character App Password with spaces removed>
+EMAIL_ALLOW_PERSONAL_GMAIL_AUTOMATION=true
 EMAIL_FROM_NAME=Harvesters Globe Attendance
-EMAIL_FROM_ADDRESS=attendance@<verified-sending-domain>
-EMAIL_REPLY_TO=<monitored-reply-address>
-EMAIL_MESSAGE_ID_DOMAIN=<verified-sending-domain>
+EMAIL_FROM_ADDRESS=<the same Gmail address>
+EMAIL_REPLY_TO=<the same monitored Gmail address>
+SMTP_MAX_CONNECTIONS=1
+SMTP_RATE_LIMIT=1
 ```
 
-Verify the sending domain in the provider and publish its SPF and DKIM records. Publish a DMARC record before production rollout. Never use an `EMAIL_FROM_ADDRESS` that the SMTP provider has not authorized.
+The preferred Google production profile is a dedicated Google Workspace account on the church domain using `smtp-relay.gmail.com`, with SPF, DKIM, and DMARC aligned to the From domain. OAuth2 is preferred for new Gmail integrations; an App Password remains supported when 2-Step Verification is enabled. Remove `EMAIL_ALLOW_PERSONAL_GMAIL_AUTOMATION` after the controlled test.
 
-Use a transactional subdomain such as `notifications.globeattendance.org` to isolate sender reputation from the main domain. Keep open and click tracking disabled for these operational messages, and start DMARC in monitoring mode (`p=none`) before gradually enforcing it after all legitimate senders pass alignment.
+Resend may remain an explicit manual fallback by changing `SMTP_HOST` and its credentials, but it is not an automatic failover: SMTP usage consumes the same Resend quota as API usage, and automatic provider failover could duplicate a message after an ambiguous SMTP response.
 
 ## 2. Install the outbox migration
 
-Run [supabase_email_notification_automation.sql](./supabase_email_notification_automation.sql) in the Supabase SQL Editor before deploying the application code that calls its RPC functions. It is safe to install before activation: existing events have automatic email disabled by default and existing users do not receive welcome messages retroactively.
+Deploy the tracked migrations with `supabase db push --linked`. The outbox and Vault migrations are safe to install before activation: existing events have automatic email disabled by default, existing users do not receive welcome messages retroactively, and Cron is a separate migration.
+
+- `20260805130000_email_notification_automation.sql` installs the private durable outbox and service-role RPCs.
+- `20260805131000_email_notification_vault_secrets.sql` stores the canonical processor origin and generates a 64-character bearer credential directly inside encrypted Supabase Vault.
+- `supabase/deferred/20260805132000_activate_email_notification_cron.sql` is deliberately outside the active migration directory until the protected route is deployed and verified.
 
 The migration stores welcome, reminder, and attendance follow-up messages in the same private, service-role-only outbox.
 
@@ -35,28 +41,28 @@ The migration stores welcome, reminder, and attendance follow-up messages in the
 Set these server-only environment variables in the deployed application:
 
 ```dotenv
-EMAIL_CRON_SECRET=<cryptographically-random-ASCII-secret-of-32-to-256-characters>
+EMAIL_CRON_SECRET=<copy the generated email_cron_secret from Supabase Vault>
 
 # Temporary staging test values
 EMAIL_REMINDER_LEAD_MINUTES=5
 EMAIL_FOLLOWUP_DELAY_MINUTES=5
 
 EMAIL_NOTIFICATION_MAX_LATENESS_MINUTES=1440
-EMAIL_NOTIFICATION_BATCH_SIZE=20
-EMAIL_NOTIFICATION_MAX_JOBS_PER_RUN=100
+EMAIL_NOTIFICATION_BATCH_SIZE=10
+EMAIL_NOTIFICATION_MAX_JOBS_PER_RUN=20
 EMAIL_NOTIFICATION_LOCK_TIMEOUT_MINUTES=10
 ```
 
-Deploy the application and confirm that `POST /api/internal/email-scheduler` is publicly reachable only with the matching bearer secret. A cloud cron service cannot invoke a `localhost` URL.
+Deploy the application and confirm that an unauthenticated `POST https://www.globeattendance.org/api/internal/email-scheduler` returns `401`, while the same request with the matching bearer secret succeeds. A `404` means the route is not deployed; do not activate Cron in that state. A cloud cron service cannot invoke a `localhost` URL.
 
 ## 4. Activate Supabase Cron
 
-In the Supabase Dashboard, open **Project Settings → Vault** and create these two named secrets:
+In the Supabase Dashboard, open **Project Settings → Vault** and verify these two named values created by the Vault migration:
 
-- `email_processor_base_url`: the deployed HTTPS application origin.
-- `email_cron_secret`: the same random value as the deployed `EMAIL_CRON_SECRET`.
+- `email_processor_base_url`: `https://www.globeattendance.org`.
+- `email_cron_secret`: a generated 64-character value; copy it into the hosting provider as the server-only `EMAIL_CRON_SECRET`.
 
-Use the Dashboard for the bearer secret so plaintext is not retained in SQL query history. Then run [supabase_email_notification_cron_setup.sql](./supabase_email_notification_cron_setup.sql) unchanged in the SQL Editor. It validates the Vault values and schedules the processor once per minute; rerunning it safely replaces the existing Cron job.
+After the endpoint checks pass, move the deferred SQL into `supabase/migrations` without changing its timestamp, dry-run it, and deploy it with `supabase db push --linked`. It validates the Vault values and schedules the processor once per minute; rerunning its SQL safely replaces the existing Cron job. Never paste the bearer value into a migration, terminal command, issue, or commit.
 
 ## 5. Controlled five-minute test
 
