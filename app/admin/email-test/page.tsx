@@ -1,4 +1,5 @@
 import { requireSuperAdminAuth } from "@/lib/rbac";
+import { notFound } from "next/navigation";
 import EmailTestClient from "./EmailTestClient";
 
 export const metadata = {
@@ -19,6 +20,10 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
 }
 
 export default async function EmailTestPage() {
+    if (process.env.NODE_ENV !== "development") {
+        notFound();
+    }
+
     const scope = await requireSuperAdminAuth();
     const maskedRecipient = scope.user.email
         ? maskEmail(scope.user.email)

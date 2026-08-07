@@ -18,7 +18,7 @@ const allNavLinks = [
     { name: "Departments", href: "/admin/departments", icon: Building2, superAdminOnly: true },
     { name: "Reports", href: "/admin/reports", icon: History, superAdminOnly: false },
     { name: "Locations", href: "/admin/locations", icon: MapPin, superAdminOnly: true },
-    { name: "Email Test", href: "/admin/email-test", icon: MailCheck, superAdminOnly: true },
+    { name: "Email Test", href: "/admin/email-test", icon: MailCheck, superAdminOnly: true, developmentOnly: true },
 ];
 
 interface AdminNavigationProps {
@@ -38,7 +38,10 @@ function AdminSidebarContent({
     isSuperAdmin?: boolean;
     scopeSummary?: string;
 }) {
-    const navLinks = allNavLinks.filter((link) => !link.superAdminOnly || isSuperAdmin);
+    const navLinks = allNavLinks.filter((link) => {
+        if (link.developmentOnly && process.env.NODE_ENV !== "development") return false;
+        return !link.superAdminOnly || isSuperAdmin;
+    });
 
     return (
         <>

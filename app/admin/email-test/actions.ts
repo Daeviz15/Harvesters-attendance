@@ -3,6 +3,12 @@
 import { requireSuperAdminAuth } from "@/lib/rbac";
 import { sendEventReminderEmail } from "@/lib/email";
 
+function assertEmailTestIsAvailable() {
+    if (process.env.NODE_ENV !== "development") {
+        throw new Error("Email test tools are only available in development.");
+    }
+}
+
 export type EmailTestState = {
     status: "idle" | "success" | "error";
     message: string;
@@ -15,6 +21,8 @@ export async function sendReminderTestEmail(
     void _previousState;
 
     try {
+        assertEmailTestIsAvailable();
+
         // Server Actions are public mutation endpoints. Always authorize here,
         // even though the page and navigation are also access-controlled.
         const scope = await requireSuperAdminAuth();
@@ -64,6 +72,8 @@ import { processDueEmailNotifications } from "@/lib/email-notification-processor
 
 export async function triggerScheduledEmailProcessorAction() {
     try {
+        assertEmailTestIsAvailable();
+
         await requireSuperAdminAuth();
         const summary = await processDueEmailNotifications();
         return {
@@ -76,4 +86,3 @@ export async function triggerScheduledEmailProcessorAction() {
         return { error: msg };
     }
 }
-
