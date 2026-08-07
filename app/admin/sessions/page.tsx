@@ -35,6 +35,10 @@ export default async function AdminSessionsPage() {
             filterParts.push(`department_id.eq.${id}`);
         }
 
+        for (const id of scope.managedTeamIds) {
+            filterParts.push(`team_id.eq.${id}`);
+        }
+
         filterParts.push(`created_by.eq.${scope.user.id}`);
         eventsQuery = eventsQuery.or(filterParts.join(','));
     }

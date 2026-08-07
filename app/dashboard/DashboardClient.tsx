@@ -6,27 +6,17 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
     MapPin, Clock, Calendar, CheckCircle2,
-    CircleDashed, LogOut, Menu, X, Users, CalendarDays,
+    CircleDashed, LogOut, Menu, X, CalendarDays,
     AlertTriangle, Loader2, History, Crown
 } from "lucide-react";
 import LeaveRequestModal from "@/components/LeaveRequestModal";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import { logout } from "@/app/auth/actions";
-import { verifyAndCheckIn, fetchAttendanceHistory, checkSessionAlive } from "./actions";
+import { verifyAndCheckIn, fetchAttendanceHistory, checkSessionAlive, updateMyDateOfBirth } from "./actions";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import ThemeToggle from "@/components/ThemeToggle";
-import type { AttendanceLog, LiveFeedEvent } from "@/lib/types";
+import type { AttendanceLog } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
-
-function formatTimeAgo(isoString: string): string {
-    const diffMs = Date.now() - new Date(isoString).getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins} mins ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} hours ago`;
-    return `${Math.floor(diffHours / 24)} days ago`;
-}
 
 /**
  * Formats an ISO timestamp into a human-friendly relative date.
@@ -208,12 +198,14 @@ interface DashboardClientProps {
     initialBroadcastSession: { id: string, title: string } | null;
     activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[];
     headDepartmentName: string | null;
+    initialDateOfBirth: string | null;
+    shouldPromptForBirthday: boolean;
 }
 
 export default function DashboardClient({
     userId, username, workerId, initials, department, team, avatarUrl,
     initialIsCheckedIn, checkInTime, serverTime,
-    initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession, activeLocations, headDepartmentName
+    initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession, activeLocations, headDepartmentName, initialDateOfBirth, shouldPromptForBirthday
 }: DashboardClientProps) {
     const router = useRouter();
     const geo = useGeolocation(activeLocations);
@@ -222,14 +214,13 @@ export default function DashboardClient({
     const [isCheckedIn, setIsCheckedIn] = useState(initialIsCheckedIn);
     const [broadcastSession, setBroadcastSession] = useState<{ id: string, title: string } | null>(initialBroadcastSession);
 
-    // Sync broadcast session state when server revalidates or passes updated prop
-    useEffect(() => {
-        setBroadcastSession(initialBroadcastSession);
-    }, [initialBroadcastSession]);
-
     const [actionError, setActionError] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+    const [dateOfBirth, setDateOfBirth] = useState(initialDateOfBirth || "");
+    const [isBirthdayPromptOpen, setIsBirthdayPromptOpen] = useState(shouldPromptForBirthday);
+    const [birthdayError, setBirthdayError] = useState<string | null>(null);
+    const [isSavingBirthday, setIsSavingBirthday] = useState(false);
 
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [gracePeriodRemaining] = useState<number | null>(null);
@@ -464,6 +455,30 @@ export default function DashboardClient({
         if (hour < 12) return "Good Morning";
         if (hour < 18) return "Good Afternoon";
         return "Good Evening";
+    };
+
+    const handleBirthdaySubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        setIsSavingBirthday(true);
+        setBirthdayError(null);
+
+        const formData = new FormData(event.currentTarget);
+        try {
+            const result = await updateMyDateOfBirth(formData);
+
+            if (result.error) {
+                setBirthdayError(result.error);
+                return;
+            }
+
+            setIsBirthdayPromptOpen(false);
+            router.refresh();
+        } catch (error) {
+            console.error("Birthday save failed:", error);
+            setBirthdayError("Could not reach the server. Please refresh the page and try again.");
+        } finally {
+            setIsSavingBirthday(false);
+        }
     };
 
     return (
@@ -710,6 +725,68 @@ export default function DashboardClient({
 
             {/* Leave Request Modal */}
             <LeaveRequestModal isOpen={isLeaveModalOpen} onClose={() => setIsLeaveModalOpen(false)} />
+
+            <AnimatePresence>
+                {isBirthdayPromptOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-sm px-4"
+                    >
+                        <motion.form
+                            initial={{ scale: 0.96, y: 16, opacity: 0 }}
+                            animate={{ scale: 1, y: 0, opacity: 1 }}
+                            exit={{ scale: 0.96, y: 16, opacity: 0 }}
+                            onSubmit={handleBirthdaySubmit}
+                            className="w-full max-w-md rounded-3xl border border-white/10 bg-neutral-950 p-6 shadow-2xl"
+                        >
+                            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#34A853]/15 text-[#34A853]">
+                                <CalendarDays className="h-6 w-6" />
+                            </div>
+                            <h2 className="text-2xl font-bold tracking-tight text-white">Complete your profile</h2>
+                            <p className="mt-2 text-sm leading-6 text-white/60">
+                                Please add your birthday so your worker profile stays complete. This is private and only visible to authorized admins.
+                            </p>
+
+                            <label className="mt-6 block text-xs font-semibold uppercase tracking-wider text-white/60">
+                                Birthday
+                            </label>
+                            <input
+                                type="date"
+                                name="dateOfBirth"
+                                required
+                                min="1900-01-01"
+                                max={new Date().toISOString().slice(0, 10)}
+                                value={dateOfBirth}
+                                onChange={(event) => setDateOfBirth(event.target.value)}
+                                className="mt-2 w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition focus:border-[#34A853] focus:ring-2 focus:ring-[#34A853]/30"
+                            />
+
+                            {birthdayError && (
+                                <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">
+                                    {birthdayError}
+                                </div>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={isSavingBirthday || !dateOfBirth}
+                                className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-[#34A853] px-5 py-3 text-sm font-bold uppercase tracking-wider text-white transition hover:bg-[#2e9347] disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                {isSavingBirthday ? (
+                                    <>
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                        Saving...
+                                    </>
+                                ) : (
+                                    "Save Birthday"
+                                )}
+                            </button>
+                        </motion.form>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </main>
     );
 }

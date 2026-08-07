@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Plus, Check, Edit3, Mail, Phone } from "lucide-react";
+import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Edit3, Mail, Phone, CalendarDays } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount, updateWorkerProfile } from "./actions";
@@ -21,6 +21,9 @@ interface Profile {
     worker_id?: string | null;
     email?: string | null;
     phone?: string | null;
+    date_of_birth?: string | null;
+    team_admin_team_id?: string | null;
+    team_admin_team_name?: string | null;
 }
 
 interface DepartmentOption {
@@ -28,6 +31,13 @@ interface DepartmentOption {
     name: string;
     is_active: boolean;
     head_user_id: string | null;
+}
+
+interface TeamOption {
+    id: string;
+    name: string;
+    code: string | null;
+    is_active: boolean;
 }
 
 interface ActiveSessionOption {
@@ -43,9 +53,11 @@ interface WorkersClientProps {
     initialSearch: string;
     selectedDepartment: string;
     departments: DepartmentOption[];
+    teams: TeamOption[];
     pageSize: number;
     activeSessions?: ActiveSessionOption[];
     isSuperAdmin: boolean;
+    canManageDepartmentHeads: boolean;
 }
 
 export default function WorkersClient({
@@ -56,9 +68,11 @@ export default function WorkersClient({
     initialSearch,
     selectedDepartment,
     departments,
+    teams,
     pageSize,
     activeSessions = [],
     isSuperAdmin,
+    canManageDepartmentHeads,
 }: WorkersClientProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -82,10 +96,16 @@ export default function WorkersClient({
     const [editError, setEditError] = useState<string | null>(null);
     const [editSuccess, setEditSuccess] = useState<string | null>(null);
     const [editDeptId, setEditDeptId] = useState<string>("");
+    const [editRole, setEditRole] = useState<string>("worker");
+    const [editTeamAdminTeamId, setEditTeamAdminTeamId] = useState<string>("");
+    const [editDateOfBirth, setEditDateOfBirth] = useState<string>("");
 
     const handleOpenEditModal = (worker: Profile) => {
         setEditingWorker(worker);
         setEditDeptId(worker.department_id || "");
+        setEditRole(worker.role || "worker");
+        setEditTeamAdminTeamId(worker.team_admin_team_id || "");
+        setEditDateOfBirth(worker.date_of_birth || "");
         setEditError(null);
         setEditSuccess(null);
     };
@@ -107,6 +127,15 @@ export default function WorkersClient({
                 formData.set("department", match.name);
                 formData.set("departmentId", match.id);
             }
+        }
+        formData.set("role", editRole);
+        if (editRole === "team_admin") {
+            formData.set("teamAdminTeamId", editTeamAdminTeamId);
+        } else {
+            formData.delete("teamAdminTeamId");
+        }
+        if (editDateOfBirth) {
+            formData.set("dateOfBirth", editDateOfBirth);
         }
 
         const res = await updateWorkerProfile(formData);
@@ -314,7 +343,7 @@ export default function WorkersClient({
                                 <th className="px-6 py-4">Department</th>
                                 <th className="px-6 py-4">Role</th>
                                 <th className="px-6 py-4">Registered On</th>
-                                {isSuperAdmin && <th className="px-6 py-4 text-right">Department Head</th>}
+                                {canManageDepartmentHeads && <th className="px-6 py-4 text-right">Department Head</th>}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
@@ -377,6 +406,12 @@ export default function WorkersClient({
                                                                     <span>{worker.phone}</span>
                                                                 </a>
                                                             )}
+                                                            {worker.date_of_birth && (
+                                                                <span className="inline-flex items-center gap-1 text-[11px] text-neutral-400 dark:text-white/35">
+                                                                    <CalendarDays className="w-3 h-3 shrink-0" />
+                                                                    <span>{new Date(`${worker.date_of_birth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -390,11 +425,18 @@ export default function WorkersClient({
                                             <td className="px-6 py-4">
                                                 <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide uppercase ${worker.role === 'admin'
                                                         ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
-                                                        : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                                        : worker.role === 'team_admin'
+                                                            ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20'
+                                                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                                                     }`}>
-                                                    {worker.role === 'admin' ? <Shield className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                                                    {worker.role}
+                                                    {worker.role === 'admin' ? <Shield className="w-3 h-3" /> : worker.role === 'team_admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                                    {worker.role === 'team_admin' ? 'Team Admin' : worker.role}
                                                 </div>
+                                                {worker.role === 'team_admin' && worker.team_admin_team_name && (
+                                                    <div className="mt-1 text-[11px] text-neutral-500 dark:text-white/45">
+                                                        {worker.team_admin_team_name}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-6 py-4 text-[14px] text-neutral-500 dark:text-white/50 font-mono">
                                                 {new Date(worker.created_at).toLocaleDateString('en-US', {
@@ -412,7 +454,7 @@ export default function WorkersClient({
                                                         <Edit3 className="w-3.5 h-3.5" />
                                                         Edit
                                                     </button>
-                                                    {isSuperAdmin && (
+                                                    {canManageDepartmentHeads && (
                                                         worker.head_department_id ? (
                                                             <button
                                                                 onClick={() => handleRemoveHead(worker)}
@@ -558,6 +600,21 @@ export default function WorkersClient({
                                             className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
                                         />
                                     </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Birthday (Optional)
+                                        </label>
+                                        <input
+                                            type="date"
+                                            name="dateOfBirth"
+                                            min="1900-01-01"
+                                            max={new Date().toISOString().slice(0, 10)}
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                                             Department
@@ -770,17 +827,64 @@ export default function WorkersClient({
                                             </label>
                                             <select
                                                 name="role"
-                                                defaultValue={editingWorker.role}
+                                                value={editRole}
+                                                onChange={(event) => {
+                                                    setEditRole(event.target.value);
+                                                    if (event.target.value !== "team_admin") {
+                                                        setEditTeamAdminTeamId("");
+                                                    }
+                                                }}
                                                 className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
                                             >
                                                 <option value="worker">Worker</option>
                                                 <option value="admin">Admin</option>
+                                                <option value="team_admin">Team Admin</option>
                                             </select>
                                         </div>
                                     ) : (
                                         <input type="hidden" name="role" value={editingWorker.role} />
                                     )}
                                 </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                        Birthday
+                                    </label>
+                                    <input
+                                        type="date"
+                                        name="dateOfBirth"
+                                        min="1900-01-01"
+                                        max={new Date().toISOString().slice(0, 10)}
+                                        value={editDateOfBirth}
+                                        onChange={(event) => setEditDateOfBirth(event.target.value)}
+                                        className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                    />
+                                </div>
+
+                                {isSuperAdmin && editRole === "team_admin" && (
+                                    <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                                        <label className="block text-xs font-semibold text-amber-800 dark:text-amber-200 mb-1">
+                                            Team Admin Scope <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            name="teamAdminTeamId"
+                                            value={editTeamAdminTeamId}
+                                            onChange={(event) => setEditTeamAdminTeamId(event.target.value)}
+                                            required
+                                            className="w-full px-3.5 py-2.5 bg-white/80 dark:bg-neutral-900 border border-amber-500/20 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500/40"
+                                        >
+                                            <option value="">Select team to manage</option>
+                                            {teams.map((team) => (
+                                                <option key={team.id} value={team.id}>
+                                                    {team.name}{team.code ? ` (${team.code})` : ""}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <p className="text-[11px] text-amber-800/75 dark:text-amber-200/75 mt-2">
+                                            This admin will only manage this team and departments inside this team.
+                                        </p>
+                                    </div>
+                                )}
 
                                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">
                                     <button

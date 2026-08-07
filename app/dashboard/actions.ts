@@ -6,11 +6,49 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog, AttendanceHistoryResponse } from '@/lib/types';
+import { validateDateOfBirth } from '@/lib/date-of-birth';
+
+type CheckInEvent = {
+    location_ids: string[] | null;
+    department_id: string | null;
+    team_id: string | null;
+    created_by: string | null;
+} | null;
 
 const locationSchema = z.object({
     lat: z.coerce.number().min(-90).max(90),
     lng: z.coerce.number().min(-180).max(180)
 });
+
+export async function updateMyDateOfBirth(formData: FormData) {
+    const birthDate = validateDateOfBirth(formData.get('dateOfBirth'));
+    if (birthDate.error || !birthDate.dateOfBirth) {
+        return { error: birthDate.error || 'Please enter a valid birthday.' };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: 'Authentication required. Please log in.' };
+    }
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({
+            date_of_birth: birthDate.dateOfBirth,
+            updated_at: new Date().toISOString(),
+        })
+        .eq('id', user.id);
+
+    if (error) {
+        console.error('[Dashboard] Failed to update date of birth:', error);
+        return { error: 'Could not save your birthday. Please try again.' };
+    }
+
+    revalidatePath('/dashboard');
+    return { success: true };
+}
 
 export async function verifyAndCheckIn(formData: FormData) {
     const sessionId = formData.get('sessionId')?.toString();
@@ -47,7 +85,7 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const { data: sessionData, error: sessionError } = await supabase
         .from('attendance_sessions')
-        .select('id, status, created_by, events(location_ids, department_id, created_by)')
+        .select('id, status, created_by, events(location_ids, department_id, team_id, created_by)')
         .eq('id', sessionId)
         .single();
 
@@ -55,30 +93,36 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: 'This attendance session is no longer active or could not be found.' };
     }
 
-    const eventObj: any = Array.isArray(sessionData.events) ? sessionData.events[0] : sessionData.events;
-    const eventDeptId = eventObj?.department_id as string | undefined;
+    const eventObj = (Array.isArray(sessionData.events) ? sessionData.events[0] : sessionData.events) as CheckInEvent;
+    const eventDeptId = eventObj?.department_id ?? null;
+    const eventTeamId = eventObj?.team_id ?? null;
 
     // Fetch the user's profile once — used for department authorization AND check-in record
     const { data: workerProfile } = await supabase
         .from('profiles')
-        .select('department_id, department, team')
+        .select('department_id, department, team, team_id')
         .eq('id', user.id)
         .single();
 
-    // Defense-in-depth: If the session is department-scoped, verify worker's department membership
-    if (eventDeptId) {
+    // Defense-in-depth: If the session is department/team-scoped, verify worker membership.
+    if (eventDeptId || eventTeamId) {
         let isAuthorized = false;
 
         if (sessionData.created_by === user.id || eventObj?.created_by === user.id) {
             isAuthorized = true;
         } else if (workerProfile?.department_id && workerProfile.department_id === eventDeptId) {
             isAuthorized = true;
+        } else if (!eventDeptId && eventTeamId && workerProfile?.team_id === eventTeamId) {
+            isAuthorized = true;
         } else if (workerProfile?.department) {
-            const { data: targetDept } = await supabase
-                .from('departments')
-                .select('name')
-                .eq('id', eventDeptId)
-                .maybeSingle();
+            const lookupDepartmentId = eventDeptId || workerProfile.department_id;
+            const { data: targetDept } = lookupDepartmentId
+                ? await supabase
+                    .from('departments')
+                    .select('name, team_id')
+                    .eq('id', lookupDepartmentId)
+                    .maybeSingle()
+                : { data: null };
 
             if (targetDept?.name) {
                 const cleanUserDept = workerProfile.department.toLowerCase().trim();
@@ -87,10 +131,14 @@ export async function verifyAndCheckIn(formData: FormData) {
                     isAuthorized = true;
                 }
             }
+
+            if (!eventDeptId && eventTeamId && targetDept?.team_id === eventTeamId) {
+                isAuthorized = true;
+            }
         }
 
         if (!isAuthorized) {
-            return { error: 'Unauthorized: This live session is restricted to members of a different department.' };
+            return { error: 'Unauthorized: This live session is restricted to members of a different team or department.' };
         }
     }
 

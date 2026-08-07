@@ -18,13 +18,13 @@ export default async function OnboardingPage() {
     
     const { data: profile } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, worker_id, avatar_url, phone, department_id')
+        .select('id, first_name, last_name, worker_id, avatar_url, phone, department_id, date_of_birth')
         .eq('id', user.id)
         .maybeSingle();
 
     
     let initialFirstName = profile?.first_name || user.user_metadata?.first_name || (user.user_metadata?.full_name?.split(' ')[0]) || '';
-    let initialLastName = profile?.last_name || user.user_metadata?.last_name || (user.user_metadata?.full_name?.split(' ').slice(1).join(' ')) || '';
+    const initialLastName = profile?.last_name || user.user_metadata?.last_name || (user.user_metadata?.full_name?.split(' ').slice(1).join(' ')) || '';
     
     if (!initialFirstName && user.email) {
         const emailName = user.email.split('@')[0];
@@ -52,6 +52,7 @@ export default async function OnboardingPage() {
             userId={user.id}
             initialAvatarUrl={profile?.avatar_url || user.user_metadata?.avatar_url || null}
             initialPhone={profile?.phone ? profile.phone.replace('+234', '') : ''}
+            initialDateOfBirth={profile?.date_of_birth || ''}
             initialDepartmentId={profile?.department_id || null}
             departments={departments || []}
         />

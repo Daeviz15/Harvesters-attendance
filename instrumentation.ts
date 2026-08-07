@@ -13,9 +13,9 @@ export async function register() {
         ],
     });
 
-    // Production-Grade Dev Cron Runner for Localhost Testing
-    // Automatically runs the outbox email processor every 60 seconds when running dev server
-    if (process.env.NODE_ENV === "development" || process.env.ENABLE_DEV_EMAIL_CRON === "true") {
+    // Local email automation is opt-in so development servers never send mail
+    // unexpectedly. Production scheduling is handled by the secured cron caller.
+    if (process.env.ENABLE_DEV_EMAIL_CRON === "true") {
         console.info("[DevCron] Starting automatic background email ticker (every 60s)...");
         
         // Initial tick after 5 seconds to catch any immediately due jobs

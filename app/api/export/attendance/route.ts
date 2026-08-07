@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { requireAdminAuth } from "@/lib/rbac";
 
-function escapeCSVValue(value: any): string {
+function escapeCSVValue(value: unknown): string {
     if (value === null || value === undefined) return "";
     let str = String(value);
     

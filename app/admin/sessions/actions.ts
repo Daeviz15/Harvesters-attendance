@@ -8,6 +8,21 @@ function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "An unexpected error occurred.";
 }
 
+type ScopedEvent = {
+    department_id: string | null;
+    team_id: string | null;
+    created_by: string | null;
+};
+
+function canManageEvent(scope: Awaited<ReturnType<typeof requireAdminAuth>>, event: ScopedEvent) {
+    return (
+        scope.isSuperAdmin
+        || event.created_by === scope.user.id
+        || (!!event.department_id && scope.managedDepartmentIds.includes(event.department_id))
+        || (!!event.team_id && scope.managedTeamIds.includes(event.team_id))
+    );
+}
+
 export async function beginSession(eventId: string) {
     try {
         const scope = await requireAdminAuth();
@@ -18,15 +33,13 @@ export async function beginSession(eventId: string) {
         if (!scope.isSuperAdmin) {
             const { data: event } = await supabase
                 .from('events')
-                .select('department_id, created_by')
+                .select('department_id, team_id, created_by')
                 .eq('id', eventId)
                 .maybeSingle();
 
             if (!event) return { error: "Event not found." };
 
-            const ownsEvent = event.created_by === user.id;
-            const managesDept = event.department_id && scope.managedDepartmentIds.includes(event.department_id);
-            if (!ownsEvent && !managesDept) {
+            if (!canManageEvent(scope, event)) {
                 return { error: "You do not have permission to start sessions for this event." };
             }
         }
@@ -65,7 +78,7 @@ export async function endSession(sessionId: string) {
         if (!scope.isSuperAdmin) {
             const { data: session } = await supabase
                 .from('attendance_sessions')
-                .select('event_id, event:events(department_id, created_by)')
+                .select('event_id, event:events(department_id, team_id, created_by)')
                 .eq('id', sessionId)
                 .maybeSingle();
 
@@ -73,9 +86,7 @@ export async function endSession(sessionId: string) {
 
             const event = Array.isArray(session.event) ? session.event[0] : session.event;
             if (event) {
-                const ownsEvent = event.created_by === scope.user.id;
-                const managesDept = event.department_id && scope.managedDepartmentIds.includes(event.department_id);
-                if (!ownsEvent && !managesDept) {
+                if (!canManageEvent(scope, event)) {
                     return { error: "You do not have permission to end this session." };
                 }
             }
@@ -113,7 +124,7 @@ export async function extendSessionTime(sessionId: string, additionalMinutes: nu
 
         const { data: session, error: sessionError } = await supabase
             .from('attendance_sessions')
-            .select('id, status, scheduled_end_at, end_time, event_id, event:events(department_id, created_by)')
+            .select('id, status, scheduled_end_at, end_time, event_id, event:events(department_id, team_id, created_by)')
             .eq('id', sessionId)
             .maybeSingle();
 
@@ -129,9 +140,7 @@ export async function extendSessionTime(sessionId: string, additionalMinutes: nu
         if (!scope.isSuperAdmin) {
             const event = Array.isArray(session.event) ? session.event[0] : session.event;
             if (event) {
-                const ownsEvent = event.created_by === scope.user.id;
-                const managesDept = event.department_id && scope.managedDepartmentIds.includes(event.department_id);
-                if (!ownsEvent && !managesDept) {
+                if (!canManageEvent(scope, event)) {
                     return { error: "You do not have permission to modify this session." };
                 }
             }
@@ -185,6 +194,24 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
 
         const cleanQuery = query.trim().replace(/[,()]/g, ' ').trim();
 
+        if (!isSuperAdmin) {
+            const { data: session } = await supabase
+                .from("attendance_sessions")
+                .select("id, event:events(department_id, team_id, created_by)")
+                .eq("id", sessionId)
+                .maybeSingle();
+
+            const event = session
+                ? Array.isArray(session.event)
+                    ? session.event[0]
+                    : session.event
+                : null;
+
+            if (!event || !canManageEvent(scope, event)) {
+                return { error: "Forbidden: You cannot search workers for this session." };
+            }
+        }
+
         const { data: existingLogs } = await supabase
             .from("attendance_logs")
             .select("user_id")
@@ -229,7 +256,16 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
             }
 
             const fallbackRes = await fallbackQuery;
-            workers = (fallbackRes.data || []).map((w: any) => ({ ...w, worker_id: null }));
+            workers = (fallbackRes.data || []).map((worker: {
+                id: string;
+                first_name: string;
+                last_name: string;
+                phone: string | null;
+                department: string | null;
+                department_id: string | null;
+                avatar_url: string | null;
+                role: string;
+            }) => ({ ...worker, worker_id: null }));
             error = fallbackRes.error;
         }
 
@@ -272,18 +308,25 @@ export async function manualWorkerCheckIn(params: { workerId: string; sessionId:
             return { error: "Worker profile not found." };
         }
 
-        if (!isSuperAdmin && workerProfile.department_id && !managedDepartmentIds.includes(workerProfile.department_id)) {
+        if (!isSuperAdmin && (!workerProfile.department_id || !managedDepartmentIds.includes(workerProfile.department_id))) {
             return { error: "Forbidden: You can only check in workers from your managed department." };
         }
 
         const { data: session, error: sessionError } = await supabase
             .from("attendance_sessions")
-            .select("id, status")
+            .select("id, status, event:events(department_id, team_id, created_by)")
             .eq("id", sessionId)
             .single();
 
         if (sessionError || !session || session.status !== "active") {
             return { error: "This session is no longer active." };
+        }
+
+        if (!isSuperAdmin) {
+            const event = Array.isArray(session.event) ? session.event[0] : session.event;
+            if (!event || !canManageEvent(scope, event)) {
+                return { error: "Forbidden: You cannot check workers into this session." };
+            }
         }
 
         const { data: existingCheckIn } = await supabase

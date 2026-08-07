@@ -9,7 +9,17 @@ const initialState: EmailTestState = {
     message: "",
 };
 
-export default function EmailTestClient({ maskedRecipient }: { maskedRecipient: string }) {
+type EmailTestClientProps = {
+    maskedRecipient: string;
+    reminderLeadMinutes: number;
+    followupDelayMinutes: number;
+};
+
+export default function EmailTestClient({
+    maskedRecipient,
+    reminderLeadMinutes,
+    followupDelayMinutes,
+}: EmailTestClientProps) {
     const [state, formAction, isPending] = useActionState(sendReminderTestEmail, initialState);
 
     return (
@@ -112,12 +122,18 @@ export default function EmailTestClient({ maskedRecipient }: { maskedRecipient: 
             </section>
 
             {/* Scheduler Processor Section */}
-            <SchedulerRunnerSection />
+            <SchedulerRunnerSection
+                reminderLeadMinutes={reminderLeadMinutes}
+                followupDelayMinutes={followupDelayMinutes}
+            />
         </div>
     );
 }
 
-function SchedulerRunnerSection() {
+function SchedulerRunnerSection({
+    reminderLeadMinutes,
+    followupDelayMinutes,
+}: Pick<EmailTestClientProps, "reminderLeadMinutes" | "followupDelayMinutes">) {
     const [running, setRunning] = useState(false);
     const [result, setResult] = useState<{
         success?: boolean;
@@ -125,6 +141,7 @@ function SchedulerRunnerSection() {
         error?: string;
         summary?: { claimed: number; sent: number; remindersQueued: number; followUpsQueued: number };
     } | null>(null);
+    const schedulerDescription = `On localhost, there is no automated background cron. Click this button to manually trigger the queue processor and send any due reminders (${reminderLeadMinutes} mins prior) or follow-ups (${followupDelayMinutes} mins post-event).`;
 
     const handleRunScheduler = async () => {
         setRunning(true);
@@ -149,7 +166,7 @@ function SchedulerRunnerSection() {
                             Run Automatic Email Scheduler (Localhost / Testing)
                         </h2>
                         <p className="text-sm text-neutral-500 dark:text-white/50 mt-1 leading-6">
-                            On localhost, there is no automated background cron. Click this button to manually trigger the queue processor and send any due reminders (30 mins prior) or follow-ups (60 mins post-event).
+                            {schedulerDescription}
                         </p>
                     </div>
                 </div>
@@ -202,4 +219,3 @@ function SchedulerRunnerSection() {
         </section>
     );
 }
-

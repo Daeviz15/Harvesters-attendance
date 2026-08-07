@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff, Mail, Send, ShieldCheck } from "lucide-react";
+import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff, Mail, ShieldCheck } from "lucide-react";
 import { createEvent, updateEvent, deleteEvent } from "./actions";
 import WorkerPicker from "@/components/ui/WorkerPicker";
 import ManualBroadcastModal from "@/components/admin/ManualBroadcastModal";
@@ -25,6 +25,7 @@ type EventType = {
     recurrence_rule: string | null;
     location_ids: string[] | null;
     department_id: string | null;
+    team_id?: string | null;
     created_by: string | null;
     created_at: string;
     email_notifications_enabled: boolean;
@@ -142,15 +143,17 @@ export type LocationBasic = {
 type ManagedDepartment = {
     id: string;
     name: string;
+    team_id?: string | null;
 };
 
-export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, managedDepartments, activeEventIds = [], workers = [] }: {
+export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, isTeamAdmin, managedDepartments, activeEventIds = [], workers = [] }: {
     initialEvents: EventType[],
     activeLocations: LocationBasic[],
     isSuperAdmin: boolean,
+    isTeamAdmin: boolean,
     managedDepartments: ManagedDepartment[],
     activeEventIds?: string[],
-    workers?: { id: string, first_name: string, last_name: string, worker_id: string, department: string }[],
+    workers?: { id: string, first_name: string, last_name: string, worker_id: string, department: string, department_id?: string | null }[],
 }) {
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -205,7 +208,7 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         setScheduleFrequency("weekly");
         setSelectedLocations([]);
         setTargetWorkerIds([]);
-        setSelectedDepartmentId(!isSuperAdmin && managedDepartments.length === 1 ? managedDepartments[0].id : "");
+        setSelectedDepartmentId(!isSuperAdmin && !isTeamAdmin && managedDepartments.length === 1 ? managedDepartments[0].id : "");
         setError(null);
         setIsModalOpen(true);
     };
@@ -526,18 +529,19 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                         {managedDepartments.length > 0 && (
                                             <div>
                                                 <label htmlFor="event_department" className="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1.5">
-                                                    Department {!isSuperAdmin && <span className="text-red-500">*</span>}
+                                                    Department {!isSuperAdmin && !isTeamAdmin && <span className="text-red-500">*</span>}
                                                     {isSuperAdmin && <span className="text-neutral-400 font-normal"> (Optional — leave blank for global event)</span>}
                                                 </label>
                                                 <select
                                                     id="event_department"
                                                     value={selectedDepartmentId}
                                                     onChange={(e) => setSelectedDepartmentId(e.target.value)}
-                                                    required={!isSuperAdmin}
+                                                    required={!isSuperAdmin && !isTeamAdmin}
                                                     className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black border border-neutral-200 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 text-neutral-900 dark:text-white"
                                                 >
                                                     {isSuperAdmin && <option value="">Global Event (All Departments)</option>}
-                                                    {!isSuperAdmin && managedDepartments.length > 1 && <option value="" disabled>-- Select Department --</option>}
+                                                    {isTeamAdmin && <option value="">Team Event (All Departments in Your Team)</option>}
+                                                    {!isSuperAdmin && !isTeamAdmin && managedDepartments.length > 1 && <option value="" disabled>-- Select Department --</option>}
                                                     {managedDepartments.map((dept) => (
                                                         <option key={dept.id} value={dept.id}>
                                                             {dept.name}

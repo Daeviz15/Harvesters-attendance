@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Phone, Users, CheckCircle2, Lock, User, ShieldCheck } from "lucide-react";
+import { Phone, Users, CheckCircle2, Lock, User, ShieldCheck, CalendarDays } from "lucide-react";
 import Image from "next/image";
 import { completeOnboarding, getUpcomingWorkerIdPreview } from "@/app/auth/actions";
 import { createClient } from "@/utils/supabase/client";
@@ -17,6 +17,7 @@ interface OnboardingClientProps {
     userId: string;
     initialAvatarUrl: string | null;
     initialPhone: string;
+    initialDateOfBirth: string;
     initialDepartmentId?: string | null;
     departments: {
         id: string;
@@ -33,6 +34,7 @@ export default function OnboardingClient({
     userId,
     initialAvatarUrl,
     initialPhone,
+    initialDateOfBirth,
     initialDepartmentId,
     departments,
 }: OnboardingClientProps) {
@@ -40,6 +42,7 @@ export default function OnboardingClient({
     const [firstName, setFirstName] = useState(initialFirstName);
     const [lastName, setLastName] = useState(initialLastName);
     const [phone, setPhone] = useState(initialPhone);
+    const [dateOfBirth, setDateOfBirth] = useState(initialDateOfBirth);
     const [avatarUrl, setAvatarUrl] = useState<string | null>(initialAvatarUrl);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState<string | null>(null);
@@ -59,7 +62,6 @@ export default function OnboardingClient({
 
     useEffect(() => {
         if (!selectedTeam) {
-            setPreviewWorkerId(null);
             return;
         }
         let isMounted = true;
@@ -117,7 +119,7 @@ export default function OnboardingClient({
     };
 
     const isPhoneValid = phone.length === 10;
-    const isFormValid = firstName.trim().length >= 2 && isPhoneValid && !!selectedDepartmentId && !isUploading;
+    const isFormValid = firstName.trim().length >= 2 && isPhoneValid && !!dateOfBirth && !!selectedDepartmentId && !isUploading;
 
     const knownTeamOrder = ["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN", "GENERAL"];
     const presentTeams = Array.from(new Set(normalizedDepts.map(d => d.teamNormalized)));
@@ -324,6 +326,7 @@ export default function OnboardingClient({
                                             onChange={(e) => {
                                                 const newTeam = e.target.value || null;
                                                 setSelectedTeam(newTeam);
+                                                setPreviewWorkerId(null);
                                                 if (selectedDepartmentId) {
                                                     const currentDept = normalizedDepts.find(d => d.id === selectedDepartmentId);
                                                     if (currentDept && currentDept.teamNormalized !== newTeam) {
@@ -401,7 +404,32 @@ export default function OnboardingClient({
                         <input type="hidden" name="departmentId" value={selectedDepartmentId} required />
                     </div>
 
-                    {/* Section 5: Phone Number Input */}
+                    {/* Section 5: Birthday Input */}
+                    <div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <CalendarDays className="w-5 h-5 text-[#34A853]" />
+                            <label className="text-[14px] font-semibold tracking-wide text-neutral-700 dark:text-white/80">
+                                Birthday <span className="text-red-500">*</span>
+                            </label>
+                        </div>
+                        <div className="max-w-md">
+                            <input
+                                type="date"
+                                name="dateOfBirth"
+                                required
+                                min="1900-01-01"
+                                max={new Date().toISOString().slice(0, 10)}
+                                value={dateOfBirth}
+                                onChange={(e) => setDateOfBirth(e.target.value)}
+                                className="w-full bg-neutral-100/70 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-xl px-4 py-3 text-neutral-800 dark:text-white text-[15px] focus:outline-none focus:border-[#34A853] transition-colors"
+                            />
+                            <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">
+                                This is kept private and visible only to authorized admins.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Section 6: Phone Number Input */}
                     <div>
                         <div className="flex items-center gap-2 mb-3">
                             <Phone className="w-5 h-5 text-[#34A853]" />

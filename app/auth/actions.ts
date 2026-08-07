@@ -6,6 +6,7 @@ import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
 import { z } from 'zod'
 import { generateTeamWorkerId } from '@/lib/workerId'
+import { validateDateOfBirth } from '@/lib/date-of-birth'
 
 type ActionState = { error?: string } | null
 
@@ -19,6 +20,7 @@ const onboardingSchema = z.object({
   departmentId: z.string().uuid({ message: 'Please select a valid department.' }),
   phone: z.string().regex(/^\d{10}$/, 'Phone number must be exactly 10 digits (e.g., 8012345678).'),
   avatarUrl: z.string().trim().url('Profile image URL is invalid.').max(2048).optional().nullable(),
+  dateOfBirth: z.string().trim(),
 })
 
 function isAllowedAvatarUrl(
@@ -101,6 +103,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
     departmentId: formData.get('departmentId'),
     phone: ((formData.get('phone') as string | null) || '').replace(/\D/g, ''),
     avatarUrl: formData.get('avatarUrl') || null,
+    dateOfBirth: formData.get('dateOfBirth') || '',
   }
 
   const validatedFields = onboardingSchema.safeParse(rawData)
@@ -110,7 +113,11 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
     return { error: firstError }
   }
 
-  const { workerId, firstName, lastName, departmentId, phone, avatarUrl } = validatedFields.data
+  const { workerId, firstName, lastName, departmentId, phone, avatarUrl, dateOfBirth } = validatedFields.data
+  const birthDate = validateDateOfBirth(dateOfBirth)
+  if (birthDate.error || !birthDate.dateOfBirth) {
+    return { error: birthDate.error || 'Please enter a valid birthday.' }
+  }
 
   const supabase = await createClient()
 
@@ -126,7 +133,7 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
 
   const { data: department, error: departmentError } = await supabase
     .from('departments')
-    .select('id, name, team')
+    .select('id, name, team, team_id')
     .eq('id', departmentId)
     .eq('is_active', true)
     .single()
@@ -155,8 +162,10 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
         department_id: department.id,
         department: department.name,
         team: department.team,
+        team_id: department.team_id,
         phone: `+234${phone}`,
         avatar_url: avatarUrl || null,
+        date_of_birth: birthDate.dateOfBirth,
         onboarding_complete: true,
         updated_at: new Date().toISOString()
       })
@@ -189,6 +198,20 @@ export async function completeOnboarding(_prevState: ActionState, formData: Form
         return { error: 'This first name is already registered. Please include your last name or an initial.' }
       }
       return { error: rpcError.message || 'System is experiencing exceptionally high load. Please try submitting again.' }
+    }
+
+    const { error: birthDateUpdateError } = await adminSupabase
+      .from('profiles')
+      .update({
+        date_of_birth: birthDate.dateOfBirth,
+        team_id: department.team_id,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+
+    if (birthDateUpdateError) {
+      console.error("Birthday update after atomic registration error:", birthDateUpdateError)
+      return { error: 'Your profile was created, but birthday could not be saved. Please try again.' }
     }
   }
 

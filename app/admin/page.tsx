@@ -3,6 +3,12 @@ import { requireAdminAuth } from "@/lib/rbac";
 import AdminDashboardClient from "./AdminDashboardClient";
 import { getDepartmentAttendanceBreakdown } from "./sessions/actions";
 
+type ActiveSessionRow = {
+    id: string;
+    event_id: string | null;
+    event: { title: string } | { title: string }[] | null;
+};
+
 export default async function AdminDashboardPage() {
     const scope = await requireAdminAuth();
     const supabase = await createClient();
@@ -19,6 +25,9 @@ export default async function AdminDashboardPage() {
         const filterParts: string[] = [];
         for (const id of scope.managedDepartmentIds) {
             filterParts.push(`department_id.eq.${id}`);
+        }
+        for (const id of scope.managedTeamIds) {
+            filterParts.push(`team_id.eq.${id}`);
         }
         filterParts.push(`created_by.eq.${scope.user.id}`);
         eventsQuery = eventsQuery.or(filterParts.join(','));
@@ -52,17 +61,17 @@ export default async function AdminDashboardPage() {
     const allEvents = eventsRes.data || [];
     const totalEventsCount = eventsRes.count !== null ? eventsRes.count : allEvents.length;
 
-    let activeSessionsList = activeSessionsRes.data || [];
+    let activeSessionsList = (activeSessionsRes.data || []) as ActiveSessionRow[];
     if (!scope.isSuperAdmin) {
         const allowedEventIds = new Set(allEvents.map(e => e.id));
-        activeSessionsList = activeSessionsList.filter((s: any) => allowedEventIds.has(s.event_id));
+        activeSessionsList = activeSessionsList.filter((s) => s.event_id && allowedEventIds.has(s.event_id));
     }
 
     const workerCount = workerRes.count || 0;
     const activeSessionsCount = activeSessionsList.length;
     const departments = departmentsRes.data || [];
 
-    const formattedActiveSessions = activeSessionsList.map((s: any) => ({
+    const formattedActiveSessions = activeSessionsList.map((s) => ({
         id: s.id as string,
         title: (Array.isArray(s.event) ? s.event[0]?.title : s.event?.title) || "Active Session",
     }));

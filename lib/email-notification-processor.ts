@@ -29,12 +29,39 @@ type EmailNotificationJob = {
 
 export type EmailProcessorSummary = {
     processorId: string;
+    automationEnabled: boolean;
+    testMode: boolean;
+    welcomeProcessingEnabled: boolean;
     remindersQueued: number;
     followUpsQueued: number;
     claimed: number;
     sent: number;
+    cancelled: number;
     deferred: number;
 };
+
+type EmailProcessorConfig = {
+    reminderLeadMinutes: number;
+    followupDelayMinutes: number;
+    maxLatenessMinutes: number;
+    batchSize: number;
+    maxJobsPerRun: number;
+    lockTimeoutMinutes: number;
+    automationEnabled: boolean;
+    testMode: boolean;
+    testRecipients: string[];
+    processWelcomeJobs: boolean;
+};
+
+type DeliveryOutcome =
+    | { status: "sent"; emailId: string }
+    | { status: "cancelled"; reason: string };
+
+type PreparedDelivery =
+    | { toEmail: string; ccEmails: string[]; isTest: boolean; cancelReason?: never }
+    | { cancelReason: string; toEmail?: never; ccEmails?: never; isTest?: never };
+
+const EMAIL_PATTERN = /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/;
 
 function parseBoundedInteger(
     value: string | undefined,
@@ -52,17 +79,49 @@ function parseBoundedInteger(
     return parsed;
 }
 
-function getProcessorConfig() {
+function parseBooleanFlag(value: string | undefined, fallback = false) {
+    if (!value) return fallback;
+
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true") return true;
+    if (normalized === "false") return false;
+
+    throw new Error("Email automation boolean flags must be either true or false.");
+}
+
+function parseEmailList(value: string | undefined) {
+    const recipients = (value || "")
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean);
+
+    for (const email of recipients) {
+        if (!EMAIL_PATTERN.test(email)) {
+            throw new Error("EMAIL_TEST_RECIPIENTS contains an invalid email address.");
+        }
+    }
+
+    return [...new Set(recipients)];
+}
+
+function getProcessorConfig(): EmailProcessorConfig {
+    const testMode = parseBooleanFlag(process.env.EMAIL_TEST_MODE, false);
+    const testRecipients = parseEmailList(process.env.EMAIL_TEST_RECIPIENTS);
+
+    if (testMode && testRecipients.length === 0) {
+        throw new Error("EMAIL_TEST_RECIPIENTS must be configured when EMAIL_TEST_MODE=true.");
+    }
+
     return {
         reminderLeadMinutes: parseBoundedInteger(
             process.env.EMAIL_REMINDER_LEAD_MINUTES,
-            5,
+            30,
             1,
             1440,
         ),
         followupDelayMinutes: parseBoundedInteger(
             process.env.EMAIL_FOLLOWUP_DELAY_MINUTES,
-            5,
+            60,
             1,
             1440,
         ),
@@ -90,6 +149,10 @@ function getProcessorConfig() {
             1,
             60,
         ),
+        automationEnabled: parseBooleanFlag(process.env.EMAIL_AUTOMATION_ENABLED, false),
+        testMode,
+        testRecipients,
+        processWelcomeJobs: parseBooleanFlag(process.env.EMAIL_PROCESS_WELCOME_JOBS, false),
     };
 }
 
@@ -114,13 +177,57 @@ function parseJobDate(value: string | null, field: string) {
     return date;
 }
 
+function isAutomaticNotification(notificationType: NotificationType) {
+    return notificationType === "event_reminder" || notificationType === "attendance_follow_up";
+}
+
+function getClaimableNotificationTypes(config: EmailProcessorConfig): NotificationType[] | null {
+    if (config.automationEnabled && config.processWelcomeJobs) return null;
+    if (config.automationEnabled) return ["event_reminder", "attendance_follow_up"];
+    if (config.processWelcomeJobs) return ["welcome"];
+    return [];
+}
+
+function prepareAutomaticTestDelivery(
+    job: EmailNotificationJob,
+    config: EmailProcessorConfig,
+): PreparedDelivery {
+    if (!config.testMode || !isAutomaticNotification(job.notification_type)) {
+        return {
+            toEmail: job.recipient_email,
+            ccEmails: job.cc_emails || [],
+            isTest: false,
+        };
+    }
+
+    const recipientEmail = job.recipient_email.trim().toLowerCase();
+    if (!config.testRecipients.includes(recipientEmail)) {
+        return {
+            cancelReason: "Automatic email test mode skipped a non-allowlisted recipient",
+        };
+    }
+
+    return {
+        toEmail: recipientEmail,
+        ccEmails: [],
+        isTest: true,
+    };
+}
+
 async function sendNotificationJob(
     job: EmailNotificationJob,
-    fallbackReminderLeadMinutes: number,
-) {
+    config: EmailProcessorConfig,
+): Promise<DeliveryOutcome> {
+    const delivery = prepareAutomaticTestDelivery(job, config);
+    if (typeof delivery.cancelReason === "string") {
+        return { status: "cancelled", reason: delivery.cancelReason };
+    }
+
+    let result;
+
     switch (job.notification_type) {
         case "welcome":
-            return sendWelcomeEmail({
+            result = await sendWelcomeEmail({
                 toEmail: job.recipient_email,
                 firstName: job.recipient_first_name,
                 lastName: job.recipient_last_name || "",
@@ -129,21 +236,24 @@ async function sendNotificationJob(
                 team: job.team_name,
                 notificationId: job.id,
             });
+            break;
         case "event_reminder":
-            return sendEventReminderEmail({
-                toEmail: job.recipient_email,
+            result = await sendEventReminderEmail({
+                toEmail: delivery.toEmail,
                 firstName: job.recipient_first_name,
                 eventTitle: requireValue(job.event_title, "event_title"),
                 eventStart: parseJobDate(job.event_start_at, "event_start_at"),
                 timezone: requireValue(job.event_timezone, "event_timezone"),
                 locationName: job.location_name,
-                reminderLeadMinutes: job.reminder_lead_minutes || fallbackReminderLeadMinutes,
+                reminderLeadMinutes: job.reminder_lead_minutes || config.reminderLeadMinutes,
                 notificationId: job.id,
+                isTest: delivery.isTest,
             });
+            break;
         case "attendance_follow_up":
-            return sendMissedAttendanceEmail({
-                toEmail: job.recipient_email,
-                ccEmails: job.cc_emails || [],
+            result = await sendMissedAttendanceEmail({
+                toEmail: delivery.toEmail,
+                ccEmails: delivery.ccEmails,
                 firstName: job.recipient_first_name,
                 eventTitle: requireValue(job.event_title, "event_title"),
                 eventStart: parseJobDate(job.event_start_at, "event_start_at"),
@@ -152,11 +262,18 @@ async function sendNotificationJob(
                 departmentName: job.department_name,
                 notificationId: job.id,
             });
+            break;
         default: {
             const exhaustiveCheck: never = job.notification_type;
             throw new Error(`Unsupported email notification type: ${exhaustiveCheck}`);
         }
     }
+
+    if (!result.success) {
+        throw new Error(result.error);
+    }
+
+    return { status: "sent", emailId: result.emailId };
 }
 
 export async function processDueEmailNotifications(): Promise<EmailProcessorSummary> {
@@ -169,27 +286,49 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
     const processorId = randomUUID();
     const supabase = createAdminClient();
 
-    const { data: enqueueData, error: enqueueError } = await supabase.rpc(
-        "enqueue_due_email_notifications",
-        {
-            p_reference_time: new Date().toISOString(),
-            p_reminder_lead_minutes: config.reminderLeadMinutes,
-            p_followup_delay_minutes: config.followupDelayMinutes,
-            p_max_lateness_minutes: config.maxLatenessMinutes,
-        },
-    );
+    let remindersQueued = 0;
+    let followUpsQueued = 0;
 
-    if (enqueueError) {
-        throw new Error(`Unable to enqueue email notifications: ${enqueueError.message}`);
+    if (config.automationEnabled) {
+        const { data: enqueueData, error: enqueueError } = await supabase.rpc(
+            "enqueue_due_email_notifications",
+            {
+                p_reference_time: new Date().toISOString(),
+                p_reminder_lead_minutes: config.reminderLeadMinutes,
+                p_followup_delay_minutes: config.followupDelayMinutes,
+                p_max_lateness_minutes: config.maxLatenessMinutes,
+            },
+        );
+
+        if (enqueueError) {
+            throw new Error(`Unable to enqueue email notifications: ${enqueueError.message}`);
+        }
+
+        const enqueueSummary = Array.isArray(enqueueData) ? enqueueData[0] : enqueueData;
+        remindersQueued = Number(enqueueSummary?.reminder_jobs_created || 0);
+        followUpsQueued = Number(enqueueSummary?.followup_jobs_created || 0);
     }
-
-    const enqueueSummary = Array.isArray(enqueueData) ? enqueueData[0] : enqueueData;
-    const remindersQueued = Number(enqueueSummary?.reminder_jobs_created || 0);
-    const followUpsQueued = Number(enqueueSummary?.followup_jobs_created || 0);
 
     let claimed = 0;
     let sent = 0;
+    let cancelled = 0;
     let deferred = 0;
+    const claimableNotificationTypes = getClaimableNotificationTypes(config);
+
+    if (claimableNotificationTypes?.length === 0) {
+        return {
+            processorId,
+            automationEnabled: config.automationEnabled,
+            testMode: config.testMode,
+            welcomeProcessingEnabled: config.processWelcomeJobs,
+            remindersQueued,
+            followUpsQueued,
+            claimed,
+            sent,
+            cancelled,
+            deferred,
+        };
+    }
 
     while (
         claimed < config.maxJobsPerRun
@@ -205,6 +344,7 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
                 p_worker_id: processorId,
                 p_batch_size: currentBatchSize,
                 p_lock_timeout_minutes: config.lockTimeoutMinutes,
+                p_notification_types: claimableNotificationTypes,
             },
         );
 
@@ -219,10 +359,24 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
 
         await Promise.all(jobs.map(async (job) => {
             try {
-                const result = await sendNotificationJob(job, config.reminderLeadMinutes);
+                const result = await sendNotificationJob(job, config);
 
-                if (!result.success) {
-                    throw new Error(result.error);
+                if (result.status === "cancelled") {
+                    const { error: cancelError } = await supabase.rpc(
+                        "cancel_email_notification_job",
+                        {
+                            p_job_id: job.id,
+                            p_worker_id: processorId,
+                            p_error: result.reason,
+                        },
+                    );
+
+                    if (cancelError) {
+                        throw new Error(`Email job could not be cancelled: ${cancelError.message}`);
+                    }
+
+                    cancelled += 1;
+                    return;
                 }
 
                 const { error: markSentError } = await supabase.rpc(
@@ -270,10 +424,14 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
 
     return {
         processorId,
+        automationEnabled: config.automationEnabled,
+        testMode: config.testMode,
+        welcomeProcessingEnabled: config.processWelcomeJobs,
         remindersQueued,
         followUpsQueued,
         claimed,
         sent,
+        cancelled,
         deferred,
     };
 }

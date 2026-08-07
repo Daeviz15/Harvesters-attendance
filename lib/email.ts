@@ -35,6 +35,29 @@ function parsePositiveInteger(value: string | undefined, fallback: number) {
     return parsed;
 }
 
+function parseEmailList(value: string | undefined, configName: string) {
+    const recipients = (value || "")
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean);
+
+    for (const email of recipients) {
+        if (!EMAIL_PATTERN.test(email)) {
+            throw new Error(`${configName} contains an invalid email address.`);
+        }
+    }
+
+    return [...new Set(recipients)];
+}
+
+export function isEmailTestModeEnabled() {
+    return process.env.EMAIL_TEST_MODE?.trim().toLowerCase() === "true";
+}
+
+export function getEmailTestRecipients() {
+    return parseEmailList(process.env.EMAIL_TEST_RECIPIENTS, "EMAIL_TEST_RECIPIENTS");
+}
+
 function parseBoolean(value: string | undefined, fallback: boolean) {
     if (!value) return fallback;
 
@@ -713,4 +736,3 @@ export async function sendCustomBroadcastEmail({
         html,
     }, notificationId);
 }
-

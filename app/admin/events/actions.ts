@@ -1,8 +1,11 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
+import { requireAdminAuth, type AdminAuthScope } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getEmailTestRecipients, isEmailTestModeEnabled, sendCustomBroadcastEmail } from "@/lib/email";
 
 const validRecurrenceDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 const validScheduleFrequencies = ["once", "daily", "weekly", "monthly", "yearly"] as const;
@@ -50,6 +53,7 @@ type EventPayload = {
     recurrence_rule: string | null;
     location_ids: string[];
     department_id: string | null;
+    team_id: string | null;
     email_notifications_enabled: boolean;
     email_target_worker_ids: string[] | null;
 };
@@ -57,6 +61,16 @@ type EventFormResult = { data: EventPayload; error?: never } | { error: string; 
 
 function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "An unexpected error occurred.";
+}
+
+function isNextRedirectError(error: unknown) {
+    return (
+        typeof error === "object"
+        && error !== null
+        && "digest" in error
+        && typeof (error as { digest?: unknown }).digest === "string"
+        && (error as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+    );
 }
 
 function getMutationErrorMessage(action: "create" | "update" | "delete", error: { code?: string; message?: string }) {
@@ -213,32 +227,99 @@ function parseEventFormData(formData: FormData): EventFormResult {
             ),
             location_ids,
             department_id: department_id || null,
+            team_id: null,
             email_notifications_enabled,
             email_target_worker_ids: email_target_worker_ids || null,
         },
     };
 }
 
-import { requireAdminAuth } from "@/lib/rbac";
+async function resolveEventScope(scope: AdminAuthScope, payload: EventPayload) {
+    const adminSupabase = createAdminClient();
+
+    if (payload.department_id) {
+        const { data: department, error } = await adminSupabase
+            .from("departments")
+            .select("id, team_id")
+            .eq("id", payload.department_id)
+            .maybeSingle();
+
+        if (error || !department) {
+            return { error: "Selected department could not be found." } as const;
+        }
+
+        if (!scope.isSuperAdmin && !scope.managedDepartmentIds.includes(department.id)) {
+            return { error: "You can only assign events to departments inside your admin scope." } as const;
+        }
+
+        return { data: { ...payload, team_id: department.team_id || null } } as const;
+    }
+
+    if (scope.isSuperAdmin) {
+        return { data: { ...payload, team_id: null } } as const;
+    }
+
+    if (scope.isTeamAdmin && scope.managedTeamIds.length === 1) {
+        return { data: { ...payload, team_id: scope.managedTeamIds[0] } } as const;
+    }
+
+    return { error: "Please select a department for this event." } as const;
+}
+
+async function validateTargetWorkersInScope(scope: AdminAuthScope, payload: EventPayload) {
+    if (!payload.email_target_worker_ids || payload.email_target_worker_ids.length === 0) {
+        return { success: true } as const;
+    }
+
+    const uniqueTargetIds = Array.from(new Set(payload.email_target_worker_ids));
+    const adminSupabase = createAdminClient();
+    let workersQuery = adminSupabase
+        .from("profiles")
+        .select("id, department_id")
+        .in("id", uniqueTargetIds)
+        .eq("role", "worker");
+
+    if (!scope.isSuperAdmin) {
+        workersQuery = workersQuery.in("department_id", scope.managedDepartmentIds);
+    }
+
+    if (payload.department_id) {
+        workersQuery = workersQuery.eq("department_id", payload.department_id);
+    } else if (payload.team_id) {
+        workersQuery = workersQuery.in("department_id", scope.managedDepartmentIds);
+    }
+
+    const { data: workers, error } = await workersQuery;
+    if (error) {
+        console.error("[Events] Failed to validate target workers:", error);
+        return { error: "Failed to validate selected email recipients." } as const;
+    }
+
+    if ((workers || []).length !== uniqueTargetIds.length) {
+        return { error: "One or more selected email recipients are outside this event scope." } as const;
+    }
+
+    payload.email_target_worker_ids = uniqueTargetIds;
+    return { success: true } as const;
+}
 
 export async function createEvent(formData: FormData) {
     try {
         const scope = await requireAdminAuth();
-        const supabase = await createClient();
 
         const parsed = parseEventFormData(formData);
         if ("error" in parsed) return { error: parsed.error };
 
-        // Department Heads must assign their managed department
-        if (!scope.isSuperAdmin) {
-            if (!parsed.data.department_id || !scope.managedDepartmentIds.includes(parsed.data.department_id)) {
-                return { error: "You can only create events for your managed department." };
-            }
-        }
+        const scopedPayload = await resolveEventScope(scope, parsed.data);
+        if ("error" in scopedPayload) return { error: scopedPayload.error };
 
-        const { error } = await supabase
+        const targetCheck = await validateTargetWorkersInScope(scope, scopedPayload.data);
+        if ("error" in targetCheck) return { error: targetCheck.error };
+
+        const adminSupabase = createAdminClient();
+        const { error } = await adminSupabase
             .from('events')
-            .insert([{ ...parsed.data, created_by: scope.user.id }]);
+            .insert([{ ...scopedPayload.data, created_by: scope.user.id }]);
 
         if (error) {
             console.error("Create Event Error:", error);
@@ -256,13 +337,13 @@ export async function createEvent(formData: FormData) {
 export async function updateEvent(id: string, formData: FormData) {
     try {
         const scope = await requireAdminAuth();
-        const supabase = await createClient();
+        const adminSupabase = createAdminClient();
 
         const eventId = eventIdSchema.safeParse(id);
         if (!eventId.success) return { error: "Invalid event selected." };
 
         // Production Lock: Prevent editing events while a live session is active
-        const { data: activeSession } = await supabase
+        const { data: activeSession } = await adminSupabase
             .from('attendance_sessions')
             .select('id')
             .eq('event_id', eventId.data)
@@ -276,11 +357,11 @@ export async function updateEvent(id: string, formData: FormData) {
         const parsed = parseEventFormData(formData);
         if ("error" in parsed) return { error: parsed.error };
 
-        // Department Head boundary: can only update events in their scope
+        // Boundary: can only update events in caller's scope
         if (!scope.isSuperAdmin) {
-            const { data: existing } = await supabase
+            const { data: existing } = await adminSupabase
                 .from('events')
-                .select('department_id, created_by')
+                .select('department_id, team_id, created_by')
                 .eq('id', eventId.data)
                 .maybeSingle();
 
@@ -288,18 +369,21 @@ export async function updateEvent(id: string, formData: FormData) {
 
             const ownsEvent = existing.created_by === scope.user.id;
             const managesDept = existing.department_id && scope.managedDepartmentIds.includes(existing.department_id);
-            if (!ownsEvent && !managesDept) {
+            const managesTeam = existing.team_id && scope.managedTeamIds.includes(existing.team_id);
+            if (!ownsEvent && !managesDept && !managesTeam) {
                 return { error: "You do not have permission to update this event." };
-            }
-
-            if (parsed.data.department_id && !scope.managedDepartmentIds.includes(parsed.data.department_id)) {
-                return { error: "You can only assign events to your managed department." };
             }
         }
 
-        const { data, error } = await supabase
+        const scopedPayload = await resolveEventScope(scope, parsed.data);
+        if ("error" in scopedPayload) return { error: scopedPayload.error };
+
+        const targetCheck = await validateTargetWorkersInScope(scope, scopedPayload.data);
+        if ("error" in targetCheck) return { error: targetCheck.error };
+
+        const { data, error } = await adminSupabase
             .from('events')
-            .update(parsed.data)
+            .update(scopedPayload.data)
             .eq('id', eventId.data)
             .select('id')
             .maybeSingle();
@@ -325,13 +409,13 @@ export async function updateEvent(id: string, formData: FormData) {
 export async function deleteEvent(id: string) {
     try {
         const scope = await requireAdminAuth();
-        const supabase = await createClient();
+        const adminSupabase = createAdminClient();
 
         const eventId = eventIdSchema.safeParse(id);
         if (!eventId.success) return { error: "Invalid event selected." };
 
         // Production Lock: Prevent deleting events while a live session is active
-        const { data: activeSession } = await supabase
+        const { data: activeSession } = await adminSupabase
             .from('attendance_sessions')
             .select('id')
             .eq('event_id', eventId.data)
@@ -344,9 +428,9 @@ export async function deleteEvent(id: string) {
 
         // Department Head boundary: can only delete events in their scope
         if (!scope.isSuperAdmin) {
-            const { data: existing } = await supabase
+            const { data: existing } = await adminSupabase
                 .from('events')
-                .select('department_id, created_by')
+                .select('department_id, team_id, created_by')
                 .eq('id', eventId.data)
                 .maybeSingle();
 
@@ -354,12 +438,13 @@ export async function deleteEvent(id: string) {
 
             const ownsEvent = existing.created_by === scope.user.id;
             const managesDept = existing.department_id && scope.managedDepartmentIds.includes(existing.department_id);
-            if (!ownsEvent && !managesDept) {
+            const managesTeam = existing.team_id && scope.managedTeamIds.includes(existing.team_id);
+            if (!ownsEvent && !managesDept && !managesTeam) {
                 return { error: "You do not have permission to delete this event." };
             }
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await adminSupabase
             .from('events')
             .delete()
             .eq('id', eventId.data)
@@ -382,8 +467,6 @@ export async function deleteEvent(id: string) {
         return { error: getErrorMessage(e) };
     }
 }
-
-import { sendCustomBroadcastEmail } from "@/lib/email";
 
 export async function sendManualBroadcastEmail(payload: {
     eventTitle?: string;
@@ -422,8 +505,6 @@ export async function sendManualBroadcastEmail(payload: {
             return { error: "No eligible workers found for this email broadcast." };
         }
 
-        // Fetch emails from auth.users (or profiles if stored there)
-        const workerUserIds = workerProfiles.map((p) => p.id);
         const { createAdminClient } = await import("@/utils/supabase/admin");
         const adminSupabase = createAdminClient();
 
@@ -449,17 +530,39 @@ export async function sendManualBroadcastEmail(payload: {
             return true;
         });
 
+        const testMode = isEmailTestModeEnabled();
+        const testRecipients = new Set(getEmailTestRecipients());
+        const deliverableRecipients = testMode
+            ? validRecipients.filter((worker) => {
+                const email = emailMap.get(worker.id)?.toLowerCase().trim();
+                return !!email && testRecipients.has(email);
+            })
+            : validRecipients;
+
         if (validRecipients.length === 0) {
             return { error: "No confirmed email addresses found for the selected worker profiles." };
         }
 
+        if (testMode && testRecipients.size === 0) {
+            return { error: "Manual broadcast test mode requires EMAIL_TEST_RECIPIENTS to be configured." };
+        }
+
+        if (deliverableRecipients.length === 0) {
+            return {
+                error: testMode
+                    ? "Test mode blocked this broadcast because none of the selected workers match EMAIL_TEST_RECIPIENTS."
+                    : "No confirmed email addresses found for the selected worker profiles.",
+            };
+        }
+
         let sentCount = 0;
         let failCount = 0;
+        const skippedCount = validRecipients.length - deliverableRecipients.length;
 
         // Process email dispatch in small chunks of 3 to respect Gmail SMTP connection limits and avoid socket timeouts
         const CHUNK_SIZE = 3;
-        for (let i = 0; i < validRecipients.length; i += CHUNK_SIZE) {
-            const chunk = validRecipients.slice(i, i + CHUNK_SIZE);
+        for (let i = 0; i < deliverableRecipients.length; i += CHUNK_SIZE) {
+            const chunk = deliverableRecipients.slice(i, i + CHUNK_SIZE);
             const results = await Promise.all(
                 chunk.map(async (worker) => {
                     const recipientEmail = emailMap.get(worker.id)!;
@@ -495,10 +598,10 @@ export async function sendManualBroadcastEmail(payload: {
             success: true,
             sentCount,
             failCount,
-            message: `Successfully sent broadcast to ${sentCount} worker${sentCount === 1 ? "" : "s"}${failCount > 0 ? ` (${failCount} failed)` : ""}.`,
+            message: `Successfully sent broadcast to ${sentCount} worker${sentCount === 1 ? "" : "s"}${failCount > 0 ? ` (${failCount} failed)` : ""}${testMode ? ` in test mode (${skippedCount} skipped)` : ""}.`,
         };
     } catch (e: unknown) {
-        if (typeof e === 'object' && e !== null && 'digest' in e && typeof (e as any).digest === 'string' && (e as any).digest.startsWith('NEXT_REDIRECT')) {
+        if (isNextRedirectError(e)) {
             throw e;
         }
         return { error: getErrorMessage(e) };
