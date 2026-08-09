@@ -27,9 +27,8 @@ function getBroadcastTitle(event: BroadcastEventJoin) {
     return event?.title || 'Live Session';
 }
 
-function shouldPromptForMissingBirthday(profile: { role: string | null; worker_id: string | null; date_of_birth: string | null } | null) {
-    if (!profile?.worker_id || profile.date_of_birth) return false;
-    return !['admin', 'super_admin'].includes(profile.role || '');
+function shouldPromptForMissingBirthday(profile: { date_of_birth: string | null } | null) {
+    return !!profile && !profile.date_of_birth;
 }
 
 export default async function DashboardServerPage() {
@@ -42,9 +41,13 @@ export default async function DashboardServerPage() {
 
     const { data: profile } = await supabase
         .from('profiles')
-        .select('id, first_name, last_name, role, department_id, department, team_id, team, worker_id, avatar_url, phone, date_of_birth')
+        .select('id, first_name, last_name, role, is_active, department_id, department, team_id, team, worker_id, avatar_url, phone, date_of_birth')
         .eq('id', user.id)
         .single();
+
+    if (profile?.is_active === false) {
+        redirect('/auth/login?reason=account_inactive');
+    }
 
     let username = "User";
     let initials = "U";
@@ -179,7 +182,6 @@ export default async function DashboardServerPage() {
             initialHistory={initialHistory}
             initialHasMore={initialHasMore}
             avatarUrl={profile?.avatar_url || null}
-            initialDateOfBirth={profile?.date_of_birth || null}
             shouldPromptForBirthday={shouldPromptForMissingBirthday(profile)}
             initialBroadcastSession={formattedBroadcast}
             activeLocations={activeLocations || []}

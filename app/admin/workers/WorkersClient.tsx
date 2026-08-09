@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Edit3, Mail, Phone, CalendarDays } from "lucide-react";
+import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Edit3, Mail, Phone, CalendarDays, Trash2, AlertTriangle } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount, updateWorkerProfile } from "./actions";
+import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount, updateWorkerProfile, removeWorkerProfile } from "./actions";
 
 interface Profile {
     id: string;
@@ -99,6 +99,9 @@ export default function WorkersClient({
     const [editRole, setEditRole] = useState<string>("worker");
     const [editTeamAdminTeamId, setEditTeamAdminTeamId] = useState<string>("");
     const [editDateOfBirth, setEditDateOfBirth] = useState<string>("");
+    const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false);
+    const [removeCountdown, setRemoveCountdown] = useState(10);
+    const [isRemovingWorker, setIsRemovingWorker] = useState(false);
 
     const handleOpenEditModal = (worker: Profile) => {
         setEditingWorker(worker);
@@ -108,7 +111,19 @@ export default function WorkersClient({
         setEditDateOfBirth(worker.date_of_birth || "");
         setEditError(null);
         setEditSuccess(null);
+        setIsRemoveConfirmOpen(false);
+        setRemoveCountdown(10);
+        setIsRemovingWorker(false);
     };
+
+    const closeEditModal = useCallback(() => {
+        if (isEditing || isRemovingWorker) return;
+        setEditingWorker(null);
+        setIsRemoveConfirmOpen(false);
+        setRemoveCountdown(10);
+        setEditError(null);
+        setEditSuccess(null);
+    }, [isEditing, isRemovingWorker]);
 
     const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -146,12 +161,70 @@ export default function WorkersClient({
         } else {
             setEditSuccess("Worker details & ID updated successfully!");
             setTimeout(() => {
-                setEditingWorker(null);
+                closeEditModal();
                 setEditSuccess(null);
                 router.refresh();
             }, 1200);
         }
     };
+
+    useEffect(() => {
+        if (!isRemoveConfirmOpen || isRemovingWorker || removeCountdown <= 0) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            setRemoveCountdown((current) => Math.max(current - 1, 0));
+        }, 1000);
+
+        return () => window.clearTimeout(timer);
+    }, [isRemoveConfirmOpen, isRemovingWorker, removeCountdown]);
+
+    const executeWorkerRemoval = useCallback(async () => {
+        if (!editingWorker || isRemovingWorker) {
+            return;
+        }
+
+        setIsRemovingWorker(true);
+        setEditError(null);
+        setEditSuccess(null);
+
+        try {
+            const res = await removeWorkerProfile(editingWorker.id);
+
+            if (res.error) {
+                setEditError(res.error);
+                setIsRemoveConfirmOpen(false);
+                setRemoveCountdown(10);
+                return;
+            }
+
+            setEditSuccess("Worker removed successfully.");
+            setIsRemoveConfirmOpen(false);
+            setTimeout(() => {
+                closeEditModal();
+                router.refresh();
+            }, 900);
+        } catch {
+            setEditError("An unexpected error occurred while removing this worker.");
+            setIsRemoveConfirmOpen(false);
+            setRemoveCountdown(10);
+        } finally {
+            setIsRemovingWorker(false);
+        }
+    }, [closeEditModal, editingWorker, isRemovingWorker, router]);
+
+    useEffect(() => {
+        if (!isRemoveConfirmOpen || removeCountdown !== 0 || isRemovingWorker || !editingWorker) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            void executeWorkerRemoval();
+        }, 0);
+
+        return () => window.clearTimeout(timer);
+    }, [editingWorker, executeWorkerRemoval, isRemoveConfirmOpen, isRemovingWorker, removeCountdown]);
 
     const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -718,7 +791,7 @@ export default function WorkersClient({
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            onClick={() => !isEditing && setEditingWorker(null)}
+                            onClick={closeEditModal}
                             className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
                         />
                         <motion.div
@@ -738,8 +811,8 @@ export default function WorkersClient({
                                     </p>
                                 </div>
                                 <button
-                                    onClick={() => setEditingWorker(null)}
-                                    disabled={isEditing}
+                                    onClick={closeEditModal}
+                                    disabled={isEditing || isRemovingWorker}
                                     className="p-1.5 sm:p-2 text-neutral-400 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-full transition-colors shrink-0"
                                 >
                                     <X className="w-5 h-5" />
@@ -886,18 +959,84 @@ export default function WorkersClient({
                                     </div>
                                 )}
 
+                                {isSuperAdmin && editingWorker.role === "worker" && (
+                                    <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-500/10 text-red-500">
+                                                <Trash2 className="h-5 w-5" />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <h3 className="text-sm font-bold text-red-700 dark:text-red-300">
+                                                    Remove worker
+                                                </h3>
+                                                <p className="mt-1 text-xs leading-relaxed text-red-700/75 dark:text-red-200/70">
+                                                    This will deactivate the worker&apos;s profile and revoke app access, while keeping attendance, leave, and report history intact.
+                                                </p>
+
+                                                {isRemoveConfirmOpen ? (
+                                                    <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3">
+                                                        <div className="flex items-start gap-2">
+                                                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                                                            <div>
+                                                                <p className="text-xs font-semibold text-red-700 dark:text-red-200">
+                                                                    Final confirmation started.
+                                                                </p>
+                                                                <p className="mt-1 text-xs text-red-700/75 dark:text-red-200/70">
+                                                                    Removing in {removeCountdown} second{removeCountdown === 1 ? "" : "s"}. You can still cancel before the countdown ends.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-red-500/15">
+                                                            <div
+                                                                className="h-full rounded-full bg-red-500 transition-all duration-1000"
+                                                                style={{ width: `${((10 - removeCountdown) / 10) * 100}%` }}
+                                                            />
+                                                        </div>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setIsRemoveConfirmOpen(false);
+                                                                setRemoveCountdown(10);
+                                                            }}
+                                                            disabled={isRemovingWorker}
+                                                            className="mt-3 inline-flex items-center justify-center rounded-lg border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-200"
+                                                        >
+                                                            Cancel removal
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setEditError(null);
+                                                            setEditSuccess(null);
+                                                            setIsRemoveConfirmOpen(true);
+                                                            setRemoveCountdown(10);
+                                                        }}
+                                                        disabled={isEditing || isRemovingWorker}
+                                                        className="mt-3 inline-flex items-center justify-center gap-2 rounded-lg border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-500/10 disabled:opacity-50 dark:text-red-300"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                        Remove this worker
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 pt-4 border-t border-neutral-100 dark:border-white/5">
                                     <button
                                         type="button"
-                                        onClick={() => setEditingWorker(null)}
-                                        disabled={isEditing}
+                                        onClick={closeEditModal}
+                                        disabled={isEditing || isRemovingWorker}
                                         className="w-full sm:w-auto px-4 py-2.5 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-xl transition-colors border border-neutral-200 dark:border-white/10 sm:border-0"
                                     >
                                         Cancel
                                     </button>
                                     <button
                                         type="submit"
-                                        disabled={isEditing}
+                                        disabled={isEditing || isRemovingWorker || isRemoveConfirmOpen}
                                         className="w-full sm:w-auto flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-5 py-2.5 text-sm font-semibold rounded-xl transition-colors shadow-sm disabled:opacity-50"
                                     >
                                         {isEditing ? (

@@ -21,10 +21,12 @@ export interface AdminAuthScope {
     first_name: string;
     last_name: string;
     role: string;
+    is_active: boolean | null;
     department_id: string | null;
     department: string | null;
     team_id: string | null;
     team: string | null;
+    date_of_birth: string | null;
   };
   isSuperAdmin: boolean;
   isTeamAdmin: boolean;
@@ -57,17 +59,17 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
   }
 
   if (!user) {
-    redirect("/auth/login");
+    redirect("/auth/login?reason=login_required&next=/admin");
   }
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, first_name, last_name, role, department_id, department, team_id, team")
+    .select("id, first_name, last_name, role, is_active, department_id, department, team_id, team, date_of_birth")
     .eq("id", user.id)
     .single();
 
-  if (!profile) {
-    redirect("/auth/login");
+  if (!profile || profile.is_active === false) {
+    redirect("/auth/login?reason=login_required&next=/admin");
   }
 
   const isSuperAdmin = profile.role === "admin" || profile.role === "super_admin";

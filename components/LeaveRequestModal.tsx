@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CalendarDays, ChevronDown, Send, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { submitLeaveRequest, fetchMyLeaveRequests } from "@/app/dashboard/actions";
@@ -29,7 +29,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-    const fetchHistory = async () => {
+    const fetchHistory = useCallback(async () => {
         setIsLoadingHistory(true);
         try {
             const data = await fetchMyLeaveRequests();
@@ -39,13 +39,19 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
         } finally {
             setIsLoadingHistory(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        if (isOpen && activeTab === "history") {
-            fetchHistory();
+        if (!isOpen || activeTab !== "history") {
+            return;
         }
-    }, [isOpen, activeTab]);
+
+        const timeoutId = window.setTimeout(() => {
+            void fetchHistory();
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+    }, [isOpen, activeTab, fetchHistory]);
 
     const calculateDuration = () => {
         if (!startDate || !endDate) return 0;
@@ -98,9 +104,10 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                     setEndDate("");
                     setReason("");
                     setActiveTab("history");
+                    void fetchHistory();
                 }, 2000);
             }
-        } catch (err) {
+        } catch {
             setErrorMsg("An unexpected error occurred.");
             setShowConfirmation(false);
         } finally {
@@ -129,6 +136,14 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                     </span>
                 );
         }
+    };
+
+    const formatReviewedAt = (value: string) => {
+        return new Date(value).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric",
+        });
     };
 
     return (
@@ -183,7 +198,10 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                     )}
                                 </button>
                                 <button
-                                    onClick={() => setActiveTab("history")}
+                                    onClick={() => {
+                                        setActiveTab("history");
+                                        void fetchHistory();
+                                    }}
                                     className={`flex-1 py-3 text-[12px] font-semibold uppercase tracking-[0.15em] transition-colors relative ${
                                         activeTab === "history" ? "text-[#34A853]" : "text-white/40 hover:text-white/60"
                                     }`}
@@ -381,7 +399,10 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                     <p className="text-[14px] text-white/40">No leave requests yet</p>
                                                 </div>
                                             ) : (
-                                                history.map((req) => (
+                                                history.map((req) => {
+                                                    const hasReviewDetails = req.status !== "pending" && (req.review_note || req.reviewed_at);
+
+                                                    return (
                                                     <div key={req.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition-colors">
                                                         <div className="flex items-start justify-between mb-3">
                                                             <div>
@@ -391,8 +412,27 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                             {getStatusBadge(req.status)}
                                                         </div>
                                                         <p className="text-[13px] text-white/50 leading-relaxed">{req.reason}</p>
+
+                                                        {hasReviewDetails && (
+                                                            <div className="mt-3 rounded-xl border border-white/5 bg-black/20 p-3">
+                                                                <p className="text-[11px] font-semibold uppercase tracking-wider text-white/35">
+                                                                    Admin Review
+                                                                </p>
+                                                                {req.review_note && (
+                                                                    <p className="mt-1 text-[13px] leading-relaxed text-white/65">
+                                                                        {req.review_note}
+                                                                    </p>
+                                                                )}
+                                                                {req.reviewed_at && (
+                                                                    <p className="mt-2 text-[11px] text-white/30">
+                                                                        Reviewed on {formatReviewedAt(req.reviewed_at)}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                ))
+                                                    );
+                                                })
                                             )}
                                         </motion.div>
                                     )}

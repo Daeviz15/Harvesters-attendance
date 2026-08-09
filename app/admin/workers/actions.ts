@@ -453,3 +453,88 @@ export async function updateWorkerProfile(formData: FormData) {
 
     return { success: true };
 }
+
+export async function removeWorkerProfile(targetUserId: string) {
+    const scope = await requireAdminAuth();
+    if (!scope.isSuperAdmin) {
+        return { error: "Forbidden: Only Super Admins can remove workers." };
+    }
+
+    const parsedTargetUserId = z.string().uuid().safeParse(targetUserId);
+    if (!parsedTargetUserId.success) {
+        return { error: "Invalid worker selected." };
+    }
+
+    if (parsedTargetUserId.data === scope.user.id) {
+        return { error: "You cannot remove your own account." };
+    }
+
+    const adminSupabase = createAdminClient();
+    const { data: targetProfile, error: targetError } = await adminSupabase
+        .from("profiles")
+        .select("id, first_name, last_name, role, is_active")
+        .eq("id", parsedTargetUserId.data)
+        .maybeSingle();
+
+    if (targetError || !targetProfile) {
+        console.error("Error finding worker to remove:", targetError);
+        return { error: "Worker profile not found." };
+    }
+
+    if (targetProfile.role !== "worker") {
+        return { error: "Only worker profiles can be removed here. Demote admin-scoped users first." };
+    }
+
+    if (targetProfile.is_active === false) {
+        return { error: "This worker has already been removed." };
+    }
+
+    const now = new Date().toISOString();
+
+    const { error: updateError } = await adminSupabase
+        .from("profiles")
+        .update({
+            is_active: false,
+            removed_at: now,
+            removed_by: scope.user.id,
+            updated_at: now,
+        })
+        .eq("id", parsedTargetUserId.data)
+        .eq("role", "worker")
+        .neq("id", scope.user.id);
+
+    if (updateError) {
+        console.error("Error soft-removing worker profile:", updateError);
+        return { error: "Failed to remove worker. Please try again." };
+    }
+
+    const { error: headCleanupError } = await adminSupabase
+        .from("departments")
+        .update({ head_user_id: null })
+        .eq("head_user_id", parsedTargetUserId.data);
+
+    if (headCleanupError) {
+        console.error("Error clearing removed worker department-head assignment:", headCleanupError);
+        return { error: "Worker removed, but failed to clear their department-head assignment. Please review departments." };
+    }
+
+    const { error: banError } = await adminSupabase.auth.admin.updateUserById(parsedTargetUserId.data, {
+        ban_duration: "876000h",
+    });
+
+    if (banError) {
+        console.error("Error banning removed worker auth account:", banError);
+        return { error: "Worker removed from active records, but auth access could not be revoked. Please review the user in Supabase Auth." };
+    }
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/workers");
+    revalidatePath("/admin/departments");
+    revalidatePath("/admin/sessions");
+    revalidatePath("/admin/reports");
+
+    return {
+        success: true,
+        message: `${targetProfile.first_name} ${targetProfile.last_name || ""}`.trim() || "Worker",
+    };
+}

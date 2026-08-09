@@ -36,6 +36,7 @@ export async function updateSession(request: NextRequest) {
   const isOnboardingComplete = user?.user_metadata?.onboarding_complete === true;
   const isAuthPage = request.nextUrl.pathname.startsWith('/auth/login') || request.nextUrl.pathname.startsWith('/auth/signup');
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth/callback');
+  const isAdminPage = request.nextUrl.pathname.startsWith('/admin');
   const isDashboardPage = request.nextUrl.pathname.startsWith('/dashboard');
   const isOnboardingPage = request.nextUrl.pathname.startsWith('/onboarding');
   const isPublicPage = request.nextUrl.pathname === '/' || request.nextUrl.pathname.startsWith('/privacy') || request.nextUrl.pathname.startsWith('/terms');
@@ -45,10 +46,12 @@ export async function updateSession(request: NextRequest) {
     return supabaseResponse;
   }
 
-  if (!user && (isDashboardPage || isOnboardingPage)) {
+  if (!user && (isAdminPage || isDashboardPage || isOnboardingPage)) {
     
     const url = request.nextUrl.clone()
     url.pathname = '/auth/login'
+    url.searchParams.set('reason', 'login_required')
+    url.searchParams.set('next', `${request.nextUrl.pathname}${request.nextUrl.search}`)
     return NextResponse.redirect(url)
   }
 

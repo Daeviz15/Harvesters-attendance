@@ -35,4 +35,7 @@ export interface LeaveRequest {
   reason: string;
   status: LeaveStatus;
   created_at: string;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
 }

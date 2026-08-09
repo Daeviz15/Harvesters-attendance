@@ -1,5 +1,6 @@
 import { requireAdminAuth } from "@/lib/rbac";
 import AdminNavigation from "@/components/AdminNavigation";
+import BirthdayPrompt from "@/components/BirthdayPrompt";
 import ThemeToggle from "@/components/ThemeToggle";
 import Link from "next/link";
 
@@ -9,7 +10,7 @@ export default async function AdminLayout({
     children: React.ReactNode;
 }) {
     // Zero-Trust Server-Side RBAC Verification
-    const { initials, isSuperAdmin, scopeSummary } = await requireAdminAuth();
+    const { initials, isSuperAdmin, scopeSummary, profile } = await requireAdminAuth();
 
     return (
         <div className="min-h-screen bg-neutral-50 dark:bg-background text-foreground flex flex-col md:flex-row">
@@ -52,6 +53,7 @@ export default async function AdminLayout({
                     {children}
                 </main>
             </div>
+            <BirthdayPrompt initialOpen={!profile.date_of_birth} />
         </div>
     );
 }

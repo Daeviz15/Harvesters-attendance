@@ -7,8 +7,11 @@ import { createAdminClient } from '@/utils/supabase/admin'
 import { z } from 'zod'
 import { generateTeamWorkerId } from '@/lib/workerId'
 import { validateDateOfBirth } from '@/lib/date-of-birth'
+import { getSafeAuthRedirectPath } from '@/lib/auth-redirect'
 
 type ActionState = { error?: string } | null
+
+const inactiveAccountMessage = 'Your account has been deactivated. Please contact your department head, team lead, or an administrator for support.'
 
 const onboardingSchema = z.object({
   workerId: z.string().trim().optional(),
@@ -52,6 +55,7 @@ function isAllowedAvatarUrl(
 export async function login(_prevState: ActionState, formData: FormData) {
   const email = formData.get('email') as string
   const password = formData.get('password') as string
+  const redirectTo = getSafeAuthRedirectPath(formData.get('redirectTo'))
 
   if (!email || !password) {
     return { error: 'Email and password are required' }
@@ -65,11 +69,30 @@ export async function login(_prevState: ActionState, formData: FormData) {
   })
 
   if (error) {
+    const message = error.message.toLowerCase()
+    if (message.includes('ban') || message.includes('deactivated') || message.includes('inactive')) {
+      return { error: inactiveAccountMessage }
+    }
+
     return { error: error.message }
   }
 
+  const { data: { user } } = await supabase.auth.getUser()
+  if (user) {
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('is_active')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (!profileError && profile?.is_active === false) {
+      await supabase.auth.signOut()
+      return { error: inactiveAccountMessage }
+    }
+  }
+
   revalidatePath('/', 'layout')
-  redirect('/dashboard')
+  redirect(redirectTo)
 }
 
 export async function signup(_prevState: ActionState, formData: FormData) {

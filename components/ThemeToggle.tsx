@@ -3,14 +3,18 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sun, Moon, Laptop } from "lucide-react";
-import { useTheme } from "./ThemeProvider";
+import { useTheme } from "@/components/ThemeProvider";
 
 export default function ThemeToggle() {
     const [mounted, setMounted] = useState(false);
     const { theme, setTheme } = useTheme();
 
     useEffect(() => {
-        setMounted(true);
+        const timeoutId = window.setTimeout(() => {
+            setMounted(true);
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
     }, []);
 
     if (!mounted) {

@@ -20,6 +20,52 @@ const locationSchema = z.object({
     lng: z.coerce.number().min(-180).max(180)
 });
 
+const leaveRequestSchema = z.object({
+    leaveType: z.enum(["Sick Leave", "Personal", "Travel", "Family Emergency", "Other"]),
+    startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Please select a valid start date."),
+    endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Please select a valid end date."),
+    reason: z.string().trim().min(5, "Please provide a brief reason.").max(500, "Reason cannot exceed 500 characters."),
+});
+
+function parseDateOnly(value: string) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(Date.UTC(year, month - 1, day));
+}
+
+async function getActiveProfileForUser(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
+    const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('id, department_id, department, team, team_id, is_active')
+        .eq('id', userId)
+        .maybeSingle();
+
+    if (error) {
+        if (error.code === '42703' || error.message?.toLowerCase().includes('is_active')) {
+            const { data: fallbackProfile, error: fallbackError } = await supabase
+                .from('profiles')
+                .select('id, department_id, department, team, team_id')
+                .eq('id', userId)
+                .maybeSingle();
+
+            if (fallbackError) {
+                console.error('[Dashboard] Failed to verify active profile fallback:', fallbackError);
+                return null;
+            }
+
+            return fallbackProfile ? { ...fallbackProfile, is_active: true } : null;
+        }
+
+        console.error('[Dashboard] Failed to verify active profile:', error);
+        return null;
+    }
+
+    if (!profile || profile.is_active === false) {
+        return null;
+    }
+
+    return profile;
+}
+
 export async function updateMyDateOfBirth(formData: FormData) {
     const birthDate = validateDateOfBirth(formData.get('dateOfBirth'));
     if (birthDate.error || !birthDate.dateOfBirth) {
@@ -33,20 +79,28 @@ export async function updateMyDateOfBirth(formData: FormData) {
         return { error: 'Authentication required. Please log in.' };
     }
 
-    const { error } = await supabase
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return { error: 'Your account is no longer active. Please contact an administrator.' };
+    }
+
+    const { data: updatedProfile, error } = await supabase
         .from('profiles')
         .update({
             date_of_birth: birthDate.dateOfBirth,
             updated_at: new Date().toISOString(),
         })
-        .eq('id', user.id);
+        .eq('id', user.id)
+        .select('id')
+        .maybeSingle();
 
-    if (error) {
+    if (error || !updatedProfile) {
         console.error('[Dashboard] Failed to update date of birth:', error);
         return { error: 'Could not save your birthday. Please try again.' };
     }
 
     revalidatePath('/dashboard');
+    revalidatePath('/admin');
     return { success: true };
 }
 
@@ -98,11 +152,10 @@ export async function verifyAndCheckIn(formData: FormData) {
     const eventTeamId = eventObj?.team_id ?? null;
 
     // Fetch the user's profile once — used for department authorization AND check-in record
-    const { data: workerProfile } = await supabase
-        .from('profiles')
-        .select('department_id, department, team, team_id')
-        .eq('id', user.id)
-        .single();
+    const workerProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!workerProfile) {
+        return { error: 'Your account is no longer active. Please contact an administrator.' };
+    }
 
     // Defense-in-depth: If the session is department/team-scoped, verify worker membership.
     if (eventDeptId || eventTeamId) {
@@ -249,6 +302,11 @@ export async function manualCheckOut(formData: FormData) {
         return { error: 'Unauthorized request.' };
     }
 
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return { error: 'Your account is no longer active. Please contact an administrator.' };
+    }
+
     // Update the active check-in record for this user, chaining .select() to verify rows were modified
     const { data, error: dbError } = await supabase
         .from('attendance_logs')
@@ -298,6 +356,11 @@ export async function fetchAttendanceHistory(
         return { logs: [], hasMore: false };
     }
 
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return { logs: [], hasMore: false };
+    }
+
     let query = supabase
         .from('attendance_logs')
         .select('id, check_in_time, check_out_time, status')
@@ -339,22 +402,26 @@ export async function fetchAttendanceHistory(
  * Submits a new leave request for the authenticated user.
  */
 export async function submitLeaveRequest(formData: FormData) {
-    const leaveType = formData.get('leaveType') as string;
-    const startDate = formData.get('startDate') as string;
-    const endDate = formData.get('endDate') as string;
-    const reason = formData.get('reason') as string;
+    const parsed = leaveRequestSchema.safeParse({
+        leaveType: formData.get('leaveType'),
+        startDate: formData.get('startDate'),
+        endDate: formData.get('endDate'),
+        reason: formData.get('reason'),
+    });
 
-    if (!leaveType || !startDate || !endDate || !reason) {
-        return { error: "All fields are required." };
+    if (!parsed.success) {
+        return { error: parsed.error.issues[0]?.message || "Please check your leave request." };
     }
 
-    // Server-side date validation
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const { leaveType, startDate, endDate, reason } = parsed.data;
 
-    if (start < today) {
+    // Server-side date validation
+    const start = parseDateOnly(startDate);
+    const end = parseDateOnly(endDate);
+    const today = new Date();
+    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    if (start < todayUtc) {
         return { error: "Start Date cannot be in the past." };
     }
 
@@ -369,6 +436,11 @@ export async function submitLeaveRequest(formData: FormData) {
         return { error: "Unauthorized request." };
     }
 
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return { error: 'Your account is no longer active. Please contact an administrator.' };
+    }
+
     const { error } = await supabase
         .from('leave_requests')
         .insert({
@@ -376,7 +448,7 @@ export async function submitLeaveRequest(formData: FormData) {
             leave_type: leaveType,
             start_date: startDate,
             end_date: endDate,
-            reason: reason,
+            reason,
             status: 'pending'
         });
 
@@ -385,6 +457,7 @@ export async function submitLeaveRequest(formData: FormData) {
         return { error: "Failed to submit request. Please try again." };
     }
 
+    revalidatePath('/admin/leave-requests');
     return { success: true };
 }
 
@@ -396,12 +469,17 @@ export async function fetchMyLeaveRequests() {
     const { data: { user } } = await supabase.auth.getUser();
 
     if (!user) {
-        throw new Error("Unauthorized request.");
+        return [];
+    }
+
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return [];
     }
 
     const { data, error } = await supabase
         .from('leave_requests')
-        .select('*')
+        .select('id, user_id, leave_type, start_date, end_date, reason, status, created_at, reviewed_at, review_note')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 

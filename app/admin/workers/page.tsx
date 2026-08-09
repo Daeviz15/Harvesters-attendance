@@ -60,7 +60,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
 
     let query = supabase
         .from('profiles')
-        .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id, phone, date_of_birth', { count: 'exact' });
+        .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id, phone, date_of_birth', { count: 'exact' })
+        .eq('is_active', true);
 
     // Zero-Trust Scope Isolation: If Department Head, restrict to managed department(s)
     if (!isSuperAdmin) {
@@ -121,7 +122,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     if (error && (error.code === '42703' || error.message?.toLowerCase().includes('worker_id'))) {
         let fallbackQuery = supabase
             .from('profiles')
-            .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, phone, date_of_birth', { count: 'exact' });
+            .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, phone, date_of_birth', { count: 'exact' })
+            .eq('is_active', true);
 
         if (!isSuperAdmin) {
             fallbackQuery = fallbackQuery.in('department_id', managedDepartmentIds);

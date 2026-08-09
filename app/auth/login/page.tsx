@@ -4,15 +4,43 @@ import { motion } from "framer-motion";
 import { Mail, Lock } from "lucide-react";
 import Link from "next/link";
 import Image from "next/image";
-import { useActionState, useState } from "react";
+import { Suspense, useActionState, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { login } from "@/app/auth/actions";
+import { getSafeAuthRedirectPath } from "@/lib/auth-redirect";
 import { createClient } from "@/utils/supabase/client";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import ThemeToggle from "@/components/ThemeToggle";
 
-export default function LoginPage() {
+function LoginPageContent() {
     const [state, formAction, isPending] = useActionState(login, null);
     const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+    const [hashErrorCode, setHashErrorCode] = useState<string | null>(null);
+    const searchParams = useSearchParams();
+    const redirectTo = getSafeAuthRedirectPath(searchParams.get("next"));
+    const reason = searchParams.get("reason");
+    const queryErrorCode = searchParams.get("error_code");
+    const authError = searchParams.get("error");
+    const isInactiveAccountError =
+        reason === "account_inactive"
+        || queryErrorCode === "user_banned"
+        || hashErrorCode === "user_banned";
+    const loginNotice = reason === "login_required"
+        ? "Please log in first to access the admin portal."
+        : isInactiveAccountError
+            ? "Your account has been deactivated. Please contact your department head, team lead, or an administrator for support."
+            : authError === "auth-failed"
+                ? "We could not complete your login. Please try again or contact an administrator if this continues."
+            : null;
+
+    useEffect(() => {
+        const timeoutId = window.setTimeout(() => {
+            const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+            setHashErrorCode(hashParams.get("error_code"));
+        }, 0);
+
+        return () => window.clearTimeout(timeoutId);
+    }, []);
 
     const handleGoogleLogin = async () => {
         setIsGoogleLoading(true);
@@ -20,7 +48,7 @@ export default function LoginPage() {
         await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
             },
         });
         // We don't set loading back to false here because the page will redirect to Google
@@ -87,11 +115,20 @@ export default function LoginPage() {
                 </div>
 
                 <form action={formAction} className="space-y-8 flex-1">
+                    {loginNotice && (
+                        <div className="bg-[#34A853]/10 border border-[#34A853]/20 text-[#34A853] text-[13px] p-3 rounded-lg text-center">
+                            {loginNotice}
+                        </div>
+                    )}
+
                     {state?.error && (
                         <div className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-[13px] p-3 rounded-lg text-center">
                             {state.error}
                         </div>
                     )}
+
+                    <input type="hidden" name="redirectTo" value={redirectTo} />
+
                     {/* Email */}
                     <div className="relative group">
                         <label className="text-[11px] font-medium uppercase tracking-wider text-neutral-500 dark:text-white/50 block mb-2">Email Address</label>
@@ -153,7 +190,7 @@ export default function LoginPage() {
 
                 <div className="mt-10 text-center">
                     <p className="text-[13px] text-neutral-500 dark:text-white/50">
-                        Don't have an account?{" "}
+                        Don&apos;t have an account?{" "}
                         <Link href="/auth/signup" className="text-[#34A853] font-semibold hover:underline">
                             Sign Up
                         </Link>
@@ -161,6 +198,14 @@ export default function LoginPage() {
                 </div>
             </motion.div>
         </main>
+    );
+}
+
+export default function LoginPage() {
+    return (
+        <Suspense fallback={null}>
+            <LoginPageContent />
+        </Suspense>
     );
 }
 
