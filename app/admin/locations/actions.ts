@@ -1,24 +1,12 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { requireSuperAdminAuth } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 
 export async function createLocation(formData: FormData) {
+    await requireSuperAdminAuth();
     const supabase = await createClient();
-
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    if (profile?.role !== 'admin') {
-        return { error: "Unauthorized" };
-    }
 
     const name = formData.get("name") as string;
     const latitude = parseFloat(formData.get("latitude") as string);
@@ -50,21 +38,8 @@ export async function createLocation(formData: FormData) {
 }
 
 export async function updateLocation(formData: FormData) {
+    await requireSuperAdminAuth();
     const supabase = await createClient();
-
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    if (profile?.role !== 'admin') {
-        return { error: "Unauthorized" };
-    }
 
     const id = formData.get("id") as string;
     const name = formData.get("name") as string;
@@ -97,21 +72,8 @@ export async function updateLocation(formData: FormData) {
 }
 
 export async function toggleLocationActive(id: string, currentStatus: boolean) {
+    await requireSuperAdminAuth();
     const supabase = await createClient();
-
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    if (profile?.role !== 'admin') {
-        return { error: "Unauthorized" };
-    }
 
     const { error } = await supabase
         .from('locations')
@@ -129,21 +91,8 @@ export async function toggleLocationActive(id: string, currentStatus: boolean) {
 }
 
 export async function deleteLocation(id: string) {
+    await requireSuperAdminAuth();
     const supabase = await createClient();
-
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    if (profile?.role !== 'admin') {
-        return { error: "Unauthorized" };
-    }
 
     const { error } = await supabase
         .from('locations')

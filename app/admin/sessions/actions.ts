@@ -1,7 +1,8 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth as requireAdminAuth } from "@/lib/rbac";
+import { canManageWorkerAccess, PROXY_CHECK_IN_RESTRICTED_MESSAGE } from "@/lib/admin-permissions";
 import { revalidatePath } from "next/cache";
 
 function getErrorMessage(error: unknown) {
@@ -189,6 +190,10 @@ export async function extendSessionTime(sessionId: string, additionalMinutes: nu
 export async function searchWorkersForCheckIn(query: string, sessionId: string) {
     try {
         const scope = await requireAdminAuth();
+        if (!canManageWorkerAccess(scope)) {
+            return { error: PROXY_CHECK_IN_RESTRICTED_MESSAGE };
+        }
+
         const { isSuperAdmin, managedDepartmentIds } = scope;
         const supabase = await createClient();
 
@@ -289,6 +294,10 @@ export async function searchWorkersForCheckIn(query: string, sessionId: string) 
 export async function manualWorkerCheckIn(params: { workerId: string; sessionId: string; note?: string }) {
     try {
         const scope = await requireAdminAuth();
+        if (!canManageWorkerAccess(scope)) {
+            return { error: PROXY_CHECK_IN_RESTRICTED_MESSAGE };
+        }
+
         const { isSuperAdmin, managedDepartmentIds, user: adminUser } = scope;
         const supabase = await createClient();
 

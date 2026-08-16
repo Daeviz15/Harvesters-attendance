@@ -2,10 +2,11 @@
 
 import { useCallback, useState, useEffect } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
-import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Edit3, Mail, Phone, CalendarDays, Trash2, AlertTriangle } from "lucide-react";
+import { Search, User, Building2, Shield, Loader2, ChevronLeft, ChevronRight, Crown, X, UserPlus, Edit3, Mail, Phone, CalendarDays, Trash2, AlertTriangle, Download } from "lucide-react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { assignDepartmentHead, removeDepartmentHead, createWorkerAccount, updateWorkerProfile, removeWorkerProfile } from "./actions";
+import { ADD_WORKER_RESTRICTED_MESSAGE } from "@/lib/admin-permissions";
 
 interface Profile {
     id: string;
@@ -58,6 +59,7 @@ interface WorkersClientProps {
     activeSessions?: ActiveSessionOption[];
     isSuperAdmin: boolean;
     canManageDepartmentHeads: boolean;
+    canManageWorkerAccess: boolean;
 }
 
 export default function WorkersClient({
@@ -73,6 +75,7 @@ export default function WorkersClient({
     activeSessions = [],
     isSuperAdmin,
     canManageDepartmentHeads,
+    canManageWorkerAccess,
 }: WorkersClientProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -124,6 +127,19 @@ export default function WorkersClient({
         setEditError(null);
         setEditSuccess(null);
     }, [isEditing, isRemovingWorker]);
+
+    const canEditRoleForWorker = (worker: Profile | null) => {
+        if (!worker) return false;
+        if (isSuperAdmin) return true;
+        return canManageDepartmentHeads && ["worker", "reports_admin"].includes(worker.role || "worker");
+    };
+
+    const getRoleLabel = (role: string) => {
+        if (role === "team_admin") return "Team Admin";
+        if (role === "reports_admin") return "Reports Only";
+        if (role === "admin" || role === "super_admin") return "Admin";
+        return "Worker";
+    };
 
     const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -338,6 +354,9 @@ export default function WorkersClient({
 
     const pageStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
     const pageEnd = Math.min(currentPage * pageSize, totalCount);
+    const workersExportHref = selectedDepartment === "all"
+        ? "/api/export/workers"
+        : `/api/export/workers?department=${encodeURIComponent(selectedDepartment)}`;
 
     return (
         <div className="w-full max-w-7xl mx-auto space-y-8">
@@ -380,8 +399,20 @@ export default function WorkersClient({
                         </select>
                     </div>
 
+                    <a
+                        href={workersExportHref}
+                        className="flex items-center justify-center gap-2 border border-neutral-200 dark:border-white/10 bg-white dark:bg-black/40 hover:bg-neutral-50 dark:hover:bg-white/5 text-neutral-700 dark:text-white/80 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm shrink-0"
+                    >
+                        <Download className="w-4 h-4" />
+                        Download Workers
+                    </a>
+
                     <button
                         onClick={() => {
+                            if (!canManageWorkerAccess) {
+                                setError(ADD_WORKER_RESTRICTED_MESSAGE);
+                                return;
+                            }
                             setIsRegisterModalOpen(true);
                             setRegisterError(null);
                             setRegisterSuccess(null);
@@ -496,14 +527,16 @@ export default function WorkersClient({
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
-                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide uppercase ${worker.role === 'admin'
+                                                <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide uppercase ${worker.role === 'admin' || worker.role === 'super_admin'
                                                         ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20'
                                                         : worker.role === 'team_admin'
                                                             ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/20'
-                                                            : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                                            : worker.role === 'reports_admin'
+                                                                ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20'
+                                                                : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
                                                     }`}>
-                                                    {worker.role === 'admin' ? <Shield className="w-3 h-3" /> : worker.role === 'team_admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
-                                                    {worker.role === 'team_admin' ? 'Team Admin' : worker.role}
+                                                    {worker.role === 'admin' || worker.role === 'super_admin' || worker.role === 'reports_admin' ? <Shield className="w-3 h-3" /> : worker.role === 'team_admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                                    {getRoleLabel(worker.role)}
                                                 </div>
                                                 {worker.role === 'team_admin' && worker.team_admin_team_name && (
                                                     <div className="mt-1 text-[11px] text-neutral-500 dark:text-white/45">
@@ -893,7 +926,7 @@ export default function WorkersClient({
                                             ))}
                                         </select>
                                     </div>
-                                    {isSuperAdmin ? (
+                                    {canEditRoleForWorker(editingWorker) ? (
                                         <div>
                                             <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
                                                 Role
@@ -910,9 +943,22 @@ export default function WorkersClient({
                                                 className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
                                             >
                                                 <option value="worker">Worker</option>
-                                                <option value="admin">Admin</option>
-                                                <option value="team_admin">Team Admin</option>
+                                                {isSuperAdmin && <option value="admin">Admin</option>}
+                                                {isSuperAdmin && <option value="team_admin">Team Admin</option>}
+                                                <option value="reports_admin">Reports Only Admin</option>
                                             </select>
+                                            {editRole === "reports_admin" && (
+                                                <p className="mt-1 text-[11px] text-neutral-400">
+                                                    {isSuperAdmin
+                                                        ? "Reports access is limited to the selected department. Leave department unassigned only when this admin should read global reports."
+                                                        : "Reports access will be limited to your team scope."}
+                                                </p>
+                                            )}
+                                            {!isSuperAdmin && editRole !== "reports_admin" && (
+                                                <p className="mt-1 text-[11px] text-neutral-400">
+                                                    Team Admins can only switch scoped workers between Worker and Reports Only Admin.
+                                                </p>
+                                            )}
                                         </div>
                                     ) : (
                                         <input type="hidden" name="role" value={editingWorker.role} />

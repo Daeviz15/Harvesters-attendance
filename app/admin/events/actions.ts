@@ -2,7 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { requireAdminAuth, type AdminAuthScope } from "@/lib/rbac";
+import { requireAdminManagementAuth as requireAdminAuth, type AdminAuthScope } from "@/lib/rbac";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getEmailTestRecipients, isEmailTestModeEnabled, sendCustomBroadcastEmail } from "@/lib/email";

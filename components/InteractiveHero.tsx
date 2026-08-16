@@ -2,12 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ChevronRight, MapPin, Clock, Shield } from "lucide-react";
+import { ChevronRight, MapPin, Shield } from "lucide-react";
 import { motion, useScroll } from "framer-motion";
 
 export default function InteractiveHero() {
     const [isCheckedIn, setIsCheckedIn] = useState(false);
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
     
     const { scrollY } = useScroll();
@@ -16,32 +15,12 @@ export default function InteractiveHero() {
 
     
     useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isCheckedIn && !isOutside) {
-            interval = setInterval(() => {
-                setElapsedSeconds((prev) => prev + 1);
-            }, 1000);
-        } else if (!isCheckedIn) {
-            setElapsedSeconds(0);
-        }
-        return () => clearInterval(interval);
-    }, [isCheckedIn, isOutside]);
-
-    useEffect(() => {
         return scrollY.on("change", (latest) => {
             
             setIsLeaving(latest > 330);
             setIsOutside(latest > 530);
         });
     }, [scrollY]);
-
-    const formatTime = (totalSeconds: number) => {
-        const h = Math.floor(totalSeconds / 3600);
-        const m = Math.floor((totalSeconds % 3600) / 60);
-        const s = totalSeconds % 60;
-        if (h > 0) return `${h}h ${m}m ${s}s`;
-        return `${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
-    };
 
     return (
         <section className="relative z-10 max-w-6xl mx-auto px-6 pt-16 md:pt-24 lg:pt-32 pb-16 md:pb-24 flex flex-col items-center">
@@ -182,17 +161,15 @@ export default function InteractiveHero() {
                                         initial={{ scale: 0.8, opacity: 0 }}
                                         animate={{ scale: 1, opacity: 1 }}
                                         className="relative w-48 h-48 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-500 shadow-2xl bg-[#34A853]/10 border-2 border-[#34A853]/30 cursor-pointer"
-                                        onClick={() => setIsCheckedIn(false)}
+                                        onClick={() => {
+                                            setIsCheckedIn(false);
+                                        }}
                                         title="Click to reset mockup"
                                     >
                                         <div className="w-2.5 h-2.5 rounded-full bg-[#34A853] animate-pulse mb-1"></div>
                                         <span className="text-[24px] font-bold tracking-tight text-[#34A853]">
-                                            Active
+                                            Checked In
                                         </span>
-                                        <div className="flex items-center gap-1.5 text-white/60 mt-0.5">
-                                            <Clock className="w-3.5 h-3.5" />
-                                            <span className="text-sm font-mono tracking-wider">{formatTime(elapsedSeconds)}</span>
-                                        </div>
                                         <span className="text-[9px] text-white/35 tracking-wider uppercase mt-2 text-center px-4">
                                             Auto-checkout on exit
                                         </span>
@@ -204,7 +181,9 @@ export default function InteractiveHero() {
                                         <div className="absolute top-[85px] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[220px] h-[220px] bg-[#34A853]/20 rounded-full animate-ping opacity-75" style={{ animationDuration: '2.5s' }}></div>
 
                                         <button
-                                            onClick={() => setIsCheckedIn(true)}
+                                            onClick={() => {
+                                                setIsCheckedIn(true);
+                                            }}
                                             className="relative w-48 h-48 rounded-full bg-[#34A853] hover:bg-[#2e9347] transition-colors flex flex-col items-center justify-center shadow-lg shadow-[#34A853]/20 z-10 border-4 border-[#0a0a0a] cursor-pointer"
                                         >
                                             <span className="text-[28px] font-bold tracking-tight mb-1 text-white">Check In</span>

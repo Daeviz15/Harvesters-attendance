@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { BarChart3, Users, CheckCircle2, ShieldCheck, MapPin, Building2, TrendingUp, Calendar, Activity } from "lucide-react";
+import { BarChart3, Users, ShieldCheck, MapPin, Building2, TrendingUp, Calendar, Activity } from "lucide-react";
 import type { AnalyticsData } from "@/app/admin/sessions/actions";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -19,12 +19,27 @@ const TEAM_COLORS: Record<string, { bg: string; text: string; border: string; ba
     GENERAL: { bg: "bg-neutral-500/10", text: "text-neutral-600 dark:text-neutral-400", border: "border-neutral-500/20", bar: "bg-neutral-500" },
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+type ChartTooltipPayload = {
+    value?: number | string;
+    payload?: {
+        title?: string;
+    };
+};
+
+const CustomTooltip = ({
+    active,
+    payload,
+    label,
+}: {
+    active?: boolean;
+    payload?: ChartTooltipPayload[];
+    label?: string;
+}) => {
     if (active && payload && payload.length) {
         return (
             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 p-3 rounded-xl shadow-lg">
                 <p className="text-sm font-bold text-neutral-900 dark:text-white mb-1">{label}</p>
-                <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{payload[0].payload.title}</p>
+                <p className="text-xs text-neutral-500 dark:text-neutral-400 mb-2">{payload[0].payload?.title}</p>
                 <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-[#34A853]" />
                     <span className="text-sm font-semibold text-[#34A853]">

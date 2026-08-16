@@ -31,10 +31,14 @@ export interface AdminAuthScope {
   isSuperAdmin: boolean;
   isTeamAdmin: boolean;
   isDeptHead: boolean;
+  isReportsAdmin: boolean;
+  isReportsOnlyAdmin: boolean;
   managedTeams: ManagedTeam[];
   managedTeamIds: string[];
   managedDepartments: ManagedDepartment[];
   managedDepartmentIds: string[];
+  reportDepartmentIds: string[];
+  hasGlobalReportAccess: boolean;
   scopeSummary: string;
   initials: string;
 }
@@ -74,6 +78,7 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
 
   const isSuperAdmin = profile.role === "admin" || profile.role === "super_admin";
   const hasTeamAdminRole = profile.role === "team_admin";
+  const hasReportsAdminRole = profile.role === "reports_admin";
   const teamIds = new Set<string>();
 
   if (hasTeamAdminRole && profile.team_id) {
@@ -113,17 +118,19 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
   const managedTeamIds = managedTeams.map((team) => team.id);
   const managedDepartments: ManagedDepartment[] = [];
 
-  const { data: headDepartments, error: headDepartmentsError } = await supabase
-    .from("departments")
-    .select("id, name, team_id")
-    .eq("head_user_id", user.id)
-    .eq("is_active", true);
+  if (!hasReportsAdminRole) {
+    const { data: headDepartments, error: headDepartmentsError } = await supabase
+      .from("departments")
+      .select("id, name, team_id")
+      .eq("head_user_id", user.id)
+      .eq("is_active", true);
 
-  if (headDepartmentsError) {
-    console.error("[RBAC] Failed to fetch department head scope:", headDepartmentsError);
+    if (headDepartmentsError) {
+      console.error("[RBAC] Failed to fetch department head scope:", headDepartmentsError);
+    }
+
+    managedDepartments.push(...((headDepartments || []) as ManagedDepartment[]));
   }
-
-  managedDepartments.push(...((headDepartments || []) as ManagedDepartment[]));
 
   if (managedTeamIds.length > 0) {
     const { data: teamDepartments, error: teamDepartmentsError } = await supabase
@@ -141,9 +148,66 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
 
   const dedupedManagedDepartments = uniqueById(managedDepartments);
   const isTeamAdmin = hasTeamAdminRole && managedTeams.length > 0;
-  const isDeptHead = dedupedManagedDepartments.length > 0;
+  const isDeptHead = !hasReportsAdminRole && dedupedManagedDepartments.length > 0;
 
-  if (!isSuperAdmin && !isTeamAdmin && !isDeptHead) {
+  const reportDepartments: ManagedDepartment[] = hasReportsAdminRole && !isSuperAdmin ? [] : [...dedupedManagedDepartments];
+  let reportsAdminTeamName: string | null = null;
+  let reportsAdminDepartmentName: string | null = null;
+
+  if (hasReportsAdminRole && !isSuperAdmin) {
+    if (profile.team_id) {
+      const { data: reportsTeam, error: reportsTeamError } = await supabase
+        .from("teams")
+        .select("id, name")
+        .eq("id", profile.team_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (reportsTeamError) {
+        console.error("[RBAC] Failed to fetch reports admin team scope:", reportsTeamError);
+      }
+
+      if (reportsTeam) {
+        reportsAdminTeamName = reportsTeam.name;
+
+        const { data: scopedDepartments, error: scopedDepartmentsError } = await supabase
+          .from("departments")
+          .select("id, name, team_id")
+          .eq("is_active", true)
+          .eq("team_id", reportsTeam.id);
+
+        if (scopedDepartmentsError) {
+          console.error("[RBAC] Failed to fetch reports admin team departments:", scopedDepartmentsError);
+        }
+
+        reportDepartments.push(...((scopedDepartments || []) as ManagedDepartment[]));
+      }
+    } else if (profile.department_id) {
+      const { data: reportsDepartment, error: reportsDepartmentError } = await supabase
+        .from("departments")
+        .select("id, name, team_id")
+        .eq("id", profile.department_id)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (reportsDepartmentError) {
+        console.error("[RBAC] Failed to fetch reports admin department scope:", reportsDepartmentError);
+      }
+
+      if (reportsDepartment) {
+        reportsAdminDepartmentName = reportsDepartment.name;
+        reportDepartments.push(reportsDepartment as ManagedDepartment);
+      }
+    }
+  }
+
+  const dedupedReportDepartments = uniqueById(reportDepartments);
+  const reportDepartmentIds = dedupedReportDepartments.map((department) => department.id);
+  const hasGlobalReportAccess = isSuperAdmin || (hasReportsAdminRole && !profile.team_id && !profile.department_id);
+  const isReportsAdmin = hasReportsAdminRole;
+  const isReportsOnlyAdmin = isReportsAdmin && !isSuperAdmin;
+
+  if (!isSuperAdmin && !isTeamAdmin && !isDeptHead && !isReportsAdmin) {
     redirect("/dashboard");
   }
 
@@ -157,6 +221,16 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
     scopeSummary = `Team Admin — ${managedTeams.map((team) => team.name).join(", ")}`;
   } else if (isDeptHead) {
     scopeSummary = `Dept Head — ${dedupedManagedDepartments.map((department) => department.name).join(", ")}`;
+  } else if (isReportsAdmin) {
+    if (hasGlobalReportAccess) {
+      scopeSummary = "Reports Admin (Global)";
+    } else if (reportsAdminTeamName) {
+      scopeSummary = `Reports Admin — ${reportsAdminTeamName}`;
+    } else if (reportsAdminDepartmentName) {
+      scopeSummary = `Reports Admin — ${reportsAdminDepartmentName}`;
+    } else {
+      scopeSummary = "Reports Admin";
+    }
   }
 
   return {
@@ -165,10 +239,14 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
     isSuperAdmin,
     isTeamAdmin,
     isDeptHead,
+    isReportsAdmin,
+    isReportsOnlyAdmin,
     managedTeams,
     managedTeamIds,
     managedDepartments: dedupedManagedDepartments,
     managedDepartmentIds,
+    reportDepartmentIds,
+    hasGlobalReportAccess,
     scopeSummary,
     initials,
   };
@@ -180,7 +258,33 @@ export async function requireAdminAuth(): Promise<AdminAuthScope> {
 export async function requireSuperAdminAuth(): Promise<AdminAuthScope> {
   const scope = await requireAdminAuth();
   if (!scope.isSuperAdmin) {
-    redirect("/admin");
+    redirect(scope.isReportsOnlyAdmin ? "/admin/reports" : "/admin");
+  }
+  return scope;
+}
+
+/**
+ * Strict gatekeeper for admin-management surfaces.
+ *
+ * Reports-only admins may enter the admin shell, but they must not be able to
+ * call mutation/read actions for workers, events, departments, sessions,
+ * locations, email tests, or leave review workflows.
+ */
+export async function requireAdminManagementAuth(): Promise<AdminAuthScope> {
+  const scope = await requireAdminAuth();
+  if (scope.isReportsOnlyAdmin) {
+    redirect("/admin/reports");
+  }
+  return scope;
+}
+
+/**
+ * Gatekeeper for reports surfaces and report exports.
+ */
+export async function requireReportsAuth(): Promise<AdminAuthScope> {
+  const scope = await requireAdminAuth();
+  if (!scope.isSuperAdmin && !scope.isTeamAdmin && !scope.isDeptHead && !scope.isReportsAdmin) {
+    redirect("/dashboard");
   }
   return scope;
 }

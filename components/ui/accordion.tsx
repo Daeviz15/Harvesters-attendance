@@ -16,12 +16,10 @@ const AccordionContext = React.createContext<AccordionContextType>({
 export function Accordion({
   children,
   className = "",
-  type = "single",
   collapsible = true,
 }: {
   children: React.ReactNode;
   className?: string;
-  type?: "single";
   collapsible?: boolean;
 }) {
   const [activeValue, setActiveValue] = React.useState<string | null>(null);

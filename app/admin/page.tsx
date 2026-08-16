@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth } from "@/lib/rbac";
+import { canManageWorkerAccess } from "@/lib/admin-permissions";
 import AdminDashboardClient from "./AdminDashboardClient";
 import { getDepartmentAttendanceBreakdown } from "./sessions/actions";
 
@@ -10,7 +11,7 @@ type ActiveSessionRow = {
 };
 
 export default async function AdminDashboardPage() {
-    const scope = await requireAdminAuth();
+    const scope = await requireAdminManagementAuth();
     const supabase = await createClient();
 
     // 1. Build Workers Count Query with RBAC scope
@@ -86,6 +87,7 @@ export default async function AdminDashboardPage() {
             departments={departments}
             activeSessions={formattedActiveSessions}
             initialBreakdown={initialBreakdown}
+            canManageWorkerAccess={canManageWorkerAccess(scope)}
         />
     );
 }

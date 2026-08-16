@@ -25,6 +25,7 @@ const allNavLinks = [
 interface AdminNavigationProps {
     initial: string;
     isSuperAdmin?: boolean;
+    isReportsOnlyAdmin?: boolean;
     scopeSummary?: string;
 }
 
@@ -32,14 +33,17 @@ function AdminSidebarContent({
     pathname,
     onSignOut,
     isSuperAdmin = true,
+    isReportsOnlyAdmin = false,
     scopeSummary = "Admin Portal",
 }: {
     pathname: string;
     onSignOut: () => void;
     isSuperAdmin?: boolean;
+    isReportsOnlyAdmin?: boolean;
     scopeSummary?: string;
 }) {
     const navLinks = allNavLinks.filter((link) => {
+        if (isReportsOnlyAdmin) return link.href === "/admin/reports";
         if (link.developmentOnly && process.env.NODE_ENV !== "development") return false;
         return !link.superAdminOnly || isSuperAdmin;
     });
@@ -116,6 +120,7 @@ function AdminSidebarContent({
 export default function AdminNavigation({
     initial,
     isSuperAdmin = true,
+    isReportsOnlyAdmin = false,
     scopeSummary = "Admin Portal",
 }: AdminNavigationProps) {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -153,6 +158,7 @@ export default function AdminNavigation({
                     pathname={pathname}
                     onSignOut={handleSignOut}
                     isSuperAdmin={isSuperAdmin}
+                    isReportsOnlyAdmin={isReportsOnlyAdmin}
                     scopeSummary={scopeSummary}
                 />
             </aside>
@@ -216,6 +222,7 @@ export default function AdminNavigation({
                                 pathname={pathname}
                                 onSignOut={handleSignOut}
                                 isSuperAdmin={isSuperAdmin}
+                                isReportsOnlyAdmin={isReportsOnlyAdmin}
                                 scopeSummary={scopeSummary}
                             />
                         </motion.aside>

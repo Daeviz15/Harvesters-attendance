@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth } from "@/lib/rbac";
 import DepartmentsClient from "./DepartmentsClient";
 import { redirect } from "next/navigation";
 
@@ -20,7 +20,7 @@ export type DepartmentRow = {
 };
 
 export default async function DepartmentsPage() {
-    const scope = await requireAdminAuth();
+    const scope = await requireAdminManagementAuth();
     if (!scope.isSuperAdmin && !scope.isTeamAdmin) {
         redirect("/admin");
     }

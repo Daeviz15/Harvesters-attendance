@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Plus, Edit2, Trash2, X, AlertCircle, Loader2, Navigation, Power, PowerOff } from "lucide-react";
+import { MapPin, Plus, Edit2, Trash2, X, AlertCircle, Loader2, Power, PowerOff } from "lucide-react";
 import { createLocation, updateLocation, deleteLocation, toggleLocationActive } from "./actions";
 
 type LocationType = {
@@ -110,7 +110,7 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                     </div>
                     <h3 className="text-lg font-semibold text-neutral-900 dark:text-white mb-2">No Locations Set</h3>
                     <p className="text-neutral-500 dark:text-neutral-400 max-w-sm mx-auto mb-6">
-                        You haven't added any branch locations yet. Add a location to enable geofencing check-ins.
+                        You haven&apos;t added any branch locations yet. Add a location to enable geofencing check-ins.
                     </p>
                     <button
                         onClick={openCreateModal}

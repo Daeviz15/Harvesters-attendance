@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth as requireAdminAuth } from "@/lib/rbac";
 import { createClient } from "@/utils/supabase/server";
 import type { LeaveStatus } from "@/lib/types";
 

@@ -1,4 +1,4 @@
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth } from "@/lib/rbac";
 import { getAdminLeaveRequests } from "./actions";
 import LeaveRequestsClient from "./LeaveRequestsClient";
 import type { LeaveStatus } from "@/lib/types";
@@ -16,7 +16,7 @@ function normalizeStatus(value: string | string[] | undefined): LeaveStatus | "a
 export default async function LeaveRequestsPage(props: {
     searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-    const scope = await requireAdminAuth();
+    const scope = await requireAdminManagementAuth();
     const searchParams = await props.searchParams;
     const result = await getAdminLeaveRequests(searchParams);
 

@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth } from "@/lib/rbac";
+import { canManageWorkerAccess } from "@/lib/admin-permissions";
 import SessionsClient from "./SessionsClient";
 
 export const metadata = {
@@ -18,7 +19,7 @@ type ActiveSession = {
 };
 
 export default async function AdminSessionsPage() {
-    const scope = await requireAdminAuth();
+    const scope = await requireAdminManagementAuth();
     const supabase = await createClient();
 
     // Build events query with RBAC scope filtering
@@ -89,6 +90,7 @@ export default async function AdminSessionsPage() {
         <SessionsClient 
             events={events} 
             activeSessions={formattedSessions} 
+            canProxySignInWorkers={canManageWorkerAccess(scope)}
         />
     );
 }

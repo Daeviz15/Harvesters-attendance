@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
     Users, Activity, Calendar, UserPlus, Zap,
-    X, Loader2, Building2, Search, User, Check,
+    X, Loader2, Search, User, Check,
     ClipboardCheck
 } from "lucide-react";
 import Link from "next/link";
@@ -12,6 +12,7 @@ import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { createWorkerAccount } from "@/app/admin/workers/actions";
 import { searchWorkersForCheckIn, manualWorkerCheckIn } from "@/app/admin/sessions/actions";
+import { ADD_WORKER_RESTRICTED_MESSAGE, PROXY_CHECK_IN_RESTRICTED_MESSAGE } from "@/lib/admin-permissions";
 
 import DepartmentAttendanceBreakdown from "@/components/admin/DepartmentAttendanceBreakdown";
 import type { MinistryGroup } from "./sessions/actions";
@@ -50,6 +51,7 @@ interface AdminDashboardClientProps {
         totalCheckedIn: number;
         ministries: MinistryGroup[];
     };
+    canManageWorkerAccess: boolean;
 }
 
 const REASON_CHIPS = [
@@ -66,6 +68,7 @@ export default function AdminDashboardClient({
     departments,
     activeSessions,
     initialBreakdown,
+    canManageWorkerAccess,
 }: AdminDashboardClientProps) {
     const router = useRouter();
 
@@ -86,6 +89,12 @@ export default function AdminDashboardClient({
     const [checkInError, setCheckInError] = useState<string | null>(null);
     const [checkInSuccess, setCheckInSuccess] = useState<string | null>(null);
     const [checkInNote, setCheckInNote] = useState("");
+    const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
+
+    const showPermissionNotice = (message: string) => {
+        setPermissionNotice(message);
+        window.setTimeout(() => setPermissionNotice(null), 5000);
+    };
 
     
     const handleRegisterSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -110,7 +119,7 @@ export default function AdminDashboardClient({
         if (res.error) {
             setRegisterError(res.error);
         } else {
-            const wid = (res as any).workerId || "";
+            const wid = "workerId" in res ? res.workerId || "" : "";
             setRegisterSuccess(`Worker registered! ID: ${wid}`);
             setTimeout(() => {
                 setIsRegisterModalOpen(false);
@@ -128,6 +137,9 @@ export default function AdminDashboardClient({
         setIsSearching(false);
         if (res.data) {
             setSearchResults(res.data as SearchWorkerResult[]);
+        } else if (res.error) {
+            setSearchResults([]);
+            setCheckInError(res.error);
         }
     }, []);
 
@@ -200,7 +212,13 @@ export default function AdminDashboardClient({
                 {/* Quick Action Buttons */}
                 <div className="flex gap-3">
                     <button
-                        onClick={() => setIsRegisterModalOpen(true)}
+                        onClick={() => {
+                            if (!canManageWorkerAccess) {
+                                showPermissionNotice(ADD_WORKER_RESTRICTED_MESSAGE);
+                                return;
+                            }
+                            setIsRegisterModalOpen(true);
+                        }}
                         className="flex items-center gap-2 px-4 py-2.5 bg-[#34A853] hover:bg-[#2e9347] text-white rounded-xl font-semibold text-sm transition-all shadow-sm hover:shadow-md"
                     >
                         <UserPlus className="w-4 h-4" />
@@ -208,6 +226,10 @@ export default function AdminDashboardClient({
                     </button>
                     <button
                         onClick={() => {
+                            if (!canManageWorkerAccess) {
+                                showPermissionNotice(PROXY_CHECK_IN_RESTRICTED_MESSAGE);
+                                return;
+                            }
                             if (activeSessions.length === 0) {
                                 setCheckInError("No active sessions. Start a session first.");
                                 setTimeout(() => setCheckInError(null), 3000);
@@ -225,6 +247,19 @@ export default function AdminDashboardClient({
                     </button>
                 </div>
             </div>
+
+            <AnimatePresence>
+                {permissionNotice && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-sm p-3 rounded-xl"
+                    >
+                        {permissionNotice}
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* Inline error for no active sessions */}
             <AnimatePresence>

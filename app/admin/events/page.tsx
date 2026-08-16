@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth } from "@/lib/rbac";
 import EventsClient from "./EventsClient";
 
 export const metadata = {
@@ -7,7 +7,7 @@ export const metadata = {
 };
 
 export default async function AdminEventsPage() {
-    const scope = await requireAdminAuth();
+    const scope = await requireAdminManagementAuth();
     const supabase = await createClient();
 
     // Build events query with RBAC scope filtering

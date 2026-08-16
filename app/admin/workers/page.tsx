@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth } from "@/lib/rbac";
+import { canManageWorkerAccess } from "@/lib/admin-permissions";
 import WorkersClient from "./WorkersClient";
 
 export const metadata = {
@@ -46,7 +47,7 @@ type ActiveSessionRow = {
 
 export default async function WorkersPage(props: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
     // Zero-Trust Server-Side RBAC Scope Retrieval
-    const { isSuperAdmin, isTeamAdmin, managedDepartmentIds } = await requireAdminAuth();
+    const { isSuperAdmin, isTeamAdmin, managedDepartmentIds } = await requireAdminManagementAuth();
 
     const searchParams = await props.searchParams;
     const parsedPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
@@ -222,6 +223,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             activeSessions={formattedActiveSessions}
             isSuperAdmin={isSuperAdmin}
             canManageDepartmentHeads={isSuperAdmin || isTeamAdmin}
+            canManageWorkerAccess={canManageWorkerAccess({ isSuperAdmin, isTeamAdmin })}
         />
     );
 }

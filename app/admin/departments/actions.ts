@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdminAuth, type AdminAuthScope } from "@/lib/rbac";
+import { requireAdminManagementAuth as requireAdminAuth, type AdminAuthScope } from "@/lib/rbac";
 import { createAdminClient } from "@/utils/supabase/admin";
 
 const departmentSchema = z.object({

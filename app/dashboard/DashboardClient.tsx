@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import {
-    MapPin, Clock, Calendar, CheckCircle2,
+    MapPin, Calendar, CheckCircle2,
     CircleDashed, LogOut, Menu, X, CalendarDays,
     AlertTriangle, Loader2, History, Crown
 } from "lucide-react";
@@ -191,8 +191,6 @@ interface DashboardClientProps {
     team: string | null;
     avatarUrl?: string | null;
     initialIsCheckedIn: boolean;
-    checkInTime: string | null;
-    serverTime: string;
     initialHistory: AttendanceLog[];
     initialHasMore: boolean;
     // initialLiveFeed: LiveFeedEvent[]; // COMMENTED OUT: Live Feed disabled per team request
@@ -204,7 +202,7 @@ interface DashboardClientProps {
 
 export default function DashboardClient({
     userId, username, workerId, initials, department, team, avatarUrl,
-    initialIsCheckedIn, checkInTime, serverTime,
+    initialIsCheckedIn,
     initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession, activeLocations, headDepartmentName, shouldPromptForBirthday
 }: DashboardClientProps) {
     const router = useRouter();
@@ -217,7 +215,6 @@ export default function DashboardClient({
     const [actionError, setActionError] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const [gracePeriodRemaining] = useState<number | null>(null);
 
     // Attendance history state (cursor-based pagination)
@@ -366,36 +363,6 @@ export default function DashboardClient({
             document.removeEventListener('visibilitychange', handleVisibility);
         };
     }, [broadcastSession]);
-
-    // Simulated Timer for active shift (with client-server clock drift correction)
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        let initialTimer: ReturnType<typeof setTimeout> | undefined;
-        if (isCheckedIn && checkInTime) {
-            const clientNow = Date.now();
-            const serverStart = new Date(serverTime).getTime();
-            const drift = clientNow - serverStart;
-
-            const start = new Date(checkInTime).getTime();
-
-            const getElapsed = () => {
-                const adjustedNow = Date.now() - drift;
-                return Math.max(0, Math.floor((adjustedNow - start) / 1000));
-            };
-
-            initialTimer = setTimeout(() => setElapsedSeconds(getElapsed()), 0);
-
-            interval = setInterval(() => {
-                setElapsedSeconds(getElapsed());
-            }, 1000);
-        } else {
-            initialTimer = setTimeout(() => setElapsedSeconds(0), 0);
-        }
-        return () => {
-            if (initialTimer) clearTimeout(initialTimer);
-            clearInterval(interval);
-        };
-    }, [isCheckedIn, checkInTime, serverTime]);
 
     const formatTime = (totalSeconds: number) => {
         const h = Math.floor(totalSeconds / 3600);
@@ -601,18 +568,14 @@ export default function DashboardClient({
                                 )}
 
                                 {isCheckedIn ? (
-                                    /* Active Session Status Display (non-interactive) */
+                                    /* Checked-in Session Status Display (non-interactive) */
                                     <div
                                         className="relative w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-500 shadow-2xl bg-[#34A853]/10 border-2 border-[#34A853]/30"
                                     >
                                         <div className="w-3 h-3 rounded-full bg-[#34A853] animate-pulse mb-2"></div>
                                         <span className="text-[28px] md:text-[34px] font-bold tracking-tight text-[#34A853]">
-                                            Active
+                                            Checked In
                                         </span>
-                                        <div className="flex items-center gap-2 text-neutral-600 dark:text-white/60 mt-1">
-                                            <Clock className="w-4 h-4" />
-                                            <span className="text-base md:text-lg font-mono tracking-wider">{formatTime(elapsedSeconds)}</span>
-                                        </div>
                                         <span className="text-[11px] text-neutral-500 dark:text-white/35 tracking-wider uppercase mt-2 text-center px-4">
                                             Waiting for Admin<br />to end session
                                         </span>

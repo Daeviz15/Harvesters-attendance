@@ -120,7 +120,7 @@ export default function AnimatedTimeline() {
                         >
                             <h3 className="text-2xl md:text-3xl font-bold text-[#34A853] mb-4">Location Verified Check-In</h3>
                             <p className="text-sm md:text-base text-neutral-600 dark:text-neutral-400 leading-relaxed max-w-sm">
-                                When you arrive at church, simply open the app. Our GPS-powered geofencing will instantly verify your presence at the premises. Tap "Check In" to record your attendance seamlessly.
+                                When you arrive at church, simply open the app. Our GPS-powered geofencing will instantly verify your presence at the premises. Tap &quot;Check In&quot; to record your attendance seamlessly.
                             </p>
                             <div className="mt-8 flex gap-2.5 opacity-30 justify-center md:justify-start w-full">
                                 {[...Array(10)].map((_, i) => (

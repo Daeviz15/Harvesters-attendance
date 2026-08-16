@@ -3,7 +3,7 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
     Search, ChevronLeft, ChevronRight, ChevronDown, Download, RotateCcw,
-    CheckCircle2, Clock, Users, Building2, AlertTriangle, Star,
+    CheckCircle2, Users, Building2, AlertTriangle, Star,
     CalendarDays, MapPin,
 } from "lucide-react";
 import Image from "next/image";
@@ -130,28 +130,6 @@ function exportCSV(filtered: ReportLog[]) {
 
 // ── Subcomponents ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ status }: { status: string }) {
-    if (status === "completed") {
-        return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide bg-[#34A853]/10 text-[#237539] dark:text-[#7be3a0] border border-[#34A853]/25">
-                <CheckCircle2 className="w-3 h-3" />Completed
-            </span>
-        );
-    }
-    if (status === "auto_completed") {
-        return (
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
-                <Clock className="w-3 h-3" />Auto-completed
-            </span>
-        );
-    }
-    return (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold uppercase tracking-wide bg-[#34A853]/10 text-[#34A853] border border-[#34A853]/20 animate-pulse">
-            <Clock className="w-3 h-3" />Active
-        </span>
-    );
-}
-
 function AvatarChip({ name, url }: { name: string; url: string | null }) {
     return (
         <div className="w-9 h-9 rounded-full bg-[#34A853]/10 border border-[#34A853]/20 flex items-center justify-center text-[11px] font-bold text-[#34A853] overflow-hidden relative shrink-0">
@@ -216,7 +194,8 @@ export default function ReportsClient({ logs, departments, events, latestSession
 
     // Reset open groups whenever filters or grouping mode changes (closed by default)
     useEffect(() => {
-        setOpenGroups(new Set());
+        const resetTimer = window.setTimeout(() => setOpenGroups(new Set()), 0);
+        return () => window.clearTimeout(resetTimer);
     }, [groupBy, search, department, event, status, dateFrom, dateTo]);
 
     // ── Filtering ──────────────────────────────────────────────────────────
@@ -302,7 +281,7 @@ export default function ReportsClient({ logs, departments, events, latestSession
             map.get(k)!.push(r);
         });
 
-        let entries = [...map.entries()];
+        const entries = [...map.entries()];
         if (groupBy === "date" || groupBy === "week") {
             entries.sort((a, b) => b[0].localeCompare(a[0]));
         } else {

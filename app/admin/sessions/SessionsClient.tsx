@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Activity, Calendar, Play, Square, Clock, Loader2, AlertTriangle, X, UserPlus, UserCheck, Search, User, Check } from "lucide-react";
 import { beginSession, endSession, extendSessionTime, searchWorkersForCheckIn, manualWorkerCheckIn } from "./actions";
 import { createClient } from "@/utils/supabase/client";
+import { PROXY_CHECK_IN_RESTRICTED_MESSAGE } from "@/lib/admin-permissions";
 
 type EventType = {
     id: string;
@@ -88,10 +89,12 @@ function getEventSchedule(event: EventType) {
 
 export default function SessionsClient({ 
     events, 
-    activeSessions: initialActiveSessions 
+    activeSessions: initialActiveSessions,
+    canProxySignInWorkers,
 }: { 
     events: EventType[], 
-    activeSessions: ActiveSessionType[] 
+    activeSessions: ActiveSessionType[],
+    canProxySignInWorkers: boolean,
 }) {
     const router = useRouter();
     const supabase = useMemo(() => createClient(), []);
@@ -120,6 +123,7 @@ export default function SessionsClient({
     const [customReason, setCustomReason] = useState("");
     const [checkingInWorkerId, setCheckingInWorkerId] = useState<string | null>(null);
     const [checkInMessage, setCheckInMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+    const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
 
     // Extend session time modal state
     const [extendModalSession, setExtendModalSession] = useState<ActiveSessionType | null>(null);
@@ -159,6 +163,8 @@ export default function SessionsClient({
         setIsSearchingWorkers(false);
         if (res.data) {
             setSearchResults(res.data);
+        } else if (res.error) {
+            setCheckInMessage({ type: 'error', text: res.error });
         }
     }, []);
 
@@ -341,6 +347,19 @@ export default function SessionsClient({
                 </p>
             </div>
 
+            <AnimatePresence>
+                {permissionNotice && (
+                    <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="bg-amber-500/10 border border-amber-500/25 text-amber-700 dark:text-amber-300 text-sm p-3 rounded-xl"
+                    >
+                        {permissionNotice}
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* ACTIVE SESSIONS PANEL */}
             {activeSessions.length > 0 && (
                 <div className="mb-10">
@@ -397,6 +416,11 @@ export default function SessionsClient({
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 relative z-10">
                                     <button
                                         onClick={() => {
+                                            if (!canProxySignInWorkers) {
+                                                setPermissionNotice(PROXY_CHECK_IN_RESTRICTED_MESSAGE);
+                                                window.setTimeout(() => setPermissionNotice(null), 5000);
+                                                return;
+                                            }
                                             setCheckInModalSession(session);
                                             setSearchQuery("");
                                             setCheckInMessage(null);

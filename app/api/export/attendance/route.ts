@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireReportsAuth } from "@/lib/rbac";
 
 function escapeCSVValue(value: unknown): string {
     if (value === null || value === undefined) return "";
@@ -34,7 +34,7 @@ function calculateDuration(checkIn: string, checkOut: string | null): string {
 export async function GET(req: NextRequest) {
     try {
         // 1. Zero-Trust RBAC Verification
-        const { isSuperAdmin, managedDepartmentIds } = await requireAdminAuth();
+        const { hasGlobalReportAccess, reportDepartmentIds } = await requireReportsAuth();
         const supabase = await createClient();
 
         // 2. Parse and Validate Query Parameters
@@ -49,17 +49,21 @@ export async function GET(req: NextRequest) {
         const tzOffsetRaw = parseInt(searchParams.get('tzOffset') || '0', 10);
         const tzOffset = Number.isFinite(tzOffsetRaw) && Math.abs(tzOffsetRaw) <= 840 ? tzOffsetRaw : 0;
 
-        // 3. Pre-fetch worker IDs for Department Heads to enforce zero-trust data isolation
+        // 3. Pre-fetch worker IDs for scoped report readers to enforce zero-trust data isolation
         let deptWorkerIds: string[] | null = null;
-        if (!isSuperAdmin) {
-            const { data: deptWorkers } = await supabase
-                .from('profiles')
-                .select('id')
-                .in('department_id', managedDepartmentIds);
-
-            deptWorkerIds = (deptWorkers || []).map((w) => w.id);
-            if (deptWorkerIds.length === 0) {
+        if (!hasGlobalReportAccess) {
+            if (reportDepartmentIds.length === 0) {
                 deptWorkerIds = ['00000000-0000-0000-0000-000000000000'];
+            } else {
+                const { data: deptWorkers } = await supabase
+                    .from('profiles')
+                    .select('id')
+                    .in('department_id', reportDepartmentIds);
+
+                deptWorkerIds = (deptWorkers || []).map((w) => w.id);
+                if (deptWorkerIds.length === 0) {
+                    deptWorkerIds = ['00000000-0000-0000-0000-000000000000'];
+                }
             }
         }
 
@@ -132,8 +136,8 @@ export async function GET(req: NextRequest) {
                 .order('check_in_time', { ascending: false })
                 .range(offset, offset + PAGE_SIZE - 1);
 
-            // Zero-Trust Isolation: Department Heads only export logs for their department workers
-            if (!isSuperAdmin && deptWorkerIds) {
+            // Zero-Trust Isolation: scoped report readers only export logs for permitted workers
+            if (!hasGlobalReportAccess && deptWorkerIds) {
                 query = query.in('user_id', deptWorkerIds);
             }
 

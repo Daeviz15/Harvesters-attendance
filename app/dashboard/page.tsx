@@ -177,8 +177,6 @@ export default async function DashboardServerPage() {
             team={team}
             workerId={workerId}
             initialIsCheckedIn={!!activeSession}
-            checkInTime={activeSession?.check_in_time || null}
-            serverTime={new Date().toISOString()}
             initialHistory={initialHistory}
             initialHasMore={initialHasMore}
             avatarUrl={profile?.avatar_url || null}

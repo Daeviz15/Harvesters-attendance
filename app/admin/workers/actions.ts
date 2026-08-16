@@ -6,7 +6,15 @@ import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { generateTeamWorkerId } from "@/lib/workerId";
 import { validateDateOfBirth } from "@/lib/date-of-birth";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireAdminManagementAuth as requireAdminAuth } from "@/lib/rbac";
+import { ADD_WORKER_RESTRICTED_MESSAGE, canManageWorkerAccess } from "@/lib/admin-permissions";
+
+const editableRoles = ["worker", "admin", "team_admin", "reports_admin"] as const;
+type EditableRole = (typeof editableRoles)[number];
+
+function isEditableRole(role: string): role is EditableRole {
+    return editableRoles.includes(role as EditableRole);
+}
 
 export async function assignDepartmentHead(workerId: string) {
     const scope = await requireAdminAuth();
@@ -120,6 +128,10 @@ const registerWorkerSchema = z.object({
 
 export async function createWorkerAccount(formData: FormData) {
     const scope = await requireAdminAuth();
+    if (!canManageWorkerAccess(scope)) {
+        return { error: ADD_WORKER_RESTRICTED_MESSAGE };
+    }
+
     const { isSuperAdmin, managedDepartmentIds, user: adminUser } = scope;
     const supabase = await createClient();
     const adminClient = createAdminClient();
@@ -280,7 +292,7 @@ export async function createWorkerAccount(formData: FormData) {
 
 export async function updateWorkerProfile(formData: FormData) {
     const scope = await requireAdminAuth();
-    const { isSuperAdmin, managedDepartmentIds } = scope;
+    const { isSuperAdmin, isTeamAdmin, managedDepartmentIds } = scope;
     const adminSupabase = createAdminClient();
 
     const targetUserId = formData.get("targetUserId")?.toString();
@@ -292,7 +304,7 @@ export async function updateWorkerProfile(formData: FormData) {
     const teamAdminTeamId = formData.get("teamAdminTeamId")?.toString() || null;
     const dateOfBirth = formData.get("dateOfBirth")?.toString() || "";
     let role = formData.get("role")?.toString() || "worker";
-    if (!["worker", "admin", "team_admin"].includes(role)) {
+    if (!isEditableRole(role)) {
         return { error: "Invalid role selected." };
     }
 
@@ -313,9 +325,12 @@ export async function updateWorkerProfile(formData: FormData) {
         return { error: "Target worker profile not found." };
     }
 
-    // Zero-Trust Boundary Checks for Department Heads
+    if (targetUserId === scope.user.id && role !== targetProfile.role) {
+        return { error: "For security, you cannot change your own admin role." };
+    }
+
+    // Zero-Trust Boundary Checks for scoped admins.
     if (!isSuperAdmin) {
-        // Must belong to managed department
         if (!targetProfile.department_id || !managedDepartmentIds.includes(targetProfile.department_id)) {
             return { error: "Forbidden: You can only edit workers in your assigned department." };
         }
@@ -325,11 +340,27 @@ export async function updateWorkerProfile(formData: FormData) {
         if (departmentId && !managedDepartmentIds.includes(departmentId)) {
             return { error: "Forbidden: You can only move workers within your assigned departments." };
         }
-        if (targetProfile.role !== "worker") {
+
+        const targetRole = targetProfile.role || "worker";
+        const canTeamAdminManageReportsRole = isTeamAdmin && ["worker", "reports_admin"].includes(targetRole);
+
+        if (isTeamAdmin) {
+            if (!["worker", "reports_admin"].includes(role)) {
+                return { error: "Forbidden: Team Admins can only assign Worker or Reports Only Admin roles." };
+            }
+            if (!canTeamAdminManageReportsRole) {
+                return { error: "Forbidden: You cannot edit another administrator's profile." };
+            }
+        } else {
+            if (targetRole !== "worker") {
+                return { error: "Forbidden: You cannot edit another administrator's profile." };
+            }
+            role = targetRole;
+        }
+
+        if (!isTeamAdmin && role !== targetRole) {
             return { error: "Forbidden: You cannot edit another administrator's profile." };
         }
-        // Prevent role elevation
-        role = targetProfile.role; // Maintain original role
     }
 
     const { data: existingWorker } = await adminSupabase
@@ -355,6 +386,7 @@ export async function updateWorkerProfile(formData: FormData) {
     let teamName: string | undefined = undefined;
     let departmentTeamId: string | null = null;
     let selectedTeamId: string | null = null;
+    const isSuperAdminDepartmentScopedReportsAdmin = isSuperAdmin && role === "reports_admin" && !!departmentId;
     if (departmentId) {
         const { data: dept } = await adminSupabase
             .from("departments")
@@ -364,13 +396,19 @@ export async function updateWorkerProfile(formData: FormData) {
         if (dept?.team) teamName = dept.team;
         if (dept?.team_id) {
             departmentTeamId = dept.team_id;
-            updatePayload.team_id = dept.team_id;
+            if (!isSuperAdminDepartmentScopedReportsAdmin) {
+                updatePayload.team_id = dept.team_id;
+            }
         }
     }
 
     updatePayload.department_id = departmentId;
     updatePayload.department = departmentName;
-    if (teamName) updatePayload.team = teamName;
+    if (teamName && !isSuperAdminDepartmentScopedReportsAdmin) updatePayload.team = teamName;
+    if (isSuperAdminDepartmentScopedReportsAdmin) {
+        updatePayload.team_id = null;
+        updatePayload.team = null;
+    }
 
     if (isSuperAdmin && role === "team_admin") {
         if (!teamAdminTeamId) {
@@ -410,6 +448,18 @@ export async function updateWorkerProfile(formData: FormData) {
         return { error: updateError.message || "Failed to update worker profile." };
     }
 
+    if (role !== "worker") {
+        const { error: headCleanupError } = await adminSupabase
+            .from("departments")
+            .update({ head_user_id: null })
+            .eq("head_user_id", targetUserId);
+
+        if (headCleanupError) {
+            console.error("Error clearing department-head assignment after role change:", headCleanupError);
+            return { error: "Profile updated, but failed to clear Department Head assignment. Please review departments." };
+        }
+    }
+
     if (isSuperAdmin) {
         if (role === "team_admin" && selectedTeamId) {
             const { error: deleteError } = await adminSupabase
@@ -445,9 +495,21 @@ export async function updateWorkerProfile(formData: FormData) {
                 return { error: "Profile updated, but failed to remove Team Admin assignment." };
             }
         }
+    } else if (isTeamAdmin && role !== "team_admin") {
+        const { error: deleteError } = await adminSupabase
+            .from("team_admin_assignments")
+            .delete()
+            .eq("user_id", targetUserId);
+
+        if (deleteError) {
+            console.error("Error clearing stale team admin assignment:", deleteError);
+            return { error: "Profile updated, but failed to clear stale Team Admin assignment." };
+        }
     }
 
     revalidatePath("/admin/workers");
+    revalidatePath("/admin");
+    revalidatePath("/admin/reports");
     revalidatePath("/admin/sessions");
     revalidatePath("/dashboard");
 

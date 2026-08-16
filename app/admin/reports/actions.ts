@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireReportsAuth } from "@/lib/rbac";
 
 function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -41,17 +41,23 @@ export type ReportsPayload = {
 
 export async function getReportsData(): Promise<{ data?: ReportsPayload; error?: string }> {
     try {
-        const scope = await requireAdminAuth();
-        const { isSuperAdmin, managedDepartmentIds } = scope;
+        const scope = await requireReportsAuth();
+        const { hasGlobalReportAccess, reportDepartmentIds } = scope;
         const supabase = await createClient();
 
-        // 1. If Department Head, resolve worker IDs in their departments
+        // 1. If scoped admin, resolve worker IDs in their allowed report departments
         let deptWorkerIds: string[] | null = null;
-        if (!isSuperAdmin) {
+        if (!hasGlobalReportAccess) {
+            if (reportDepartmentIds.length === 0) {
+                return {
+                    data: { logs: [], departments: [], events: [], latestSession: null },
+                };
+            }
+
             const { data: deptWorkers } = await supabase
                 .from("profiles")
                 .select("id")
-                .in("department_id", managedDepartmentIds);
+                .in("department_id", reportDepartmentIds);
             deptWorkerIds = (deptWorkers || []).map((w) => w.id);
         }
 
@@ -74,8 +80,8 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
             `)
             .order("check_in_time", { ascending: false });
 
-        // RBAC scoping for Department Heads
-        if (!isSuperAdmin && deptWorkerIds) {
+        // RBAC scoping for non-global report readers
+        if (!hasGlobalReportAccess && deptWorkerIds) {
             if (deptWorkerIds.length === 0) {
                 // No workers in their departments — return empty
                 return {

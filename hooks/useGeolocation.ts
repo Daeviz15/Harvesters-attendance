@@ -12,7 +12,11 @@ interface GeolocationState {
     isLoading: boolean;
 }
 
-export function useGeolocation(activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[] = []) {
+type ActiveLocation = { id: string, name: string, latitude: number, longitude: number, radius: number };
+
+export function useGeolocation(activeLocations: ActiveLocation[] = []) {
+    const hasGeolocation = typeof navigator !== "undefined" && "geolocation" in navigator;
+    const activeLocationsKey = JSON.stringify(activeLocations);
     const [state, setState] = useState<GeolocationState>({
         lat: null,
         lng: null,
@@ -20,15 +24,15 @@ export function useGeolocation(activeLocations: { id: string, name: string, lati
         isWithinPerimeter: false,
         locationName: null,
         distance: null,
-        error: null,
-        isLoading: true,
+        error: hasGeolocation ? null : "Geolocation is not supported by your browser",
+        isLoading: hasGeolocation,
     });
 
     useEffect(() => {
-        if (!("geolocation" in navigator)) {
-            setState(s => ({ ...s, error: "Geolocation is not supported by your browser", isLoading: false }));
+        if (!hasGeolocation) {
             return;
         }
+        const monitoredLocations = JSON.parse(activeLocationsKey) as ActiveLocation[];
 
         const watchId = navigator.geolocation.watchPosition(
             (position) => {
@@ -42,8 +46,8 @@ export function useGeolocation(activeLocations: { id: string, name: string, lati
                 const MAX_ACCEPTABLE_ACCURACY = 300;
                 const effectiveAccuracy = Math.min(accuracy ?? 0, MAX_ACCEPTABLE_ACCURACY);
 
-                if (activeLocations && activeLocations.length > 0) {
-                    for (const loc of activeLocations) {
+                if (monitoredLocations.length > 0) {
+                    for (const loc of monitoredLocations) {
                         const distance = calculateDistanceInMeters(latitude, longitude, loc.latitude, loc.longitude);
                         if (distance < minDistance) minDistance = distance;
                         if ((distance - effectiveAccuracy) <= loc.radius) {
@@ -115,7 +119,7 @@ export function useGeolocation(activeLocations: { id: string, name: string, lati
         );
 
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [JSON.stringify(activeLocations)]);
+    }, [hasGeolocation, activeLocationsKey]);
 
     return state;
 }

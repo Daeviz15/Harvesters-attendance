@@ -8,7 +8,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className = "", variant = "default", size = "default", children, ...props }, ref) => {
-    let baseStyles = "inline-flex items-center justify-center rounded-lg font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E05D06] disabled:pointer-events-none disabled:opacity-50 cursor-pointer";
+    const baseStyles = "inline-flex items-center justify-center rounded-lg font-medium transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E05D06] disabled:pointer-events-none disabled:opacity-50 cursor-pointer";
     
     let variantStyles = "";
     if (variant === "default") {

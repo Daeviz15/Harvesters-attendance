@@ -10,7 +10,7 @@ export default async function AdminLayout({
     children: React.ReactNode;
 }) {
     // Zero-Trust Server-Side RBAC Verification
-    const { initials, isSuperAdmin, scopeSummary, profile } = await requireAdminAuth();
+    const { initials, isSuperAdmin, isReportsOnlyAdmin, scopeSummary, profile } = await requireAdminAuth();
 
     return (
         <div className="min-h-screen bg-neutral-50 dark:bg-background text-foreground flex flex-col md:flex-row">
@@ -18,6 +18,7 @@ export default async function AdminLayout({
             <AdminNavigation 
                 initial={initials} 
                 isSuperAdmin={isSuperAdmin}
+                isReportsOnlyAdmin={isReportsOnlyAdmin}
                 scopeSummary={scopeSummary}
             />
 

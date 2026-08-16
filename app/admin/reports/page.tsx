@@ -1,4 +1,4 @@
-import { requireAdminAuth } from "@/lib/rbac";
+import { requireReportsAuth } from "@/lib/rbac";
 import { getReportsData } from "./actions";
 import ReportsClient from "./ReportsClient";
 
@@ -8,8 +8,8 @@ export const metadata = {
 };
 
 export default async function ReportsPage() {
-    // Zero-Trust Server-Side RBAC — ensures only admins can access this page
-    await requireAdminAuth();
+    // Zero-Trust Server-Side RBAC — allows scoped admins and reports-only admins.
+    await requireReportsAuth();
 
     const { data, error } = await getReportsData();
 
