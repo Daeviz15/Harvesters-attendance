@@ -9,7 +9,7 @@ export async function getAuthenticatedHomePath(
 ) {
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, is_active, onboarding_complete")
+    .select("id, is_active, onboarding_complete")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -22,27 +22,6 @@ export async function getAuthenticatedHomePath(
 
   if (!profile || !hasCompletedOnboarding) {
     return "/onboarding";
-  }
-
-  const role = profile.role;
-  if (role === "reports_admin") {
-    return "/admin/reports";
-  }
-
-  if (role === "admin" || role === "super_admin" || role === "team_admin") {
-    return "/admin";
-  }
-
-  const { data: headedDepartment } = await supabase
-    .from("departments")
-    .select("id")
-    .eq("head_user_id", user.id)
-    .eq("is_active", true)
-    .limit(1)
-    .maybeSingle();
-
-  if (headedDepartment) {
-    return "/admin";
   }
 
   return "/dashboard";

@@ -513,7 +513,7 @@ export default function DashboardClient({
                     <div className="flex-1 flex flex-col">
                         <div className="mb-12">
                             <h1 className="text-[28px] md:text-[34px] font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-2 leading-tight flex flex-wrap items-baseline gap-x-2">
-                                <span>{getGreeting()}, {username}</span>
+                                <span suppressHydrationWarning>{getGreeting()}, {username}</span>
                                 {workerId && (
                                     <span className="text-xs md:text-sm font-mono font-normal text-neutral-500 dark:text-white/60 bg-neutral-200/60 dark:bg-white/10 px-2 py-0.5 rounded-md align-middle">
                                         {workerId}

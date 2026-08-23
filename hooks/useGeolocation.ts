@@ -15,7 +15,6 @@ interface GeolocationState {
 type ActiveLocation = { id: string, name: string, latitude: number, longitude: number, radius: number };
 
 export function useGeolocation(activeLocations: ActiveLocation[] = []) {
-    const hasGeolocation = typeof navigator !== "undefined" && "geolocation" in navigator;
     const activeLocationsKey = JSON.stringify(activeLocations);
     const [state, setState] = useState<GeolocationState>({
         lat: null,
@@ -24,13 +23,21 @@ export function useGeolocation(activeLocations: ActiveLocation[] = []) {
         isWithinPerimeter: false,
         locationName: null,
         distance: null,
-        error: hasGeolocation ? null : "Geolocation is not supported by your browser",
-        isLoading: hasGeolocation,
+        error: null,
+        isLoading: true,
     });
 
     useEffect(() => {
+        const hasGeolocation = "geolocation" in navigator;
         if (!hasGeolocation) {
-            return;
+            const timeoutId = window.setTimeout(() => {
+                setState((current) => ({
+                    ...current,
+                    error: "Geolocation is not supported by your browser",
+                    isLoading: false,
+                }));
+            }, 0);
+            return () => window.clearTimeout(timeoutId);
         }
         const monitoredLocations = JSON.parse(activeLocationsKey) as ActiveLocation[];
 
@@ -119,7 +126,7 @@ export function useGeolocation(activeLocations: ActiveLocation[] = []) {
         );
 
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [hasGeolocation, activeLocationsKey]);
+    }, [activeLocationsKey]);
 
     return state;
 }

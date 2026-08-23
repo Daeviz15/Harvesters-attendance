@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ChevronRight } from "lucide-react";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import InteractiveHero from "@/components/InteractiveHero";
 import AnimatedTimeline from "@/components/AnimatedTimeline";
@@ -9,13 +10,24 @@ import AceternityFeatures from "@/components/AceternityFeatures";
 import VisitUs from "@/components/VisitUs";
 import TeamStrip from "@/components/TeamStrip";
 import ScrollReveal from "@/components/ScrollReveal";
+import { getAuthenticatedHomePath } from "@/lib/auth-home";
+import { createClient } from "@/utils/supabase/server";
 
 export const metadata: Metadata = {
     title: "Harvesters Attendance — Smart Attendance for Church Workers",
     description: "Harvesters Attendance is a modern, location-verified attendance tracking application for church workers at The Harvesters International Christian Centre.",
 };
 
-export default function WorkersAttendancePage() {
+export default async function WorkersAttendancePage() {
+    const supabase = await createClient();
+    const {
+        data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user) {
+        redirect(await getAuthenticatedHomePath(supabase, user));
+    }
+
     return (
         <main className="min-h-screen bg-background text-foreground relative overflow-hidden pt-[72px]">
             {}
