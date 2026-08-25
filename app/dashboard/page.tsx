@@ -167,6 +167,11 @@ export default async function DashboardServerPage() {
         .select('id, name, latitude, longitude, radius')
         .eq('is_active', true);
 
+    const canAccessAdmin = !!profile && (
+        ["admin", "super_admin", "team_admin", "reports_admin"].includes(profile.role)
+        || !!headDeptName
+    );
+
     return (
         <DashboardClient
             key={`${formattedBroadcast?.id ?? 'no-broadcast'}:${activeSession?.id ?? 'not-checked-in'}:${activeSession?.check_in_time ?? 'no-check-in-time'}`}
@@ -184,6 +189,7 @@ export default async function DashboardServerPage() {
             initialBroadcastSession={formattedBroadcast}
             activeLocations={activeLocations || []}
             headDepartmentName={headDeptName}
+            canAccessAdmin={canAccessAdmin}
         />
     );
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck, ClipboardList } from "lucide-react";
+import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck, ClipboardList, ArrowLeftRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -103,8 +103,15 @@ function AdminSidebarContent({
                 })}
             </nav>
 
-            {/* Logout Button */}
+            {/* Worker/Admin Mode Switch + Logout */}
             <div className="p-4 border-t border-neutral-200 dark:border-white/10 shrink-0">
+                <Link
+                    href="/dashboard"
+                    className="mb-2 flex w-full items-center gap-3 px-4 py-3 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 dark:text-neutral-400 dark:hover:text-white rounded-xl transition-colors font-medium text-sm"
+                >
+                    <ArrowLeftRight className="w-5 h-5 shrink-0" />
+                    Switch to Worker View
+                </Link>
                 <button
                     onClick={onSignOut}
                     className="flex w-full items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-colors font-medium text-sm"

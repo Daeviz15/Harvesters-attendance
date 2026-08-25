@@ -3,6 +3,7 @@
 import { useState, useEffect, useTransition, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
     MapPin, Calendar, CheckCircle2,
@@ -56,13 +57,14 @@ interface SidebarContentProps {
     team: string | null;
     avatarUrl?: string | null;
     headDepartmentName: string | null;
+    canAccessAdmin: boolean;
     history: AttendanceLog[];
     hasMore: boolean;
     isLoadingMore: boolean;
     onLoadMore: () => void;
 }
 
-const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, workerId, initials, department, team, avatarUrl, headDepartmentName, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, workerId, initials, department, team, avatarUrl, headDepartmentName, canAccessAdmin, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
@@ -111,6 +113,17 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, wo
                 )}
             </div>
         </div>
+
+        {canAccessAdmin && (
+            <Link
+                href="/admin"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="mb-8 inline-flex items-center gap-2 text-[12px] font-semibold uppercase tracking-[0.18em] text-[#34A853] hover:text-[#2e9347] transition-colors"
+            >
+                <Crown className="w-4 h-4" />
+                Switch to Admin
+            </Link>
+        )}
 
         <div className="flex-1 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-6">
@@ -198,12 +211,14 @@ interface DashboardClientProps {
     activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[];
     headDepartmentName: string | null;
     shouldPromptForBirthday: boolean;
+    canAccessAdmin: boolean;
 }
 
 export default function DashboardClient({
     userId, username, workerId, initials, department, team, avatarUrl,
     initialIsCheckedIn,
-    initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession, activeLocations, headDepartmentName, shouldPromptForBirthday
+    initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession,
+    activeLocations, headDepartmentName, shouldPromptForBirthday, canAccessAdmin
 }: DashboardClientProps) {
     const router = useRouter();
     const geo = useGeolocation(activeLocations);
@@ -431,7 +446,7 @@ export default function DashboardClient({
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-neutral-200 dark:border-white/10 bg-neutral-100/40 dark:bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} workerId={workerId} initials={initials} department={department} team={team} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} workerId={workerId} initials={initials} department={department} team={team} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} canAccessAdmin={canAccessAdmin} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -452,7 +467,7 @@ export default function DashboardClient({
                             transition={{ type: "spring", bounce: 0, duration: 0.4 }}
                             className="fixed inset-y-0 left-0 w-[280px] bg-neutral-50 dark:bg-[#0f0f0f] border-r border-neutral-200 dark:border-white/10 p-6 flex flex-col z-50 md:hidden shadow-2xl"
                         >
-                            <SidebarContent
+                        <SidebarContent
                         setIsMobileMenuOpen={setIsMobileMenuOpen}
                         setIsLeaveModalOpen={setIsLeaveModalOpen}
                         username={username}
@@ -460,7 +475,7 @@ export default function DashboardClient({
                         initials={initials}
                         department={department}
                         team={team}
-                        avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
+                        avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} canAccessAdmin={canAccessAdmin} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
                         </motion.aside>
                     </>
                 )}
