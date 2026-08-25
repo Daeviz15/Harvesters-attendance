@@ -84,6 +84,10 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
     };
 
     const activeCount = initialDepartments.filter((department) => department.is_active).length;
+    const workersWithDepartmentsCount = initialDepartments.reduce(
+        (total, department) => total + department.worker_count,
+        0
+    );
 
     const availableTeams = new Set(initialDepartments.map(d => d.team).filter(Boolean));
     const allTeams = ["PROGRAMS", "MINISTRY", "MATURITY", "MEMBERSHIP", "MISSIONS", "NEXT GEN"]
@@ -123,9 +127,12 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                     <p className="mt-2 text-3xl font-bold text-[#34A853]">{activeCount}</p>
                 </div>
                 <div className="rounded-2xl border border-neutral-200 dark:border-white/10 bg-white dark:bg-[#0f0f0f] p-5">
-                    <p className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-white/40">Assigned Workers</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-neutral-500 dark:text-white/40">Workers With Departments</p>
                     <p className="mt-2 text-3xl font-bold text-neutral-900 dark:text-white">
-                        {initialDepartments.reduce((total, department) => total + department.worker_count, 0)}
+                        {workersWithDepartmentsCount}
+                    </p>
+                    <p className="mt-1 text-xs text-neutral-500 dark:text-white/40">
+                        Workers currently linked to a department.
                     </p>
                 </div>
             </div>
@@ -198,7 +205,7 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                                         <h3 className="font-semibold text-neutral-900 dark:text-white break-words">{department.name}</h3>
                                         <p className="text-xs text-neutral-500 dark:text-white/40 mt-1">
                                             {department.team ? <span className="font-medium text-[#34A853] mr-1">{department.team} &bull;</span> : null}
-                                            {department.worker_count} assigned worker{department.worker_count === 1 ? "" : "s"}
+                                            {department.worker_count} worker{department.worker_count === 1 ? "" : "s"} in this department
                                         </p>
                                     </div>
                                 </div>
@@ -388,7 +395,7 @@ export default function DepartmentsClient({ initialDepartments }: { initialDepar
                             </div>
                             <div className="p-6">
                                 <p className="text-neutral-600 dark:text-neutral-400 mb-6">
-                                    Delete <strong className="text-neutral-900 dark:text-white">{departmentToDelete.name}</strong>? Departments with assigned workers cannot be deleted.
+                                    Delete <strong className="text-neutral-900 dark:text-white">{departmentToDelete.name}</strong>? Departments with workers linked to them cannot be deleted.
                                 </p>
                                 <div className="flex gap-3">
                                     <button
