@@ -9,11 +9,27 @@ function getErrorMessage(error: unknown) {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+export type DepartmentOption = {
+    id: string;
+    name: string;
+    team: string | null;
+    team_id: string | null;
+};
+
+export type TeamOption = {
+    id: string;
+    name: string;
+    code: string | null;
+};
+
 export type ReportLog = {
     id: string;
     workerName: string;
     avatarUrl: string | null;
     department: string;
+    departmentId: string | null;
+    team: string | null;
+    teamId: string | null;
     eventTitle: string;
     date: string;           // YYYY-MM-DD
     checkInTime: string;    // ISO
@@ -26,7 +42,8 @@ export type ReportLog = {
 
 export type ReportsPayload = {
     logs: ReportLog[];
-    departments: string[];
+    departments: DepartmentOption[];
+    teams: TeamOption[];
     events: string[];
     latestSession: {
         title: string;
@@ -45,14 +62,35 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
         const { hasGlobalReportAccess, reportDepartmentIds } = scope;
         const supabase = await createClient();
 
-        // 1. If scoped admin, resolve worker IDs in their allowed report departments
+        // 1. Fetch active departments and teams
+        const [departmentsRes, teamsRes] = await Promise.all([
+            supabase
+                .from("departments")
+                .select("id, name, team, team_id, is_active")
+                .eq("is_active", true)
+                .order("name", { ascending: true }),
+            supabase
+                .from("teams")
+                .select("id, name, code, is_active")
+                .eq("is_active", true)
+                .order("name", { ascending: true }),
+        ]);
+
+        let departmentRows = (departmentsRes.data || []) as DepartmentOption[];
+        let teamRows = (teamsRes.data || []) as TeamOption[];
+
+        // RBAC scoping for non-global report readers
         let deptWorkerIds: string[] | null = null;
         if (!hasGlobalReportAccess) {
             if (reportDepartmentIds.length === 0) {
                 return {
-                    data: { logs: [], departments: [], events: [], latestSession: null },
+                    data: { logs: [], departments: [], teams: [], events: [], latestSession: null },
                 };
             }
+
+            departmentRows = departmentRows.filter((d) => reportDepartmentIds.includes(d.id));
+            const allowedTeamIds = new Set(departmentRows.map((d) => d.team_id).filter(Boolean));
+            teamRows = teamRows.filter((t) => allowedTeamIds.has(t.id));
 
             const { data: deptWorkers } = await supabase
                 .from("profiles")
@@ -60,6 +98,13 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
                 .in("department_id", reportDepartmentIds);
             deptWorkerIds = (deptWorkers || []).map((w) => w.id);
         }
+
+        const deptNameToInfoMap = new Map<string, DepartmentOption>();
+        const deptIdToInfoMap = new Map<string, DepartmentOption>();
+        departmentRows.forEach((d) => {
+            deptNameToInfoMap.set(d.name, d);
+            deptIdToInfoMap.set(d.id, d);
+        });
 
         // 2. Fetch all attendance logs with joined session + event data
         let query = supabase
@@ -80,12 +125,10 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
             `)
             .order("check_in_time", { ascending: false });
 
-        // RBAC scoping for non-global report readers
         if (!hasGlobalReportAccess && deptWorkerIds) {
             if (deptWorkerIds.length === 0) {
-                // No workers in their departments — return empty
                 return {
-                    data: { logs: [], departments: [], events: [], latestSession: null },
+                    data: { logs: [], departments: departmentRows, teams: teamRows, events: [], latestSession: null },
                 };
             }
             query = query.in("user_id", deptWorkerIds);
@@ -100,7 +143,7 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
 
         if (!rawLogs || rawLogs.length === 0) {
             return {
-                data: { logs: [], departments: [], events: [], latestSession: null },
+                data: { logs: [], departments: departmentRows, teams: teamRows, events: [], latestSession: null },
             };
         }
 
@@ -108,7 +151,7 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
         const uniqueUserIds = Array.from(new Set(rawLogs.map((l) => l.user_id)));
         const { data: profiles } = await supabase
             .from("profiles")
-            .select("id, first_name, last_name, avatar_url")
+            .select("id, first_name, last_name, avatar_url, department, department_id, team, team_id")
             .in("id", uniqueUserIds);
 
         const profileMap = new Map(
@@ -117,12 +160,15 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
                 {
                     name: `${p.first_name || "Unknown"} ${p.last_name || ""}`.trim(),
                     avatarUrl: p.avatar_url,
+                    department: p.department,
+                    departmentId: p.department_id,
+                    team: p.team,
+                    teamId: p.team_id,
                 },
             ])
         );
 
         // 4. Transform raw logs into ReportLog[]
-        const departmentsSet = new Set<string>();
         const eventsSet = new Set<string>();
 
         const logs: ReportLog[] = rawLogs.map((log) => {
@@ -135,10 +181,13 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
                 : null;
 
             const eventTitle = event?.title || "Unknown Event";
-            const dept = log.department || "Unknown";
+            const dept = log.department || profile?.department || "Unknown";
+            const deptInfo = deptNameToInfoMap.get(dept) || (profile?.departmentId ? deptIdToInfoMap.get(profile.departmentId) : undefined);
+            const deptId = profile?.departmentId || deptInfo?.id || null;
+            const teamName = profile?.team || deptInfo?.team || null;
+            const teamId = profile?.teamId || deptInfo?.team_id || null;
             const sessionStartTime = session?.start_time || null;
 
-            departmentsSet.add(dept);
             eventsSet.add(eventTitle);
 
             // Calculate arrival offset in minutes
@@ -159,6 +208,9 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
                 workerName: profile?.name || "Unknown",
                 avatarUrl: profile?.avatarUrl || null,
                 department: dept,
+                departmentId: deptId,
+                team: teamName,
+                teamId: teamId,
                 eventTitle,
                 date,
                 checkInTime: log.check_in_time,
@@ -173,7 +225,6 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
         // 5. Compute latest session summary
         let latestSession: ReportsPayload["latestSession"] = null;
         if (logs.length > 0) {
-            // The most recent date
             const latestDate = logs[0].date;
             const latestEvent = logs[0].eventTitle;
             const latestLogs = logs.filter(
@@ -192,10 +243,46 @@ export async function getReportsData(): Promise<{ data?: ReportsPayload; error?:
             };
         }
 
+        // Deduplicate departments by id and normalized name
+        const deptMap = new Map<string, DepartmentOption>();
+        const existingNamesNormalized = new Set<string>();
+
+        for (const d of departmentRows) {
+            deptMap.set(d.id, d);
+            existingNamesNormalized.add(d.name.trim().toLowerCase());
+        }
+
+        for (const log of logs) {
+            const trimmedName = (log.department || "").trim();
+            if (
+                trimmedName &&
+                trimmedName !== "Unknown" &&
+                !existingNamesNormalized.has(trimmedName.toLowerCase())
+            ) {
+                const newId = log.departmentId && !deptMap.has(log.departmentId)
+                    ? log.departmentId
+                    : `log-dept-${trimmedName}`;
+
+                const newDept: DepartmentOption = {
+                    id: newId,
+                    name: trimmedName,
+                    team: log.team || null,
+                    team_id: log.teamId || null,
+                };
+                deptMap.set(newId, newDept);
+                existingNamesNormalized.add(trimmedName.toLowerCase());
+            }
+        }
+
+        const finalDepartments = Array.from(deptMap.values()).sort((a, b) =>
+            a.name.localeCompare(b.name)
+        );
+
         return {
             data: {
                 logs,
-                departments: Array.from(departmentsSet).sort(),
+                departments: finalDepartments,
+                teams: teamRows,
                 events: Array.from(eventsSet).sort(),
                 latestSession,
             },

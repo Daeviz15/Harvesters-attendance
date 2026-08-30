@@ -27,6 +27,7 @@ export default async function ReportsPage() {
         <ReportsClient
             logs={data.logs}
             departments={data.departments}
+            teams={data.teams}
             events={data.events}
             latestSession={data.latestSession}
         />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
     Users, Activity, Calendar, UserPlus, Zap,
@@ -20,7 +20,16 @@ import type { MinistryGroup } from "./sessions/actions";
 interface DepartmentOption {
     id: string;
     name: string;
+    team?: string | null;
+    team_id?: string | null;
     is_active: boolean;
+}
+
+interface TeamOption {
+    id: string;
+    name: string;
+    code?: string | null;
+    is_active?: boolean;
 }
 
 interface ActiveSessionOption {
@@ -46,6 +55,7 @@ interface AdminDashboardClientProps {
     activeSessionsCount: number;
     totalEventsCount: number;
     departments: DepartmentOption[];
+    teams?: TeamOption[];
     activeSessions: ActiveSessionOption[];
     initialBreakdown?: {
         totalCheckedIn: number;
@@ -66,6 +76,7 @@ export default function AdminDashboardClient({
     activeSessionsCount,
     totalEventsCount,
     departments,
+    teams = [],
     activeSessions,
     initialBreakdown,
     canManageWorkerAccess,
@@ -77,7 +88,16 @@ export default function AdminDashboardClient({
     const [isRegistering, setIsRegistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+    const [selectedCreateTeamId, setSelectedCreateTeamId] = useState<string>("");
     const [selectedDeptId, setSelectedDeptId] = useState<string>("");
+
+    const selectedCreateTeam = teams.find((t) => t.id === selectedCreateTeamId);
+    const createDepartmentOptions = useMemo(() => {
+        if (!selectedCreateTeamId) return [];
+        return departments.filter(
+            (d) => d.is_active && (d.team_id === selectedCreateTeamId || (selectedCreateTeam && d.team === selectedCreateTeam.name))
+        );
+    }, [departments, selectedCreateTeamId, selectedCreateTeam]);
 
     
     const [isCheckInModalOpen, setIsCheckInModalOpen] = useState(false);
@@ -105,6 +125,14 @@ export default function AdminDashboardClient({
 
         const formData = new FormData(e.currentTarget);
 
+        if (selectedCreateTeamId) {
+            const selectedTeam = teams.find((t) => t.id === selectedCreateTeamId);
+            if (selectedTeam) {
+                formData.set("teamId", selectedTeam.id);
+                formData.set("team", selectedTeam.name);
+            }
+        }
+
         if (selectedDeptId) {
             const match = departments.find(d => d.id === selectedDeptId);
             if (match) {
@@ -124,6 +152,8 @@ export default function AdminDashboardClient({
             setTimeout(() => {
                 setIsRegisterModalOpen(false);
                 setRegisterSuccess(null);
+                setSelectedCreateTeamId("");
+                setSelectedDeptId("");
                 router.refresh();
             }, 2000);
         }
@@ -336,7 +366,7 @@ export default function AdminDashboardClient({
                 sessionTitle={activeSessions[0]?.title}
             />
 
-            {/* ===== REGISTER WORKER MODAL ===== */}
+            {/* REGISTER WORKER MODAL */}
             <AnimatePresence>
                 {isRegisterModalOpen && (
                     <>
@@ -415,18 +445,68 @@ export default function AdminDashboardClient({
                                     </div>
                                     <div>
                                         <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                                            Department
+                                            Birthday (Optional)
+                                        </label>
+                                        <input
+                                            type="date"
+                                            name="dateOfBirth"
+                                            min="1900-01-01"
+                                            max={new Date().toISOString().slice(0, 10)}
+                                            className="w-full px-3 py-2.5 border border-neutral-200 dark:border-white/10 rounded-xl bg-neutral-50 dark:bg-white/5 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#34A853]/30 focus:border-[#34A853]"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                    <div>
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Team <span className="text-red-500">*</span>
                                         </label>
                                         <select
-                                            value={selectedDeptId}
-                                            onChange={(e) => setSelectedDeptId(e.target.value)}
+                                            name="teamId"
+                                            value={selectedCreateTeamId}
+                                            onChange={(e) => {
+                                                setSelectedCreateTeamId(e.target.value);
+                                                setSelectedDeptId("");
+                                            }}
+                                            required
                                             className="w-full px-3 py-2.5 border border-neutral-200 dark:border-white/10 rounded-xl bg-neutral-50 dark:bg-white/5 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#34A853]/30 focus:border-[#34A853]"
                                         >
-                                            <option value="">Select Department</option>
-                                            {departments.filter(d => d.is_active).map(d => (
-                                                <option key={d.id} value={d.id}>{d.name}</option>
+                                            <option value="">Select Team</option>
+                                            {teams.map((team) => (
+                                                <option key={team.id} value={team.id}>
+                                                    {team.name}
+                                                </option>
                                             ))}
                                         </select>
+                                        <input type="hidden" name="team" value={selectedCreateTeam?.name || ""} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs sm:text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Department <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            name="departmentId"
+                                            value={selectedDeptId}
+                                            onChange={(e) => setSelectedDeptId(e.target.value)}
+                                            required
+                                            disabled={!selectedCreateTeamId}
+                                            className="w-full px-3 py-2.5 border border-neutral-200 dark:border-white/10 rounded-xl bg-neutral-50 dark:bg-white/5 text-neutral-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-[#34A853]/30 focus:border-[#34A853] disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            <option value="">
+                                                {selectedCreateTeamId ? "Select Department" : "Select Team first"}
+                                            </option>
+                                            {createDepartmentOptions.map((d) => (
+                                                <option key={d.id} value={d.id}>
+                                                    {d.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <input
+                                            type="hidden"
+                                            name="department"
+                                            value={createDepartmentOptions.find((d) => d.id === selectedDeptId)?.name || ""}
+                                        />
                                     </div>
                                 </div>
 

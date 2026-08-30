@@ -37,24 +37,33 @@ export default async function AdminDashboardPage() {
     // 3. Departments Query with RBAC scope
     let departmentsQuery = supabase
         .from('departments')
-        .select('id, name, is_active')
+        .select('id, name, team, team_id, is_active')
         .eq('is_active', true)
         .order('name', { ascending: true });
     if (!scope.isSuperAdmin) {
         departmentsQuery = departmentsQuery.in('id', scope.managedDepartmentIds);
     }
 
+    // 4. Teams Query with RBAC scope
+    const teamsQuery = supabase
+        .from('teams')
+        .select('id, name, code, is_active')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+
     // Parallelize independent DB queries to eliminate waterfalls
     const [
         workerRes,
         eventsRes,
         departmentsRes,
+        teamsRes,
         activeSessionsRes,
         breakdownRes,
     ] = await Promise.all([
         workersQuery,
         eventsQuery,
         departmentsQuery,
+        teamsQuery,
         supabase.from('attendance_sessions').select('id, event_id, event:events(title)').eq('status', 'active'),
         getDepartmentAttendanceBreakdown(),
     ]);
@@ -70,7 +79,13 @@ export default async function AdminDashboardPage() {
 
     const workerCount = workerRes.count || 0;
     const activeSessionsCount = activeSessionsList.length;
-    const departments = departmentsRes.data || [];
+    const departmentRows = departmentsRes.data || [];
+    let accessibleTeams = (teamsRes.data || []) as { id: string; name: string; code: string | null; is_active: boolean }[];
+
+    if (!scope.isSuperAdmin) {
+        const allowedTeamIds = new Set(departmentRows.map(d => d.team_id).filter(Boolean));
+        accessibleTeams = accessibleTeams.filter(t => allowedTeamIds.has(t.id));
+    }
 
     const formattedActiveSessions = activeSessionsList.map((s) => ({
         id: s.id as string,
@@ -84,7 +99,8 @@ export default async function AdminDashboardPage() {
             workerCount={workerCount}
             activeSessionsCount={activeSessionsCount}
             totalEventsCount={totalEventsCount}
-            departments={departments}
+            departments={departmentRows}
+            teams={accessibleTeams}
             activeSessions={formattedActiveSessions}
             initialBreakdown={initialBreakdown}
             canManageWorkerAccess={canManageWorkerAccess(scope)}

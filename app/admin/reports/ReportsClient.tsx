@@ -13,13 +13,14 @@ import {
     ResponsiveContainer,
 } from "recharts";
 import ExportModal from "@/components/admin/ExportModal";
-import type { ReportLog, ReportsPayload } from "./actions";
+import type { ReportLog, ReportsPayload, DepartmentOption, TeamOption } from "./actions";
 
 // ── Props ──────────────────────────────────────────────────────────────────────
 
 interface ReportsClientProps {
     logs: ReportLog[];
-    departments: string[];
+    departments: DepartmentOption[];
+    teams: TeamOption[];
     events: string[];
     latestSession: ReportsPayload["latestSession"];
 }
@@ -32,7 +33,7 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
 
 type SortKey = "worker" | "department" | "event" | "date" | "checkIn";
 type SortDir = "asc" | "desc";
-type GroupBy = "none" | "date" | "week" | "event" | "worker" | "department";
+type GroupBy = "none" | "date" | "week" | "event" | "worker" | "department" | "team";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -106,9 +107,9 @@ function escapeCSV(v: string | number) {
 }
 
 function exportCSV(filtered: ReportLog[]) {
-    const header = ["Worker", "Department", "Event", "Date", "Check-in", "Check-out", "Duration (min)", "Arrival offset (min)", "Status", "Method"];
+    const header = ["Worker", "Team", "Department", "Event", "Date", "Check-in", "Check-out", "Duration (min)", "Arrival offset (min)", "Status", "Method"];
     const rows = filtered.map((r) => [
-        r.workerName, r.department, r.eventTitle, r.date,
+        r.workerName, r.team || "—", r.department, r.eventTitle, r.date,
         fmtTime(r.checkInTime),
         r.checkOutTime ? fmtTime(r.checkOutTime) : "—",
         r.checkOutTime ? Math.round((new Date(r.checkOutTime).getTime() - new Date(r.checkInTime).getTime()) / 60000) : 0,
@@ -176,9 +177,10 @@ function StatCard({ label, value, sub, icon: Icon }: {
 
 // ── Main Component ─────────────────────────────────────────────────────────────
 
-export default function ReportsClient({ logs, departments, events, latestSession }: ReportsClientProps) {
+export default function ReportsClient({ logs, departments, teams = [], events, latestSession }: ReportsClientProps) {
     // ── State ──────────────────────────────────────────────────────────────
     const [search, setSearch] = useState("");
+    const [team, setTeam] = useState("all");
     const [department, setDepartment] = useState("all");
     const [event, setEvent] = useState("all");
     const [status, setStatus] = useState("all");
@@ -192,25 +194,76 @@ export default function ReportsClient({ logs, departments, events, latestSession
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
 
+    // ── Team-dependent Departments ─────────────────────────────────────────
+    const availableDepartments = useMemo(() => {
+        let list = departments;
+        if (team !== "all") {
+            const selectedTeamObj = teams.find((t) => t.id === team);
+            list = departments.filter(
+                (d) => d.team_id === team || d.team === team || (selectedTeamObj && d.team === selectedTeamObj.name)
+            );
+        }
+        const seenIds = new Set<string>();
+        const seenNames = new Set<string>();
+        return list.filter((d) => {
+            const nameKey = d.name.trim().toLowerCase();
+            if (seenIds.has(d.id) || seenNames.has(nameKey)) return false;
+            seenIds.add(d.id);
+            seenNames.add(nameKey);
+            return true;
+        });
+    }, [departments, team, teams]);
+
+    const handleTeamChange = useCallback((newTeam: string) => {
+        setTeam(newTeam);
+        setDepartment("all"); // Reset department when team changes
+        setPage(1);
+    }, []);
+
     // Reset open groups whenever filters or grouping mode changes (closed by default)
     useEffect(() => {
         const resetTimer = window.setTimeout(() => setOpenGroups(new Set()), 0);
         return () => window.clearTimeout(resetTimer);
-    }, [groupBy, search, department, event, status, dateFrom, dateTo]);
+    }, [groupBy, search, team, department, event, status, dateFrom, dateTo]);
 
     // ── Filtering ──────────────────────────────────────────────────────────
     const filtered = useMemo(() => {
         const q = search.trim().toLowerCase();
+        const allowedDeptNames = new Set(availableDepartments.map((d) => d.name));
+        const allowedDeptIds = new Set(availableDepartments.map((d) => d.id));
+        const selectedTeamObj = teams.find((t) => t.id === team);
+
         return logs.filter((r) => {
-            if (q && !(r.workerName.toLowerCase().includes(q) || r.department.toLowerCase().includes(q) || r.eventTitle.toLowerCase().includes(q))) return false;
-            if (department !== "all" && r.department !== department) return false;
+            if (q && !(
+                r.workerName.toLowerCase().includes(q) ||
+                r.department.toLowerCase().includes(q) ||
+                r.eventTitle.toLowerCase().includes(q) ||
+                (r.team && r.team.toLowerCase().includes(q))
+            )) return false;
+
+            // Filter by team
+            if (team !== "all") {
+                const matchesTeam =
+                    r.teamId === team ||
+                    r.team === team ||
+                    (selectedTeamObj && r.team === selectedTeamObj.name) ||
+                    allowedDeptNames.has(r.department) ||
+                    (r.departmentId && allowedDeptIds.has(r.departmentId));
+                if (!matchesTeam) return false;
+            }
+
+            // Filter by department
+            if (department !== "all") {
+                if (r.department !== department && r.departmentId !== department) return false;
+            }
+
             if (event !== "all" && r.eventTitle !== event) return false;
             if (status !== "all" && r.status !== status) return false;
             if (dateFrom && r.date < dateFrom) return false;
             if (dateTo && r.date > dateTo) return false;
             return true;
         });
-    }, [logs, search, department, event, status, dateFrom, dateTo]);
+    }, [logs, search, team, department, event, status, dateFrom, dateTo, availableDepartments, teams]);
 
     // ── Sorting ────────────────────────────────────────────────────────────
     const sorted = useMemo(() => {
@@ -275,6 +328,7 @@ export default function ReportsClient({ logs, departments, events, latestSession
                 case "event": k = r.eventTitle; break;
                 case "worker": k = r.workerName; break;
                 case "department": k = r.department; break;
+                case "team": k = r.team || "Unassigned Team"; break;
                 default: k = r.date;
             }
             if (!map.has(k)) map.set(k, []);
@@ -318,6 +372,7 @@ export default function ReportsClient({ logs, departments, events, latestSession
 
     const handleReset = useCallback(() => {
         setSearch("");
+        setTeam("all");
         setDepartment("all");
         setEvent("all");
         setStatus("all");
@@ -401,6 +456,14 @@ export default function ReportsClient({ logs, departments, events, latestSession
                     hideCol: "department" as const,
                 };
             }
+            case "team": {
+                return {
+                    eyebrow: "Team",
+                    title: key,
+                    meta: `${uniqueWorkers} workers · ${uniqueDepts} departments · ${rows.length} check-ins · ${avgOffsetSentence(rows)}`,
+                    hideCol: null,
+                };
+            }
             default:
                 return { eyebrow: "", title: key, meta: "", hideCol: null };
         }
@@ -413,6 +476,7 @@ export default function ReportsClient({ logs, departments, events, latestSession
         event: "Grouped by event",
         worker: "Grouped by worker",
         department: "Grouped by department",
+        team: "Grouped by team",
     };
 
     // ── Render ─────────────────────────────────────────────────────────────
@@ -465,8 +529,6 @@ export default function ReportsClient({ logs, departments, events, latestSession
                     icon={AlertTriangle}
                 />
             </motion.section>
-            {/* ═══ Header ═══ */}
-
 
             {/* ═══ Filters ═══ */}
             <motion.section
@@ -482,19 +544,41 @@ export default function ReportsClient({ logs, departments, events, latestSession
                             type="text"
                             value={search}
                             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                            placeholder="Search worker, department or event…"
+                            placeholder="Search worker, department, team or event…"
                             className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13.5px] placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all"
                         />
                     </div>
-                    <select value={department} onChange={(e) => { setDepartment(e.target.value); setPage(1); }} className="w-44 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50">
-                        <option value="all">All departments</option>
-                        {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                    {teams.length > 0 && (
+                        <select
+                            value={team}
+                            onChange={(e) => handleTeamChange(e.target.value)}
+                            className="w-40 sm:w-44 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
+                        >
+                            <option value="all">All teams</option>
+                            {teams.map((t) => (
+                                <option key={t.id} value={t.id}>
+                                    {t.name}
+                                </option>
+                            ))}
+                        </select>
+                    )}
+                    <select
+                        value={department}
+                        onChange={(e) => { setDepartment(e.target.value); setPage(1); }}
+                        className="w-44 sm:w-48 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
+                    >
+                        <option value="all">{team !== "all" ? "All team departments" : "All departments"}</option>
+                        {availableDepartments.map((d) => (
+                            <option key={d.id} value={d.name}>
+                                {d.name}
+                            </option>
+                        ))}
                     </select>
-                    <select value={event} onChange={(e) => { setEvent(e.target.value); setPage(1); }} className="w-44 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50">
+                    <select value={event} onChange={(e) => { setEvent(e.target.value); setPage(1); }} className="w-44 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate">
                         <option value="all">All events</option>
                         {events.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
                     </select>
-                    <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="w-48 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50">
+                    <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="w-48 px-3 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] font-medium focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate">
                         <option value="all">All check-out types</option>
                         <option value="completed">Manually completed</option>
                         <option value="auto_completed">Auto-completed</option>
@@ -539,6 +623,7 @@ export default function ReportsClient({ logs, departments, events, latestSession
                             <option value="event">Event</option>
                             <option value="worker">Worker</option>
                             <option value="department">Department</option>
+                            <option value="team">Team</option>
                         </select>
                     </div>
                     <button onClick={handleReset} className="px-3.5 py-2 rounded-xl text-[13px] font-semibold text-neutral-500 dark:text-white/50 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors">
