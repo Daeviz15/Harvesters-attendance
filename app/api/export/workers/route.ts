@@ -7,6 +7,11 @@ const PAGE_SIZE = 1000;
 const AUTH_PAGE_SIZE = 1000;
 const MAX_AUTH_PAGES = 100;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ROLE_FILTERS = ["worker", "admin", "team_admin", "reports_admin"] as const;
+
+function isRoleFilter(value: string): value is typeof ROLE_FILTERS[number] {
+    return ROLE_FILTERS.includes(value as typeof ROLE_FILTERS[number]);
+}
 
 type WorkerExportRow = {
     id: string;
@@ -45,6 +50,13 @@ function getRoleLabel(role: string | null) {
     if (role === "team_admin") return "Team Admin";
     if (role === "reports_admin") return "Reports Only Admin";
     return "Worker";
+}
+
+function getRoleFilterLabel(role: string) {
+    if (role === "admin") return "admins";
+    if (role === "team_admin") return "team-admins";
+    if (role === "reports_admin") return "reports-admins";
+    return "workers";
 }
 
 function toSafeFilenamePart(value: string) {
@@ -91,8 +103,10 @@ export async function GET(request: NextRequest) {
     try {
         const teamParam = request.nextUrl.searchParams.get("team");
         const departmentParam = request.nextUrl.searchParams.get("department");
+        const roleParam = request.nextUrl.searchParams.get("role");
         const requestedTeamId = teamParam && teamParam !== "all" ? teamParam : null;
         const requestedDepartmentId = departmentParam && departmentParam !== "all" ? departmentParam : null;
+        const requestedRole = roleParam && roleParam !== "all" ? roleParam : null;
         let selectedTeamName: string | null = null;
         let selectedDepartmentName: string | null = null;
 
@@ -102,6 +116,10 @@ export async function GET(request: NextRequest) {
 
         if (requestedDepartmentId && !UUID_REGEX.test(requestedDepartmentId)) {
             return NextResponse.json({ error: "Invalid department selected." }, { status: 400 });
+        }
+
+        if (requestedRole && !isRoleFilter(requestedRole)) {
+            return NextResponse.json({ error: "Invalid role selected." }, { status: 400 });
         }
 
         if (requestedTeamId) {
@@ -180,6 +198,12 @@ export async function GET(request: NextRequest) {
                 query = query.in("department_id", scope.managedDepartmentIds);
             }
 
+            if (requestedRole === "admin") {
+                query = query.in("role", ["admin", "super_admin"]);
+            } else if (requestedRole) {
+                query = query.eq("role", requestedRole);
+            }
+
             const { data, error } = await query;
             if (error) {
                 console.error("[WorkersExport] Failed to fetch workers:", error);
@@ -236,12 +260,13 @@ export async function GET(request: NextRequest) {
             : selectedTeamName
                 ? `-${toSafeFilenamePart(selectedTeamName)}`
                 : "";
+        const filenameRole = requestedRole ? `-${getRoleFilterLabel(requestedRole)}` : "";
 
         return new NextResponse(csv, {
             status: 200,
             headers: {
                 "Content-Type": "text/csv; charset=utf-8",
-                "Content-Disposition": `attachment; filename="workers${filenameScope}-${dateSuffix}.csv"`,
+                "Content-Disposition": `attachment; filename="workers${filenameScope}${filenameRole}-${dateSuffix}.csv"`,
                 "Cache-Control": "no-store",
             },
         });

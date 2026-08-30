@@ -48,6 +48,13 @@ interface ActiveSessionOption {
     title: string;
 }
 
+const ROLE_FILTER_OPTIONS = [
+    { value: "worker", label: "Workers" },
+    { value: "admin", label: "Admins" },
+    { value: "team_admin", label: "Team Admins" },
+    { value: "reports_admin", label: "Reports Admins" },
+] as const;
+
 interface WorkersClientProps {
     workers: Profile[];
     currentPage: number;
@@ -56,6 +63,7 @@ interface WorkersClientProps {
     initialSearch: string;
     selectedTeam: string;
     selectedDepartment: string;
+    selectedRole: string;
     departments: DepartmentOption[];
     teams: TeamOption[];
     pageSize: number;
@@ -73,6 +81,7 @@ export default function WorkersClient({
     initialSearch,
     selectedTeam,
     selectedDepartment,
+    selectedRole,
     departments,
     teams,
     pageSize,
@@ -146,9 +155,10 @@ export default function WorkersClient({
         return "Worker";
     };
 
+    const activeDepartments = departments.filter((department) => department.is_active);
     const filterDepartmentOptions = selectedTeam === "all"
-        ? departments
-        : departments.filter((department) => department.team_id === selectedTeam);
+        ? activeDepartments
+        : activeDepartments.filter((department) => department.team_id === selectedTeam);
     const createDepartmentOptions = selectedCreateTeamId
         ? departments.filter((department) => department.is_active && department.team_id === selectedCreateTeamId)
         : [];
@@ -384,6 +394,17 @@ export default function WorkersClient({
         pushParams(params);
     };
 
+    const handleRoleChange = (role: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (role === 'all') {
+            params.delete('role');
+        } else {
+            params.set('role', role);
+        }
+        params.set('page', '1');
+        pushParams(params);
+    };
+
     const handlePageChange = (newPage: number) => {
         if (newPage < 1 || newPage > totalPages) return;
         const params = new URLSearchParams(searchParams.toString());
@@ -426,6 +447,7 @@ export default function WorkersClient({
     const exportParams = new URLSearchParams();
     if (selectedTeam !== "all") exportParams.set("team", selectedTeam);
     if (selectedDepartment !== "all") exportParams.set("department", selectedDepartment);
+    if (selectedRole !== "all") exportParams.set("role", selectedRole);
     const workersExportHref = exportParams.toString()
         ? `/api/export/workers?${exportParams.toString()}`
         : "/api/export/workers";
@@ -484,6 +506,22 @@ export default function WorkersClient({
                             {filterDepartmentOptions.map((department) => (
                                 <option key={department.id} value={department.id}>
                                     {department.name}{selectedTeam === "all" && department.team ? ` - ${department.team}` : ""}{department.is_active ? "" : " (Inactive)"}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="relative w-full sm:w-48">
+                        <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                        <select
+                            value={selectedRole}
+                            onChange={(event) => handleRoleChange(event.target.value)}
+                            className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                        >
+                            <option value="all">All roles</option>
+                            {ROLE_FILTER_OPTIONS.map((roleOption) => (
+                                <option key={roleOption.value} value={roleOption.value}>
+                                    {roleOption.label}
                                 </option>
                             ))}
                         </select>

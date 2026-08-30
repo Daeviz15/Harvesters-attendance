@@ -127,10 +127,11 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
         accessibleTeams = accessibleTeams.filter((teamRow) => accessibleTeamIds.has(teamRow.id));
     }
 
+    const activeDepartments = allDepartments.filter((departmentRow) => departmentRow.is_active);
     const selectedTeam = accessibleTeams.some((teamRow) => teamRow.id === team) ? team : 'all';
     const departmentsForSelectedTeam = selectedTeam === 'all'
-        ? allDepartments
-        : allDepartments.filter((departmentRow) => departmentRow.team_id === selectedTeam);
+        ? activeDepartments
+        : activeDepartments.filter((departmentRow) => departmentRow.team_id === selectedTeam);
     const selectedDepartment = departmentsForSelectedTeam.some((dept) => dept.id === department) ? department : 'all';
     const selectedDepartmentIds = selectedDepartment === 'all'
         ? departmentsForSelectedTeam.map((dept) => dept.id)
