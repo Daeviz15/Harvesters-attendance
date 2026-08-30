@@ -9,6 +9,11 @@ export const metadata = {
 };
 
 const WORKERS_PAGE_SIZE = 20;
+const WORKER_ROLE_FILTERS = ["worker", "admin", "team_admin", "reports_admin"] as const;
+
+function isWorkerRoleFilter(value: string): value is typeof WORKER_ROLE_FILTERS[number] {
+    return WORKER_ROLE_FILTERS.includes(value as typeof WORKER_ROLE_FILTERS[number]);
+}
 
 type WorkerRow = {
     id: string;
@@ -59,6 +64,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     const search = typeof searchParams.search === 'string' ? searchParams.search : '';
     const team = typeof searchParams.team === 'string' ? searchParams.team : 'all';
     const department = typeof searchParams.department === 'string' ? searchParams.department : 'all';
+    const role = typeof searchParams.role === 'string' ? searchParams.role : 'all';
+    const selectedRole = isWorkerRoleFilter(role) ? role : 'all';
 
     const supabase = await createClient();
 
@@ -148,6 +155,12 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
         }
     }
 
+    if (selectedRole === 'admin') {
+        query = query.in('role', ['admin', 'super_admin']);
+    } else if (selectedRole !== 'all') {
+        query = query.eq('role', selectedRole);
+    }
+
     if (sanitizedSearch) {
         query = query.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%,team.ilike.%${sanitizedSearch}%,worker_id.ilike.%${sanitizedSearch}%`);
     }
@@ -182,6 +195,12 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             } else {
                 fallbackQuery = fallbackQuery.eq('team_id', selectedTeam);
             }
+        }
+
+        if (selectedRole === 'admin') {
+            fallbackQuery = fallbackQuery.in('role', ['admin', 'super_admin']);
+        } else if (selectedRole !== 'all') {
+            fallbackQuery = fallbackQuery.eq('role', selectedRole);
         }
 
         if (sanitizedSearch) {
@@ -269,7 +288,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             initialSearch={search}
             selectedTeam={selectedTeam}
             selectedDepartment={selectedDepartment}
-            departments={departmentsForSelectedTeam}
+            selectedRole={selectedRole}
+            departments={allDepartments}
             teams={accessibleTeams}
             pageSize={WORKERS_PAGE_SIZE}
             activeSessions={formattedActiveSessions}

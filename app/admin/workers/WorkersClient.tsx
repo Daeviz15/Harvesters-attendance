@@ -95,6 +95,7 @@ export default function WorkersClient({
     const [isRegistering, setIsRegistering] = useState(false);
     const [registerError, setRegisterError] = useState<string | null>(null);
     const [registerSuccess, setRegisterSuccess] = useState<string | null>(null);
+    const [selectedCreateTeamId, setSelectedCreateTeamId] = useState<string>("");
     const [selectedDeptId, setSelectedDeptId] = useState<string>("");
 
     // Edit Worker Modal state
@@ -143,6 +144,36 @@ export default function WorkersClient({
         if (role === "reports_admin") return "Reports Only";
         if (role === "admin" || role === "super_admin") return "Admin";
         return "Worker";
+    };
+
+    const filterDepartmentOptions = selectedTeam === "all"
+        ? departments
+        : departments.filter((department) => department.team_id === selectedTeam);
+    const createDepartmentOptions = selectedCreateTeamId
+        ? departments.filter((department) => department.is_active && department.team_id === selectedCreateTeamId)
+        : [];
+    const selectedCreateTeam = teams.find((team) => team.id === selectedCreateTeamId);
+
+    const openRegisterModal = () => {
+        if (!canManageWorkerAccess) {
+            setError(ADD_WORKER_RESTRICTED_MESSAGE);
+            return;
+        }
+
+        const initialTeamId = selectedTeam !== "all"
+            ? selectedTeam
+            : teams.length === 1
+                ? teams[0].id
+                : "";
+        const initialDepartmentOptions = initialTeamId
+            ? departments.filter((department) => department.is_active && department.team_id === initialTeamId)
+            : [];
+
+        setSelectedCreateTeamId(initialTeamId);
+        setSelectedDeptId(initialDepartmentOptions.length === 1 ? initialDepartmentOptions[0].id : "");
+        setIsRegisterModalOpen(true);
+        setRegisterError(null);
+        setRegisterSuccess(null);
     };
 
     const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -254,9 +285,31 @@ export default function WorkersClient({
 
         const formData = new FormData(e.currentTarget);
 
+        if (!selectedCreateTeamId) {
+            setRegisterError("Please select the worker's team.");
+            setIsRegistering(false);
+            return;
+        }
+
+        if (!selectedDeptId) {
+            setRegisterError("Please select the worker's department.");
+            setIsRegistering(false);
+            return;
+        }
+
+        formData.set("teamId", selectedCreateTeamId);
+        if (selectedCreateTeam) {
+            formData.set("team", selectedCreateTeam.name);
+        }
+
         if (selectedDeptId) {
             const match = departments.find(d => d.id === selectedDeptId);
             if (match) {
+                if (match.team_id !== selectedCreateTeamId) {
+                    setRegisterError("Selected department does not belong to the selected team.");
+                    setIsRegistering(false);
+                    return;
+                }
                 formData.set("department", match.name);
                 formData.set("departmentId", match.id);
             }
@@ -428,7 +481,7 @@ export default function WorkersClient({
                             className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
                         >
                             <option value="all">All departments</option>
-                            {departments.map((department) => (
+                            {filterDepartmentOptions.map((department) => (
                                 <option key={department.id} value={department.id}>
                                     {department.name}{selectedTeam === "all" && department.team ? ` - ${department.team}` : ""}{department.is_active ? "" : " (Inactive)"}
                                 </option>
@@ -445,15 +498,7 @@ export default function WorkersClient({
                     </a>
 
                     <button
-                        onClick={() => {
-                            if (!canManageWorkerAccess) {
-                                setError(ADD_WORKER_RESTRICTED_MESSAGE);
-                                return;
-                            }
-                            setIsRegisterModalOpen(true);
-                            setRegisterError(null);
-                            setRegisterSuccess(null);
-                        }}
+                        onClick={openRegisterModal}
                         className="flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-[#34A853]/20 shrink-0"
                     >
                         <UserPlus className="w-4 h-4" />
@@ -760,16 +805,43 @@ export default function WorkersClient({
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                     <div>
                                         <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
-                                            Department
+                                            Team <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            name="teamId"
+                                            value={selectedCreateTeamId}
+                                            onChange={(e) => {
+                                                setSelectedCreateTeamId(e.target.value);
+                                                setSelectedDeptId("");
+                                            }}
+                                            required
+                                            className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
+                                        >
+                                            <option value="">Select Team</option>
+                                            {teams.map((team) => (
+                                                <option key={team.id} value={team.id}>
+                                                    {team.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <input type="hidden" name="team" value={selectedCreateTeam?.name || ""} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-neutral-700 dark:text-neutral-300 mb-1">
+                                            Department <span className="text-red-500">*</span>
                                         </label>
                                         <select
                                             name="departmentId"
                                             value={selectedDeptId}
                                             onChange={(e) => setSelectedDeptId(e.target.value)}
+                                            required
+                                            disabled={!selectedCreateTeamId}
                                             className="w-full px-3.5 py-2.5 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-xl text-sm text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50"
                                         >
-                                            <option value="">Select Department</option>
-                                            {departments.map((d) => (
+                                            <option value="">
+                                                {selectedCreateTeamId ? "Select Department" : "Select Team first"}
+                                            </option>
+                                            {createDepartmentOptions.map((d) => (
                                                 <option key={d.id} value={d.id}>
                                                     {d.name}
                                                 </option>
@@ -778,7 +850,7 @@ export default function WorkersClient({
                                         <input
                                             type="hidden"
                                             name="department"
-                                            value={departments.find((d) => d.id === selectedDeptId)?.name || ""}
+                                            value={createDepartmentOptions.find((d) => d.id === selectedDeptId)?.name || ""}
                                         />
                                     </div>
                                 </div>

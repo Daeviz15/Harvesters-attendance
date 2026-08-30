@@ -119,6 +119,8 @@ const registerWorkerSchema = z.object({
     email: z.string().trim().email("Please enter a valid email address.").or(z.literal("")).optional(),
     phone: z.string().trim().optional(),
     dateOfBirth: z.string().trim().optional(),
+    team: z.string().trim().optional(),
+    teamId: z.string().uuid().optional().nullable(),
     department: z.string().trim().optional(),
     departmentId: z.string().uuid().optional().nullable(),
     role: z.enum(["worker", "admin"]).default("worker"),
@@ -142,6 +144,8 @@ export async function createWorkerAccount(formData: FormData) {
         email: formData.get("email")?.toString() || "",
         phone: formData.get("phone")?.toString() || "",
         dateOfBirth: formData.get("dateOfBirth")?.toString() || "",
+        team: formData.get("team")?.toString() || "",
+        teamId: formData.get("teamId")?.toString() || undefined,
         department: formData.get("department")?.toString() || "",
         departmentId: formData.get("departmentId")?.toString() || undefined,
         role: formData.get("role")?.toString() || "worker",
@@ -161,6 +165,7 @@ export async function createWorkerAccount(formData: FormData) {
         email: userEmail,
         phone,
         dateOfBirth,
+        teamId: selectedTeamId,
         checkInSessionId,
         checkInNote,
     } = parsed.data;
@@ -184,14 +189,40 @@ export async function createWorkerAccount(formData: FormData) {
     let teamName = "General";
     let teamId: string | null = null;
     if (departmentId) {
-        const { data: deptData } = await adminClient
+        const { data: deptData, error: deptError } = await adminClient
             .from("departments")
-            .select("team, name, team_id")
+            .select("team, name, team_id, is_active")
             .eq("id", departmentId)
             .maybeSingle();
+
+        if (deptError || !deptData) {
+            return { error: "Selected department was not found." };
+        }
+
+        if (!deptData.is_active) {
+            return { error: "Selected department is inactive." };
+        }
+
+        if (selectedTeamId && deptData.team_id !== selectedTeamId) {
+            return { error: "Selected department does not belong to the selected team." };
+        }
+
         if (deptData?.team) teamName = deptData.team;
         if (deptData?.name) department = deptData.name;
         if (deptData?.team_id) teamId = deptData.team_id;
+    } else if (selectedTeamId) {
+        const { data: selectedTeam, error: teamError } = await adminClient
+            .from("teams")
+            .select("id, name, is_active")
+            .eq("id", selectedTeamId)
+            .maybeSingle();
+
+        if (teamError || !selectedTeam || !selectedTeam.is_active) {
+            return { error: "Selected team was not found or is inactive." };
+        }
+
+        teamName = selectedTeam.name;
+        teamId = selectedTeam.id;
     }
 
     // Auto-generate sequential team Worker ID (GLOBE/{TEAM}/26/XXXX)
