@@ -16,6 +16,8 @@ type WorkerRow = {
     last_name: string;
     department: string;
     department_id: string | null;
+    team_id: string | null;
+    team: string | null;
     role: string;
     avatar_url: string | null;
     created_at: string;
@@ -29,6 +31,8 @@ type WorkerRow = {
 type DepartmentRow = {
     id: string;
     name: string;
+    team_id: string | null;
+    team: string | null;
     is_active: boolean;
     head_user_id: string | null;
 };
@@ -53,48 +57,23 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     const parsedPage = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
     const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
     const search = typeof searchParams.search === 'string' ? searchParams.search : '';
+    const team = typeof searchParams.team === 'string' ? searchParams.team : 'all';
     const department = typeof searchParams.department === 'string' ? searchParams.department : 'all';
 
     const supabase = await createClient();
 
     const sanitizedSearch = search.replace(/[,()]/g, ' ').trim();
 
-    let query = supabase
-        .from('profiles')
-        .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, worker_id, phone, date_of_birth', { count: 'exact' })
-        .eq('is_active', true);
-
-    // Zero-Trust Scope Isolation: If Department Head, restrict to managed department(s)
-    if (!isSuperAdmin) {
-        query = query.in('department_id', managedDepartmentIds);
-    }
-
-    if (sanitizedSearch) {
-        query = query.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%,worker_id.ilike.%${sanitizedSearch}%`);
-    }
-
-    if (department !== 'all') {
-        query = query.eq('department_id', department);
-    }
-
-    // Apply pagination
-    const from = (page - 1) * WORKERS_PAGE_SIZE;
-    const to = from + WORKERS_PAGE_SIZE - 1;
-
-    // Parallelize all independent DB queries to eliminate server waterfalls
-    const [departmentsRes, workersRes, activeSessionsRes, teamsRes] = await Promise.all([
+    const [departmentsRes, activeSessionsRes, teamsRes] = await Promise.all([
         supabase
             .from('departments')
-            .select('id, name, is_active, head_user_id')
+            .select('id, name, team, team_id, is_active, head_user_id')
             .order('name', { ascending: true }),
-        query
-            .order('created_at', { ascending: false })
-            .range(from, to),
         supabase
             .from('attendance_sessions')
             .select('id, event:events(title)')
             .eq('status', 'active'),
-        isSuperAdmin
+        isSuperAdmin || isTeamAdmin
             ? supabase
                 .from('teams')
                 .select('id, name, code, is_active')
@@ -103,17 +82,82 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             : Promise.resolve({ data: [] as TeamRow[], error: null }),
     ]);
 
-    if (departmentsRes.error) {
-        console.error("Error fetching departments:", departmentsRes.error);
+    let departmentsError = departmentsRes.error;
+    let departmentRows = (departmentsRes.data || []) as DepartmentRow[];
+
+    if (departmentsRes.error && departmentsRes.error.code === "42703") {
+        const fallbackDepartmentsRes = await supabase
+            .from('departments')
+            .select('id, name, team, team_id, is_active')
+            .order('name', { ascending: true });
+
+        departmentsError = fallbackDepartmentsRes.error;
+        departmentRows = (fallbackDepartmentsRes.data || []).map((departmentRow) => ({
+            ...departmentRow,
+            head_user_id: null,
+        })) as DepartmentRow[];
     }
 
-    let rawDepartments = departmentsRes.data || [];
-    // Filter department dropdown options for Department Heads
+    if (departmentsError) {
+        console.error("Error fetching departments:", {
+            message: departmentsError.message,
+            details: departmentsError.details,
+            hint: departmentsError.hint,
+            code: departmentsError.code,
+        });
+    }
+
+    if (teamsRes.error) {
+        console.error("Error fetching teams:", teamsRes.error);
+    }
+
+    let allDepartments = departmentRows;
+    let accessibleTeams = ((teamsRes.data || []) as TeamRow[]);
+
     if (!isSuperAdmin) {
-        rawDepartments = rawDepartments.filter((d) => managedDepartmentIds.includes(d.id));
+        allDepartments = allDepartments.filter((departmentRow) => managedDepartmentIds.includes(departmentRow.id));
+        const accessibleTeamIds = new Set(allDepartments.map((departmentRow) => departmentRow.team_id).filter(Boolean));
+        accessibleTeams = accessibleTeams.filter((teamRow) => accessibleTeamIds.has(teamRow.id));
     }
 
-    const selectedDepartment = rawDepartments.some((dept) => dept.id === department) ? department : 'all';
+    const selectedTeam = accessibleTeams.some((teamRow) => teamRow.id === team) ? team : 'all';
+    const departmentsForSelectedTeam = selectedTeam === 'all'
+        ? allDepartments
+        : allDepartments.filter((departmentRow) => departmentRow.team_id === selectedTeam);
+    const selectedDepartment = departmentsForSelectedTeam.some((dept) => dept.id === department) ? department : 'all';
+    const selectedDepartmentIds = selectedDepartment === 'all'
+        ? departmentsForSelectedTeam.map((dept) => dept.id)
+        : [selectedDepartment];
+
+    let query = supabase
+        .from('profiles')
+        .select('id, first_name, last_name, department, department_id, team_id, team, role, avatar_url, created_at, worker_id, phone, date_of_birth', { count: 'exact' })
+        .eq('is_active', true);
+
+    if (!isSuperAdmin) {
+        query = query.in('department_id', managedDepartmentIds);
+    }
+
+    if (selectedDepartment !== 'all') {
+        query = query.eq('department_id', selectedDepartment);
+    } else if (selectedTeam !== 'all') {
+        if (selectedDepartmentIds.length > 0) {
+            query = query.in('department_id', selectedDepartmentIds);
+        } else {
+            query = query.eq('team_id', selectedTeam);
+        }
+    }
+
+    if (sanitizedSearch) {
+        query = query.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%,team.ilike.%${sanitizedSearch}%,worker_id.ilike.%${sanitizedSearch}%`);
+    }
+
+    const from = (page - 1) * WORKERS_PAGE_SIZE;
+    const to = from + WORKERS_PAGE_SIZE - 1;
+
+    const workersRes = await query
+        .order('created_at', { ascending: false })
+        .range(from, to);
 
     let workers = (workersRes.data || []) as WorkerRow[];
     let count = workersRes.count;
@@ -123,18 +167,25 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     if (error && (error.code === '42703' || error.message?.toLowerCase().includes('worker_id'))) {
         let fallbackQuery = supabase
             .from('profiles')
-            .select('id, first_name, last_name, department, department_id, role, avatar_url, created_at, phone, date_of_birth', { count: 'exact' })
+            .select('id, first_name, last_name, department, department_id, team_id, team, role, avatar_url, created_at, phone, date_of_birth', { count: 'exact' })
             .eq('is_active', true);
 
         if (!isSuperAdmin) {
             fallbackQuery = fallbackQuery.in('department_id', managedDepartmentIds);
         }
 
-        if (sanitizedSearch) {
-            fallbackQuery = fallbackQuery.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%`);
+        if (selectedDepartment !== 'all') {
+            fallbackQuery = fallbackQuery.eq('department_id', selectedDepartment);
+        } else if (selectedTeam !== 'all') {
+            if (selectedDepartmentIds.length > 0) {
+                fallbackQuery = fallbackQuery.in('department_id', selectedDepartmentIds);
+            } else {
+                fallbackQuery = fallbackQuery.eq('team_id', selectedTeam);
+            }
         }
-        if (department !== 'all') {
-            fallbackQuery = fallbackQuery.eq('department_id', department);
+
+        if (sanitizedSearch) {
+            fallbackQuery = fallbackQuery.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%,team.ilike.%${sanitizedSearch}%`);
         }
 
         const fallbackRes = await fallbackQuery
@@ -151,7 +202,7 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     }
 
     const headByUserId = new Map(
-        rawDepartments
+        allDepartments
             .filter((dept: DepartmentRow) => dept.head_user_id)
             .map((dept: DepartmentRow) => [dept.head_user_id as string, { id: dept.id, name: dept.name }])
     );
@@ -216,9 +267,10 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             totalPages={totalPages} 
             totalCount={count || 0}
             initialSearch={search}
+            selectedTeam={selectedTeam}
             selectedDepartment={selectedDepartment}
-            departments={rawDepartments}
-            teams={(teamsRes.data || []) as TeamRow[]}
+            departments={departmentsForSelectedTeam}
+            teams={accessibleTeams}
             pageSize={WORKERS_PAGE_SIZE}
             activeSessions={formattedActiveSessions}
             isSuperAdmin={isSuperAdmin}

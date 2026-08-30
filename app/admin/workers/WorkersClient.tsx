@@ -30,6 +30,8 @@ interface Profile {
 interface DepartmentOption {
     id: string;
     name: string;
+    team_id: string | null;
+    team: string | null;
     is_active: boolean;
     head_user_id: string | null;
 }
@@ -52,6 +54,7 @@ interface WorkersClientProps {
     totalPages: number;
     totalCount: number;
     initialSearch: string;
+    selectedTeam: string;
     selectedDepartment: string;
     departments: DepartmentOption[];
     teams: TeamOption[];
@@ -68,6 +71,7 @@ export default function WorkersClient({
     totalPages,
     totalCount,
     initialSearch,
+    selectedTeam,
     selectedDepartment,
     departments,
     teams,
@@ -315,6 +319,18 @@ export default function WorkersClient({
         pushParams(params);
     };
 
+    const handleTeamChange = (teamId: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (teamId === 'all') {
+            params.delete('team');
+        } else {
+            params.set('team', teamId);
+        }
+        params.delete('department');
+        params.set('page', '1');
+        pushParams(params);
+    };
+
     const handlePageChange = (newPage: number) => {
         if (newPage < 1 || newPage > totalPages) return;
         const params = new URLSearchParams(searchParams.toString());
@@ -354,9 +370,12 @@ export default function WorkersClient({
 
     const pageStart = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
     const pageEnd = Math.min(currentPage * pageSize, totalCount);
-    const workersExportHref = selectedDepartment === "all"
-        ? "/api/export/workers"
-        : `/api/export/workers?department=${encodeURIComponent(selectedDepartment)}`;
+    const exportParams = new URLSearchParams();
+    if (selectedTeam !== "all") exportParams.set("team", selectedTeam);
+    if (selectedDepartment !== "all") exportParams.set("department", selectedDepartment);
+    const workersExportHref = exportParams.toString()
+        ? `/api/export/workers?${exportParams.toString()}`
+        : "/api/export/workers";
 
     return (
         <div className="w-full max-w-7xl mx-auto space-y-8">
@@ -383,6 +402,24 @@ export default function WorkersClient({
                             className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
                         />
                     </div>
+                    {teams.length > 0 && (
+                        <div className="relative w-full sm:w-52">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                            <select
+                                value={selectedTeam}
+                                onChange={(event) => handleTeamChange(event.target.value)}
+                                className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                            >
+                                <option value="all">All teams</option>
+                                {teams.map((team) => (
+                                    <option key={team.id} value={team.id}>
+                                        {team.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="relative w-full sm:w-56">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
                         <select
@@ -393,7 +430,7 @@ export default function WorkersClient({
                             <option value="all">All departments</option>
                             {departments.map((department) => (
                                 <option key={department.id} value={department.id}>
-                                    {department.name}{department.is_active ? "" : " (Inactive)"}
+                                    {department.name}{selectedTeam === "all" && department.team ? ` - ${department.team}` : ""}{department.is_active ? "" : " (Inactive)"}
                                 </option>
                             ))}
                         </select>
@@ -634,7 +671,7 @@ export default function WorkersClient({
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[90vh] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[calc(100dvh-2rem)] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
                         >
                             <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between shrink-0">
                                 <div>
@@ -655,7 +692,7 @@ export default function WorkersClient({
                                 </button>
                             </div>
 
-                            <form onSubmit={handleRegisterSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                            <form onSubmit={handleRegisterSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
                                 {registerError && (
                                     <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-xs text-red-600 dark:text-red-300">
                                         {registerError}
@@ -831,7 +868,7 @@ export default function WorkersClient({
                             initial={{ opacity: 0, scale: 0.95, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[90vh] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
+                            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[calc(100vw-1.5rem)] sm:w-full max-w-lg max-h-[calc(100dvh-2rem)] bg-white dark:bg-[#0f0f0f] border border-neutral-200 dark:border-white/10 rounded-2xl shadow-2xl z-50 flex flex-col overflow-hidden"
                         >
                             <div className="p-4 sm:p-6 border-b border-neutral-100 dark:border-white/5 flex items-center justify-between shrink-0">
                                 <div>
@@ -852,7 +889,7 @@ export default function WorkersClient({
                                 </button>
                             </div>
 
-                            <form onSubmit={handleEditSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+                            <form onSubmit={handleEditSubmit} className="p-4 sm:p-6 space-y-4 overflow-y-auto overscroll-contain flex-1 min-h-0">
                                 {editError && (
                                     <div className="p-3 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-xl text-xs text-red-600 dark:text-red-300 font-medium">
                                         {editError}

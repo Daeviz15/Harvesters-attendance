@@ -89,12 +89,43 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
 
     try {
+        const teamParam = request.nextUrl.searchParams.get("team");
         const departmentParam = request.nextUrl.searchParams.get("department");
+        const requestedTeamId = teamParam && teamParam !== "all" ? teamParam : null;
         const requestedDepartmentId = departmentParam && departmentParam !== "all" ? departmentParam : null;
+        let selectedTeamName: string | null = null;
         let selectedDepartmentName: string | null = null;
+
+        if (requestedTeamId && !UUID_REGEX.test(requestedTeamId)) {
+            return NextResponse.json({ error: "Invalid team selected." }, { status: 400 });
+        }
 
         if (requestedDepartmentId && !UUID_REGEX.test(requestedDepartmentId)) {
             return NextResponse.json({ error: "Invalid department selected." }, { status: 400 });
+        }
+
+        if (requestedTeamId) {
+            if (!scope.isSuperAdmin && !scope.managedTeamIds.includes(requestedTeamId)) {
+                return NextResponse.json({ error: "Forbidden: You cannot export workers for this team." }, { status: 403 });
+            }
+
+            const { data: team, error: teamError } = await supabase
+                .from("teams")
+                .select("id, name")
+                .eq("id", requestedTeamId)
+                .eq("is_active", true)
+                .maybeSingle();
+
+            if (teamError) {
+                console.error("[WorkersExport] Failed to validate team:", teamError);
+                return NextResponse.json({ error: "Failed to validate team." }, { status: 500 });
+            }
+
+            if (!team) {
+                return NextResponse.json({ error: "Selected team was not found." }, { status: 404 });
+            }
+
+            selectedTeamName = team.name;
         }
 
         if (requestedDepartmentId) {
@@ -104,7 +135,7 @@ export async function GET(request: NextRequest) {
 
             const { data: department, error: departmentError } = await supabase
                 .from("departments")
-                .select("id, name")
+                .select("id, name, team_id")
                 .eq("id", requestedDepartmentId)
                 .eq("is_active", true)
                 .maybeSingle();
@@ -116,6 +147,10 @@ export async function GET(request: NextRequest) {
 
             if (!department) {
                 return NextResponse.json({ error: "Selected department was not found." }, { status: 404 });
+            }
+
+            if (requestedTeamId && department.team_id !== requestedTeamId) {
+                return NextResponse.json({ error: "Selected department does not belong to the selected team." }, { status: 400 });
             }
 
             selectedDepartmentName = department.name;
@@ -135,6 +170,8 @@ export async function GET(request: NextRequest) {
 
             if (requestedDepartmentId) {
                 query = query.eq("department_id", requestedDepartmentId);
+            } else if (requestedTeamId) {
+                query = query.eq("team_id", requestedTeamId);
             } else if (!scope.isSuperAdmin) {
                 if (scope.managedDepartmentIds.length === 0) {
                     hasMore = false;
@@ -194,7 +231,11 @@ export async function GET(request: NextRequest) {
         ].join("\n");
 
         const dateSuffix = new Date().toISOString().slice(0, 10);
-        const filenameScope = selectedDepartmentName ? `-${toSafeFilenamePart(selectedDepartmentName)}` : "";
+        const filenameScope = selectedDepartmentName
+            ? `-${toSafeFilenamePart(selectedDepartmentName)}`
+            : selectedTeamName
+                ? `-${toSafeFilenamePart(selectedTeamName)}`
+                : "";
 
         return new NextResponse(csv, {
             status: 200,
