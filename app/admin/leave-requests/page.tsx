@@ -37,6 +37,7 @@ export default async function LeaveRequestsPage(props: {
             initialStatus={normalizeStatus(searchParams.status)}
             initialSearch={typeof searchParams.search === "string" ? searchParams.search : ""}
             scopeSummary={scope.scopeSummary}
+            statusCounts={result.data.statusCounts}
         />
     );
 }

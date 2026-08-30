@@ -8,9 +8,50 @@ const AUTH_PAGE_SIZE = 1000;
 const MAX_AUTH_PAGES = 100;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ROLE_FILTERS = ["worker", "admin", "team_admin", "reports_admin"] as const;
+const HEAD_FILTERS = ["heads", "non_heads"] as const;
+const BIRTHDAY_FILTERS = ["today", "next_7_days", "this_month", "missing"] as const;
+const WORKER_DIRECTORY_TIME_ZONE = "Africa/Lagos";
 
 function isRoleFilter(value: string): value is typeof ROLE_FILTERS[number] {
     return ROLE_FILTERS.includes(value as typeof ROLE_FILTERS[number]);
+}
+
+function isHeadFilter(value: string): value is typeof HEAD_FILTERS[number] {
+    return HEAD_FILTERS.includes(value as typeof HEAD_FILTERS[number]);
+}
+
+function isBirthdayFilter(value: string): value is typeof BIRTHDAY_FILTERS[number] {
+    return BIRTHDAY_FILTERS.includes(value as typeof BIRTHDAY_FILTERS[number]);
+}
+
+function getZonedDateParts(offsetDays = 0) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: WORKER_DIRECTORY_TIME_ZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    });
+    const parts = formatter.formatToParts(new Date());
+    const year = Number(parts.find((part) => part.type === "year")?.value);
+    const month = Number(parts.find((part) => part.type === "month")?.value);
+    const day = Number(parts.find((part) => part.type === "day")?.value);
+    const zonedDate = new Date(Date.UTC(year, month - 1, day + offsetDays));
+
+    return {
+        month: zonedDate.getUTCMonth() + 1,
+        day: zonedDate.getUTCDate(),
+    };
+}
+
+function getUpcomingBirthdayClauses(days: number) {
+    const uniqueDays = new Set<string>();
+
+    for (let offset = 0; offset < days; offset += 1) {
+        const dateParts = getZonedDateParts(offset);
+        uniqueDays.add(`and(birthday_month.eq.${dateParts.month},birthday_day.eq.${dateParts.day})`);
+    }
+
+    return Array.from(uniqueDays).join(",");
 }
 
 type WorkerExportRow = {
@@ -104,9 +145,13 @@ export async function GET(request: NextRequest) {
         const teamParam = request.nextUrl.searchParams.get("team");
         const departmentParam = request.nextUrl.searchParams.get("department");
         const roleParam = request.nextUrl.searchParams.get("role");
+        const headParam = request.nextUrl.searchParams.get("head");
+        const birthdayParam = request.nextUrl.searchParams.get("birthday");
         const requestedTeamId = teamParam && teamParam !== "all" ? teamParam : null;
         const requestedDepartmentId = departmentParam && departmentParam !== "all" ? departmentParam : null;
         const requestedRole = roleParam && roleParam !== "all" ? roleParam : null;
+        const requestedHead = headParam && headParam !== "all" ? headParam : null;
+        const requestedBirthday = birthdayParam && birthdayParam !== "all" ? birthdayParam : null;
         let selectedTeamName: string | null = null;
         let selectedDepartmentName: string | null = null;
 
@@ -120,6 +165,14 @@ export async function GET(request: NextRequest) {
 
         if (requestedRole && !isRoleFilter(requestedRole)) {
             return NextResponse.json({ error: "Invalid role selected." }, { status: 400 });
+        }
+
+        if (requestedHead && !isHeadFilter(requestedHead)) {
+            return NextResponse.json({ error: "Invalid department-head filter selected." }, { status: 400 });
+        }
+
+        if (requestedBirthday && !isBirthdayFilter(requestedBirthday)) {
+            return NextResponse.json({ error: "Invalid birthday filter selected." }, { status: 400 });
         }
 
         if (requestedTeamId) {
@@ -174,6 +227,34 @@ export async function GET(request: NextRequest) {
             selectedDepartmentName = department.name;
         }
 
+        let headDepartmentsQuery = supabase
+            .from("departments")
+            .select("head_user_id")
+            .eq("is_active", true)
+            .not("head_user_id", "is", null);
+
+        if (requestedDepartmentId) {
+            headDepartmentsQuery = headDepartmentsQuery.eq("id", requestedDepartmentId);
+        } else if (requestedTeamId) {
+            headDepartmentsQuery = headDepartmentsQuery.eq("team_id", requestedTeamId);
+        } else if (!scope.isSuperAdmin) {
+            if (scope.managedDepartmentIds.length === 0) {
+                headDepartmentsQuery = headDepartmentsQuery.eq("id", "00000000-0000-0000-0000-000000000000");
+            } else {
+                headDepartmentsQuery = headDepartmentsQuery.in("id", scope.managedDepartmentIds);
+            }
+        }
+
+        const { data: headDepartments, error: headDepartmentsError } = await headDepartmentsQuery;
+        if (headDepartmentsError) {
+            console.error("[WorkersExport] Failed to fetch department-head scope:", headDepartmentsError);
+            return NextResponse.json({ error: "Failed to validate department-head filter." }, { status: 500 });
+        }
+
+        const departmentHeadUserIds = (headDepartments || [])
+            .map((department) => department.head_user_id)
+            .filter((headUserId): headUserId is string => Boolean(headUserId));
+
         const workerRows: WorkerExportRow[] = [];
         let offset = 0;
         let hasMore = true;
@@ -202,6 +283,25 @@ export async function GET(request: NextRequest) {
                 query = query.in("role", ["admin", "super_admin"]);
             } else if (requestedRole) {
                 query = query.eq("role", requestedRole);
+            }
+
+            if (requestedHead === "heads") {
+                query = departmentHeadUserIds.length > 0
+                    ? query.in("id", departmentHeadUserIds)
+                    : query.eq("id", "00000000-0000-0000-0000-000000000000");
+            } else if (requestedHead === "non_heads" && departmentHeadUserIds.length > 0) {
+                query = query.not("id", "in", `(${departmentHeadUserIds.join(",")})`);
+            }
+
+            if (requestedBirthday === "missing") {
+                query = query.is("date_of_birth", null);
+            } else if (requestedBirthday === "today") {
+                const today = getZonedDateParts();
+                query = query.eq("birthday_month", today.month).eq("birthday_day", today.day);
+            } else if (requestedBirthday === "this_month") {
+                query = query.eq("birthday_month", getZonedDateParts().month);
+            } else if (requestedBirthday === "next_7_days") {
+                query = query.or(getUpcomingBirthdayClauses(7));
             }
 
             const { data, error } = await query;
@@ -261,12 +361,14 @@ export async function GET(request: NextRequest) {
                 ? `-${toSafeFilenamePart(selectedTeamName)}`
                 : "";
         const filenameRole = requestedRole ? `-${getRoleFilterLabel(requestedRole)}` : "";
+        const filenameHead = requestedHead ? `-${toSafeFilenamePart(requestedHead)}` : "";
+        const filenameBirthday = requestedBirthday ? `-${toSafeFilenamePart(requestedBirthday)}` : "";
 
         return new NextResponse(csv, {
             status: 200,
             headers: {
                 "Content-Type": "text/csv; charset=utf-8",
-                "Content-Disposition": `attachment; filename="workers${filenameScope}${filenameRole}-${dateSuffix}.csv"`,
+                "Content-Disposition": `attachment; filename="workers${filenameScope}${filenameRole}${filenameHead}${filenameBirthday}-${dateSuffix}.csv"`,
                 "Cache-Control": "no-store",
             },
         });

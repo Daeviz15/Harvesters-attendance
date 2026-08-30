@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import {
@@ -25,6 +25,11 @@ interface LeaveRequestsClientProps {
     initialStatus: LeaveStatus | "all";
     initialSearch: string;
     scopeSummary: string;
+    statusCounts: {
+        pending: number;
+        approved: number;
+        rejected: number;
+    };
 }
 
 function formatDate(date: string) {
@@ -77,6 +82,7 @@ export default function LeaveRequestsClient({
     initialStatus,
     initialSearch,
     scopeSummary,
+    statusCounts,
 }: LeaveRequestsClientProps) {
     const router = useRouter();
     const pathname = usePathname();
@@ -88,16 +94,6 @@ export default function LeaveRequestsClient({
     const [isPending, startTransition] = useTransition();
 
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-
-    const statusCounts = useMemo(() => {
-        return requests.reduce(
-            (acc, request) => {
-                acc[request.status] += 1;
-                return acc;
-            },
-            { pending: 0, approved: 0, rejected: 0 } satisfies Record<LeaveStatus, number>,
-        );
-    }, [requests]);
 
     const setQuery = (updates: Record<string, string | null>) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -152,18 +148,39 @@ export default function LeaveRequestsClient({
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 rounded-2xl border border-neutral-200 bg-white p-2 shadow-sm dark:border-white/10 dark:bg-[#101010]">
-                    <div className="rounded-xl bg-orange-500/10 px-4 py-3 text-center">
+                    <button
+                        onClick={() => setQuery({ status: null })}
+                        className={`rounded-xl px-4 py-3 text-center transition-all ${
+                            initialStatus === "pending"
+                                ? "bg-orange-500/20 ring-1 ring-orange-500/40"
+                                : "bg-orange-500/10 hover:bg-orange-500/15"
+                        }`}
+                    >
                         <p className="text-lg font-bold text-orange-500">{statusCounts.pending}</p>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Pending</p>
-                    </div>
-                    <div className="rounded-xl bg-[#34A853]/10 px-4 py-3 text-center">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Pending</p>
+                    </button>
+                    <button
+                        onClick={() => setQuery({ status: "approved" })}
+                        className={`rounded-xl px-4 py-3 text-center transition-all ${
+                            initialStatus === "approved"
+                                ? "bg-[#34A853]/20 ring-1 ring-[#34A853]/40"
+                                : "bg-[#34A853]/10 hover:bg-[#34A853]/15"
+                        }`}
+                    >
                         <p className="text-lg font-bold text-[#34A853]">{statusCounts.approved}</p>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Approved</p>
-                    </div>
-                    <div className="rounded-xl bg-red-500/10 px-4 py-3 text-center">
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Approved</p>
+                    </button>
+                    <button
+                        onClick={() => setQuery({ status: "rejected" })}
+                        className={`rounded-xl px-4 py-3 text-center transition-all ${
+                            initialStatus === "rejected"
+                                ? "bg-red-500/20 ring-1 ring-red-500/40"
+                                : "bg-red-500/10 hover:bg-red-500/15"
+                        }`}
+                    >
                         <p className="text-lg font-bold text-red-400">{statusCounts.rejected}</p>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500">Rejected</p>
-                    </div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">Rejected</p>
+                    </button>
                 </div>
             </div>
 

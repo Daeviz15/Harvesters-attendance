@@ -10,9 +10,50 @@ export const metadata = {
 
 const WORKERS_PAGE_SIZE = 20;
 const WORKER_ROLE_FILTERS = ["worker", "admin", "team_admin", "reports_admin"] as const;
+const HEAD_FILTERS = ["heads", "non_heads"] as const;
+const BIRTHDAY_FILTERS = ["today", "next_7_days", "this_month", "missing"] as const;
+const WORKER_DIRECTORY_TIME_ZONE = "Africa/Lagos";
 
 function isWorkerRoleFilter(value: string): value is typeof WORKER_ROLE_FILTERS[number] {
     return WORKER_ROLE_FILTERS.includes(value as typeof WORKER_ROLE_FILTERS[number]);
+}
+
+function isHeadFilter(value: string): value is typeof HEAD_FILTERS[number] {
+    return HEAD_FILTERS.includes(value as typeof HEAD_FILTERS[number]);
+}
+
+function isBirthdayFilter(value: string): value is typeof BIRTHDAY_FILTERS[number] {
+    return BIRTHDAY_FILTERS.includes(value as typeof BIRTHDAY_FILTERS[number]);
+}
+
+function getZonedDateParts(offsetDays = 0) {
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: WORKER_DIRECTORY_TIME_ZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    });
+    const parts = formatter.formatToParts(new Date());
+    const year = Number(parts.find((part) => part.type === "year")?.value);
+    const month = Number(parts.find((part) => part.type === "month")?.value);
+    const day = Number(parts.find((part) => part.type === "day")?.value);
+    const zonedDate = new Date(Date.UTC(year, month - 1, day + offsetDays));
+
+    return {
+        month: zonedDate.getUTCMonth() + 1,
+        day: zonedDate.getUTCDate(),
+    };
+}
+
+function getUpcomingBirthdayClauses(days: number) {
+    const uniqueDays = new Set<string>();
+
+    for (let offset = 0; offset < days; offset += 1) {
+        const dateParts = getZonedDateParts(offset);
+        uniqueDays.add(`and(birthday_month.eq.${dateParts.month},birthday_day.eq.${dateParts.day})`);
+    }
+
+    return Array.from(uniqueDays).join(",");
 }
 
 type WorkerRow = {
@@ -66,6 +107,10 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
     const department = typeof searchParams.department === 'string' ? searchParams.department : 'all';
     const role = typeof searchParams.role === 'string' ? searchParams.role : 'all';
     const selectedRole = isWorkerRoleFilter(role) ? role : 'all';
+    const head = typeof searchParams.head === 'string' ? searchParams.head : 'all';
+    const selectedHead = isHeadFilter(head) ? head : 'all';
+    const birthday = typeof searchParams.birthday === 'string' ? searchParams.birthday : 'all';
+    const selectedBirthday = isBirthdayFilter(birthday) ? birthday : 'all';
 
     const supabase = await createClient();
 
@@ -162,6 +207,29 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
         query = query.eq('role', selectedRole);
     }
 
+    const departmentHeadUserIds = allDepartments
+        .map((departmentRow) => departmentRow.head_user_id)
+        .filter((headUserId): headUserId is string => Boolean(headUserId));
+
+    if (selectedHead === 'heads') {
+        query = departmentHeadUserIds.length > 0
+            ? query.in('id', departmentHeadUserIds)
+            : query.eq('id', '00000000-0000-0000-0000-000000000000');
+    } else if (selectedHead === 'non_heads' && departmentHeadUserIds.length > 0) {
+        query = query.not('id', 'in', `(${departmentHeadUserIds.join(',')})`);
+    }
+
+    if (selectedBirthday === 'missing') {
+        query = query.is('date_of_birth', null);
+    } else if (selectedBirthday === 'today') {
+        const today = getZonedDateParts();
+        query = query.eq('birthday_month', today.month).eq('birthday_day', today.day);
+    } else if (selectedBirthday === 'this_month') {
+        query = query.eq('birthday_month', getZonedDateParts().month);
+    } else if (selectedBirthday === 'next_7_days') {
+        query = query.or(getUpcomingBirthdayClauses(7));
+    }
+
     if (sanitizedSearch) {
         query = query.or(`first_name.ilike.%${sanitizedSearch}%,last_name.ilike.%${sanitizedSearch}%,department.ilike.%${sanitizedSearch}%,team.ilike.%${sanitizedSearch}%,worker_id.ilike.%${sanitizedSearch}%`);
     }
@@ -202,6 +270,25 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             fallbackQuery = fallbackQuery.in('role', ['admin', 'super_admin']);
         } else if (selectedRole !== 'all') {
             fallbackQuery = fallbackQuery.eq('role', selectedRole);
+        }
+
+        if (selectedHead === 'heads') {
+            fallbackQuery = departmentHeadUserIds.length > 0
+                ? fallbackQuery.in('id', departmentHeadUserIds)
+                : fallbackQuery.eq('id', '00000000-0000-0000-0000-000000000000');
+        } else if (selectedHead === 'non_heads' && departmentHeadUserIds.length > 0) {
+            fallbackQuery = fallbackQuery.not('id', 'in', `(${departmentHeadUserIds.join(',')})`);
+        }
+
+        if (selectedBirthday === 'missing') {
+            fallbackQuery = fallbackQuery.is('date_of_birth', null);
+        } else if (selectedBirthday === 'today') {
+            const today = getZonedDateParts();
+            fallbackQuery = fallbackQuery.eq('birthday_month', today.month).eq('birthday_day', today.day);
+        } else if (selectedBirthday === 'this_month') {
+            fallbackQuery = fallbackQuery.eq('birthday_month', getZonedDateParts().month);
+        } else if (selectedBirthday === 'next_7_days') {
+            fallbackQuery = fallbackQuery.or(getUpcomingBirthdayClauses(7));
         }
 
         if (sanitizedSearch) {
@@ -290,6 +377,8 @@ export default async function WorkersPage(props: { searchParams: Promise<{ [key:
             selectedTeam={selectedTeam}
             selectedDepartment={selectedDepartment}
             selectedRole={selectedRole}
+            selectedHead={selectedHead}
+            selectedBirthday={selectedBirthday}
             departments={allDepartments}
             teams={accessibleTeams}
             pageSize={WORKERS_PAGE_SIZE}

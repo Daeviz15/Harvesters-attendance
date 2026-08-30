@@ -48,6 +48,11 @@ export interface LeaveRequestsResult {
     totalCount: number;
     page: number;
     pageSize: number;
+    statusCounts: {
+        pending: number;
+        approved: number;
+        rejected: number;
+    };
 }
 
 function getStringParam(
@@ -100,6 +105,11 @@ export async function getAdminLeaveRequests(
                     totalCount: 0,
                     page,
                     pageSize: PAGE_SIZE,
+                    statusCounts: {
+                        pending: 0,
+                        approved: 0,
+                        rejected: 0,
+                    },
                 },
             };
         }
@@ -120,9 +130,33 @@ export async function getAdminLeaveRequests(
         query = query.in("user_id", matchingProfileIds);
     }
 
-    const leaveResponse = await query
-        .order("created_at", { ascending: false })
-        .range(from, to);
+    let pendingCountQuery = supabase
+        .from("leave_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "pending");
+
+    let approvedCountQuery = supabase
+        .from("leave_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "approved");
+
+    let rejectedCountQuery = supabase
+        .from("leave_requests")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "rejected");
+
+    if (matchingProfileIds) {
+        pendingCountQuery = pendingCountQuery.in("user_id", matchingProfileIds);
+        approvedCountQuery = approvedCountQuery.in("user_id", matchingProfileIds);
+        rejectedCountQuery = rejectedCountQuery.in("user_id", matchingProfileIds);
+    }
+
+    const [pendingRes, approvedRes, rejectedRes, leaveResponse] = await Promise.all([
+        pendingCountQuery,
+        approvedCountQuery,
+        rejectedCountQuery,
+        query.order("created_at", { ascending: false }).range(from, to),
+    ]);
 
     if (leaveResponse.error) {
         console.error("[LeaveRequests] Failed to fetch scoped leave requests:", leaveResponse.error);
@@ -193,6 +227,11 @@ export async function getAdminLeaveRequests(
             totalCount: leaveResponse.count || 0,
             page,
             pageSize: PAGE_SIZE,
+            statusCounts: {
+                pending: pendingRes.count || 0,
+                approved: approvedRes.count || 0,
+                rejected: rejectedRes.count || 0,
+            },
         },
     };
 }

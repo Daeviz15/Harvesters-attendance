@@ -13,7 +13,7 @@ export default async function AdminLayout({
     const { initials, isSuperAdmin, isReportsOnlyAdmin, scopeSummary, profile } = await requireAdminAuth();
 
     return (
-        <div className="min-h-screen bg-neutral-50 dark:bg-background text-foreground flex flex-col md:flex-row">
+        <div className="min-h-screen bg-neutral-50 dark:bg-background text-foreground overflow-x-hidden max-w-full">
             {/* Navigation Sidebar & Mobile Header */}
             <AdminNavigation 
                 initial={initials} 
@@ -23,9 +23,9 @@ export default async function AdminLayout({
             />
 
             {/* Main Content Area */}
-            <div className="flex-1 md:ml-64 flex flex-col min-h-screen relative z-10">
+            <div className="min-h-screen md:pl-64 flex flex-col relative z-10 min-w-0 max-w-full overflow-x-hidden">
                 {/* Desktop Top Header */}
-                <header className="hidden md:flex h-20 border-b border-neutral-200 dark:border-white/10 bg-white/50 dark:bg-background/50 backdrop-blur-xl sticky top-0 z-40 items-center justify-between px-6 lg:px-10">
+                <header className="hidden md:flex h-20 border-b border-neutral-200 dark:border-white/10 bg-white/50 dark:bg-background/50 backdrop-blur-xl sticky top-0 z-40 items-center justify-between px-6 lg:px-8">
                     <div className="flex items-center gap-3">
                         <h1 className="text-xl font-bold text-neutral-900 dark:text-white">
                             Admin Overview
@@ -50,7 +50,7 @@ export default async function AdminLayout({
                 </header>
 
                 {/* Page Content */}
-                <main className="flex-1 p-6 lg:p-10 max-w-7xl mx-auto w-full">
+                <main className="flex-1 w-full min-w-0 max-w-full p-4 sm:p-6 lg:p-8">
                     {children}
                 </main>
             </div>

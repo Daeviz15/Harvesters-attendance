@@ -55,6 +55,18 @@ const ROLE_FILTER_OPTIONS = [
     { value: "reports_admin", label: "Reports Admins" },
 ] as const;
 
+const HEAD_FILTER_OPTIONS = [
+    { value: "heads", label: "Department Heads" },
+    { value: "non_heads", label: "Not Dept Heads" },
+] as const;
+
+const BIRTHDAY_FILTER_OPTIONS = [
+    { value: "today", label: "Birthday today" },
+    { value: "next_7_days", label: "Next 7 days" },
+    { value: "this_month", label: "This month" },
+    { value: "missing", label: "Missing birthday" },
+] as const;
+
 interface WorkersClientProps {
     workers: Profile[];
     currentPage: number;
@@ -64,6 +76,8 @@ interface WorkersClientProps {
     selectedTeam: string;
     selectedDepartment: string;
     selectedRole: string;
+    selectedHead: string;
+    selectedBirthday: string;
     departments: DepartmentOption[];
     teams: TeamOption[];
     pageSize: number;
@@ -82,6 +96,8 @@ export default function WorkersClient({
     selectedTeam,
     selectedDepartment,
     selectedRole,
+    selectedHead,
+    selectedBirthday,
     departments,
     teams,
     pageSize,
@@ -405,6 +421,28 @@ export default function WorkersClient({
         pushParams(params);
     };
 
+    const handleHeadChange = (head: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (head === 'all') {
+            params.delete('head');
+        } else {
+            params.set('head', head);
+        }
+        params.set('page', '1');
+        pushParams(params);
+    };
+
+    const handleBirthdayChange = (birthday: string) => {
+        const params = new URLSearchParams(searchParams.toString());
+        if (birthday === 'all') {
+            params.delete('birthday');
+        } else {
+            params.set('birthday', birthday);
+        }
+        params.set('page', '1');
+        pushParams(params);
+    };
+
     const handlePageChange = (newPage: number) => {
         if (newPage < 1 || newPage > totalPages) return;
         const params = new URLSearchParams(searchParams.toString());
@@ -448,21 +486,70 @@ export default function WorkersClient({
     if (selectedTeam !== "all") exportParams.set("team", selectedTeam);
     if (selectedDepartment !== "all") exportParams.set("department", selectedDepartment);
     if (selectedRole !== "all") exportParams.set("role", selectedRole);
+    if (selectedHead !== "all") exportParams.set("head", selectedHead);
+if (selectedBirthday !== "all") exportParams.set("birthday", selectedBirthday);
     const workersExportHref = exportParams.toString()
         ? `/api/export/workers?${exportParams.toString()}`
         : "/api/export/workers";
 
+    const hasActiveFilters = Boolean(
+        searchTerm.trim() ||
+        selectedTeam !== "all" ||
+        selectedDepartment !== "all" ||
+        selectedRole !== "all" ||
+        selectedHead !== "all" ||
+        selectedBirthday !== "all"
+    );
+
+    const handleClearAllFilters = () => {
+        setSearchTerm("");
+        const params = new URLSearchParams();
+        pushParams(params);
+    };
+
     return (
-        <div className="w-full max-w-7xl mx-auto space-y-8">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-                <div>
-                    <h1 className="text-3xl font-bold tracking-tight text-neutral-800 dark:text-white/90">Workers Directory</h1>
-                    <p className="text-neutral-500 dark:text-white/50 mt-1">Manage and view all registered profiles ({totalCount} total)</p>
+        <div className="w-full max-w-[96rem] mx-auto space-y-6 sm:space-y-8 min-w-0">
+            {/* Top Page Header & Primary Actions */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 min-w-0">
+                <div className="min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-neutral-800 dark:text-white/90">
+                            Workers Directory
+                        </h1>
+                        <span className="text-xs font-semibold text-[#34A853] bg-[#34A853]/10 dark:bg-[#34A853]/20 px-2.5 py-0.5 rounded-full border border-[#34A853]/20 shrink-0">
+                            {totalCount} {totalCount === 1 ? "Worker" : "Workers"}
+                        </span>
+                    </div>
+                    <p className="text-sm text-neutral-500 dark:text-white/50 mt-1">
+                        Manage and view all registered workforce profiles across teams and departments
+                    </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-                    <div className="relative w-full sm:w-64">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 flex-wrap">
+                    <a
+                        href={workersExportHref}
+                        className="inline-flex items-center justify-center gap-2 border border-neutral-200 dark:border-white/10 bg-white dark:bg-black/40 hover:bg-neutral-50 dark:hover:bg-white/5 text-neutral-700 dark:text-white/80 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm whitespace-nowrap"
+                    >
+                        <Download className="w-4 h-4 text-neutral-500 dark:text-neutral-400" />
+                        <span>Export CSV</span>
+                    </a>
+
+                    <button
+                        onClick={openRegisterModal}
+                        className="inline-flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-[#34A853]/20 whitespace-nowrap"
+                    >
+                        <UserPlus className="w-4 h-4" />
+                        <span>Add Worker</span>
+                    </button>
+                </div>
+            </div>
+
+            {/* Filter & Search Control Panel */}
+            <div className="bg-white dark:bg-[#0f0f0f] p-4 sm:p-5 rounded-2xl border border-neutral-200 dark:border-white/10 shadow-sm space-y-3.5 min-w-0">
+                {/* Search Bar + Clear Filters Button */}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                    <div className="relative flex-1 min-w-0">
+                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
                             {isSearching ? (
                                 <Loader2 className="w-4 h-4 text-neutral-400 animate-spin" />
                             ) : (
@@ -471,19 +558,33 @@ export default function WorkersClient({
                         </div>
                         <input
                             type="text"
-                            placeholder="Search workers..."
+                            placeholder="Search workers by name, email, phone, or ID..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                            className="w-full pl-10 pr-4 py-2.5 bg-neutral-50 dark:bg-black/30 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 placeholder:text-neutral-400 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
                         />
                     </div>
+
+                    {hasActiveFilters && (
+                        <button
+                            onClick={handleClearAllFilters}
+                            className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl border border-red-200 dark:border-red-500/20 transition-colors shrink-0"
+                        >
+                            <X className="w-3.5 h-3.5" />
+                            Clear Filters
+                        </button>
+                    )}
+                </div>
+
+                {/* Filter Dropdowns Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2.5 pt-2 border-t border-neutral-100 dark:border-white/5">
                     {teams.length > 0 && (
-                        <div className="relative w-full sm:w-52">
+                        <div className="relative min-w-0">
                             <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
                             <select
                                 value={selectedTeam}
                                 onChange={(event) => handleTeamChange(event.target.value)}
-                                className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                                className="w-full appearance-none pl-9 pr-8 py-2 bg-neutral-50 dark:bg-black/30 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
                             >
                                 <option value="all">All teams</option>
                                 {teams.map((team) => (
@@ -495,12 +596,12 @@ export default function WorkersClient({
                         </div>
                     )}
 
-                    <div className="relative w-full sm:w-56">
+                    <div className="relative min-w-0">
                         <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
                         <select
                             value={selectedDepartment}
                             onChange={(event) => handleDepartmentChange(event.target.value)}
-                            className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                            className="w-full appearance-none pl-9 pr-8 py-2 bg-neutral-50 dark:bg-black/30 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
                         >
                             <option value="all">All departments</option>
                             {filterDepartmentOptions.map((department) => (
@@ -511,12 +612,12 @@ export default function WorkersClient({
                         </select>
                     </div>
 
-                    <div className="relative w-full sm:w-48">
+                    <div className="relative min-w-0">
                         <Shield className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
                         <select
                             value={selectedRole}
                             onChange={(event) => handleRoleChange(event.target.value)}
-                            className="w-full appearance-none pl-10 pr-8 py-2.5 bg-white dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-[14px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all shadow-sm"
+                            className="w-full appearance-none pl-9 pr-8 py-2 bg-neutral-50 dark:bg-black/30 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
                         >
                             <option value="all">All roles</option>
                             {ROLE_FILTER_OPTIONS.map((roleOption) => (
@@ -527,21 +628,37 @@ export default function WorkersClient({
                         </select>
                     </div>
 
-                    <a
-                        href={workersExportHref}
-                        className="flex items-center justify-center gap-2 border border-neutral-200 dark:border-white/10 bg-white dark:bg-black/40 hover:bg-neutral-50 dark:hover:bg-white/5 text-neutral-700 dark:text-white/80 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm shrink-0"
-                    >
-                        <Download className="w-4 h-4" />
-                        Download Workers
-                    </a>
+                    <div className="relative min-w-0">
+                        <Crown className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                        <select
+                            value={selectedHead}
+                            onChange={(event) => handleHeadChange(event.target.value)}
+                            className="w-full appearance-none pl-9 pr-8 py-2 bg-neutral-50 dark:bg-black/30 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
+                        >
+                            <option value="all">All head status</option>
+                            {HEAD_FILTER_OPTIONS.map((headOption) => (
+                                <option key={headOption.value} value={headOption.value}>
+                                    {headOption.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
 
-                    <button
-                        onClick={openRegisterModal}
-                        className="flex items-center justify-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-[#34A853]/20 shrink-0"
-                    >
-                        <UserPlus className="w-4 h-4" />
-                        Add Worker
-                    </button>
+                    <div className="relative min-w-0">
+                        <CalendarDays className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400 pointer-events-none" />
+                        <select
+                            value={selectedBirthday}
+                            onChange={(event) => handleBirthdayChange(event.target.value)}
+                            className="w-full appearance-none pl-9 pr-8 py-2 bg-neutral-50 dark:bg-black/30 border border-neutral-200 dark:border-white/10 rounded-xl text-[13px] text-neutral-800 dark:text-white/90 focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all truncate"
+                        >
+                            <option value="all">All birthdays</option>
+                            {BIRTHDAY_FILTER_OPTIONS.map((birthdayOption) => (
+                                <option key={birthdayOption.value} value={birthdayOption.value}>
+                                    {birthdayOption.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -559,15 +676,137 @@ export default function WorkersClient({
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white dark:bg-[#0f0f0f] rounded-2xl border border-neutral-200 dark:border-white/10 shadow-sm overflow-hidden"
             >
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                <div className="xl:hidden divide-y divide-neutral-200 dark:divide-white/10">
+                    {workers.length === 0 ? (
+                        <div className="px-4 py-12 text-center text-neutral-500 dark:text-white/40 text-sm">
+                            No workers found matching your filters.
+                        </div>
+                    ) : (
+                        workers.map((worker) => {
+                            const init = `${worker.first_name[0] || ''}${worker.last_name ? worker.last_name[0] : ''}`.toUpperCase();
+
+                            return (
+                                <div key={worker.id} className="p-4 sm:p-5 space-y-4">
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <div className="w-11 h-11 rounded-full bg-neutral-100 dark:bg-white/5 border border-neutral-200 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 overflow-hidden relative shrink-0">
+                                            {worker.avatar_url ? (
+                                                <Image src={worker.avatar_url} alt={worker.first_name} fill unoptimized className="object-cover" sizes="44px" />
+                                            ) : (
+                                                init
+                                            )}
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <p className="text-sm font-semibold text-neutral-800 dark:text-white/90 truncate">
+                                                    {worker.first_name} {worker.last_name}
+                                                </p>
+                                                {worker.worker_id && (
+                                                    <span className="px-1.5 py-0.5 bg-neutral-100 dark:bg-white/10 text-neutral-600 dark:text-neutral-300 text-[10px] font-mono font-semibold rounded">
+                                                        {worker.worker_id}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {worker.head_department_name && (
+                                                <div className="mt-1 inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">
+                                                    <Crown className="w-3 h-3" />
+                                                    Department Head
+                                                </div>
+                                            )}
+                                            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-neutral-400 dark:text-white/35">
+                                                {worker.email && (
+                                                    <a href={`mailto:${worker.email}`} className="inline-flex items-center gap-1 min-w-0 hover:text-[#34A853]">
+                                                        <Mail className="w-3 h-3 shrink-0" />
+                                                        <span className="truncate max-w-[190px]">{worker.email}</span>
+                                                    </a>
+                                                )}
+                                                {worker.phone && (
+                                                    <a href={`tel:${worker.phone}`} className="inline-flex items-center gap-1 hover:text-[#34A853]">
+                                                        <Phone className="w-3 h-3 shrink-0" />
+                                                        <span>{worker.phone}</span>
+                                                    </a>
+                                                )}
+                                                {worker.date_of_birth && (
+                                                    <span className="inline-flex items-center gap-1">
+                                                        <CalendarDays className="w-3 h-3 shrink-0" />
+                                                        <span>{new Date(`${worker.date_of_birth}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                                        <div>
+                                            <p className="text-neutral-400 dark:text-white/35 uppercase font-semibold">Department</p>
+                                            <p className="mt-1 text-neutral-700 dark:text-white/70">{worker.department || "Unassigned"}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-neutral-400 dark:text-white/35 uppercase font-semibold">Role</p>
+                                            <div className={`mt-1 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-[11px] font-semibold uppercase ${worker.role === 'admin' || worker.role === 'super_admin'
+                                                ? 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
+                                                : worker.role === 'team_admin'
+                                                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                                                    : worker.role === 'reports_admin'
+                                                        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                                                        : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                                }`}>
+                                                {worker.role === 'admin' || worker.role === 'super_admin' || worker.role === 'reports_admin' ? <Shield className="w-3 h-3" /> : worker.role === 'team_admin' ? <Crown className="w-3 h-3" /> : <User className="w-3 h-3" />}
+                                                {getRoleLabel(worker.role)}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-neutral-400 dark:text-white/35 uppercase font-semibold">Registered</p>
+                                            <p className="mt-1 font-mono text-neutral-700 dark:text-white/70">
+                                                {new Date(worker.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => handleOpenEditModal(worker)}
+                                            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] dark:border-white/10 dark:bg-white/5 dark:text-white/70 transition-colors"
+                                        >
+                                            <Edit3 className="w-3.5 h-3.5" />
+                                            Edit
+                                        </button>
+                                        {canManageDepartmentHeads && (
+                                            worker.head_department_id ? (
+                                                <button
+                                                    onClick={() => handleRemoveHead(worker)}
+                                                    disabled={busyWorkerId === worker.id}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-xs font-semibold text-amber-700 hover:bg-amber-500/15 disabled:opacity-50 dark:text-amber-300 transition-colors"
+                                                >
+                                                    {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                                                    Remove Head
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => handleAssignHead(worker)}
+                                                    disabled={busyWorkerId === worker.id || !worker.department_id}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5 text-xs font-semibold text-neutral-600 hover:border-[#34A853]/30 hover:bg-[#34A853]/10 hover:text-[#34A853] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white/60 transition-colors"
+                                                >
+                                                    {busyWorkerId === worker.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Crown className="w-3.5 h-3.5" />}
+                                                    Make Head
+                                                </button>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="hidden xl:block overflow-x-auto min-w-0">
+                    <table className="w-full min-w-[860px] text-left border-collapse">
                         <thead>
                             <tr className="bg-neutral-50/50 dark:bg-white/[0.02] border-b border-neutral-200 dark:border-white/10 text-[12px] font-semibold text-neutral-500 dark:text-white/40 uppercase tracking-wider">
-                                <th className="px-6 py-4">Username</th>
+                                <th className="px-6 py-4">Worker Profile</th>
                                 <th className="px-6 py-4">Department</th>
                                 <th className="px-6 py-4">Role</th>
                                 <th className="px-6 py-4">Registered On</th>
-                                {canManageDepartmentHeads && <th className="px-6 py-4 text-right">Department Head</th>}
+                                <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-neutral-200 dark:divide-white/10">
