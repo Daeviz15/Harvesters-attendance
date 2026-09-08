@@ -1,17 +1,33 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/utils/supabase/server'
 import { createAdminClient } from '@/utils/supabase/admin'
+import { sendPasswordResetEmail } from '@/lib/auth-reset-email'
 import { z } from 'zod'
 import { generateTeamWorkerId } from '@/lib/workerId'
 import { validateDateOfBirth } from '@/lib/date-of-birth'
 import { getSafeAuthRedirectPath } from '@/lib/auth-redirect'
 
-type ActionState = { error?: string } | null
+type ActionState = { error?: string; success?: string } | null
 
 const inactiveAccountMessage = 'Your account has been deactivated. Please contact your department head, team lead, or an administrator for support.'
+
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().email('Please enter a valid email address.').max(254, 'Email address is too long.'),
+})
+
+const resetPasswordSchema = z.object({
+  password: z.string()
+    .min(8, 'Password must be at least 8 characters.')
+    .max(128, 'Password cannot exceed 128 characters.'),
+  confirmPassword: z.string(),
+}).refine((value) => value.password === value.confirmPassword, {
+  message: 'Passwords do not match.',
+  path: ['confirmPassword'],
+})
 
 const onboardingSchema = z.object({
   workerId: z.string().trim().optional(),
@@ -50,6 +66,168 @@ function isAllowedAvatarUrl(
   } catch {
     return false
   }
+}
+
+function normalizeConfiguredOrigin(value: string | undefined) {
+  if (!value) return null
+
+  try {
+    const parsed = new URL(value)
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null
+    if (parsed.username || parsed.password) return null
+    return parsed.origin
+  } catch {
+    return null
+  }
+}
+
+async function getPasswordRecoveryOrigin() {
+  if (process.env.NODE_ENV !== 'production') {
+    const requestHeaders = await headers()
+    const host = requestHeaders.get('x-forwarded-host') || requestHeaders.get('host') || 'localhost:3000'
+    const protocol = requestHeaders.get('x-forwarded-proto') || (host.startsWith('localhost') ? 'http' : 'https')
+
+    return `${protocol}://${host}`
+  }
+
+  const configuredOrigin = normalizeConfiguredOrigin(
+    process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL
+  )
+
+  if (configuredOrigin) {
+    return configuredOrigin
+  }
+
+  return 'https://www.globeattendance.org'
+}
+
+export async function requestPasswordReset(_prevState: ActionState, formData: FormData): Promise<ActionState> {
+  const parsed = forgotPasswordSchema.safeParse({
+    email: formData.get('email'),
+  })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || 'Please enter a valid email address.' }
+  }
+
+  const email = parsed.data.email.trim().toLowerCase()
+  const successResponse = {
+    success: 'If an account exists for that email, a password reset link has been sent.',
+  }
+
+  try {
+    const adminClient = createAdminClient()
+    const appOrigin = await getPasswordRecoveryOrigin()
+    const confirmUrl = `${appOrigin}/auth/confirm?next=${encodeURIComponent('/auth/reset-password')}`
+
+    const { data: linkData, error: linkError } = await adminClient.auth.admin.generateLink({
+      type: 'recovery',
+      email,
+      options: {
+        redirectTo: confirmUrl,
+      },
+    })
+
+    if (linkError) {
+      const isUserNotFound =
+        linkError.code === 'user_not_found' ||
+        linkError.status === 404 ||
+        linkError.message?.toLowerCase().includes('not found')
+
+      if (isUserNotFound) {
+        console.info('[AuthAction] Password reset requested for non-existent email:', email)
+        return successResponse
+      }
+
+      console.error('[AuthAction] generateLink failed:', linkError)
+      return { error: 'We could not process that reset request right now. Please try again shortly.' }
+    }
+
+    const tokenHash = linkData?.properties?.hashed_token
+    if (!tokenHash) {
+      console.error('[AuthAction] generateLink did not return a token hash.')
+      return { error: 'We could not process that reset request right now. Please try again shortly.' }
+    }
+
+    const resetUrl = `${appOrigin}/auth/confirm?token_hash=${tokenHash}&type=recovery&next=${encodeURIComponent('/auth/reset-password')}`
+
+    let userName: string | undefined = undefined
+    if (linkData.user?.id) {
+      const { data: profile } = await adminClient
+        .from('profiles')
+        .select('full_name')
+        .eq('id', linkData.user.id)
+        .maybeSingle()
+
+      if (profile?.full_name) {
+        userName = profile.full_name.trim().split(' ')[0]
+      }
+    }
+
+    const sendResult = await sendPasswordResetEmail({
+      toEmail: email,
+      resetUrl,
+      userName,
+      appOrigin,
+    })
+
+    if (!sendResult.success) {
+      console.error('[AuthAction] Resend email dispatch failed:', sendResult.error)
+      return { error: 'We could not dispatch the reset email right now. Please try again shortly.' }
+    }
+
+    return successResponse
+  } catch (error) {
+    console.error('[AuthAction] Password reset request failed:', error)
+    return { error: 'We could not process that reset request right now. Please try again shortly.' }
+  }
+}
+
+export async function updateRecoveredPassword(_prevState: ActionState, formData: FormData) {
+  const parsed = resetPasswordSchema.safeParse({
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
+  })
+
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message || 'Please enter a valid password.' }
+  }
+
+  const supabase = await createClient()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return { error: 'This reset link is invalid or has expired. Please request a new password reset link.' }
+  }
+
+  const { data: profile, error: profileError } = await supabase
+    .from('profiles')
+    .select('is_active')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (profileError) {
+    console.error('[AuthAction] Password reset profile lookup failed:', profileError)
+    return { error: 'We could not verify your account status. Please try again shortly.' }
+  }
+
+  if (profile?.is_active === false) {
+    await supabase.auth.signOut()
+    return { error: inactiveAccountMessage }
+  }
+
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+  })
+
+  if (error) {
+    console.error('[AuthAction] Password update failed:', error)
+    return { error: 'We could not update your password. Please try again with a stronger password.' }
+  }
+
+  await supabase.auth.signOut()
+  revalidatePath('/', 'layout')
+  redirect('/auth/login?reason=password_reset_success')
 }
 
 export async function login(_prevState: ActionState, formData: FormData) {

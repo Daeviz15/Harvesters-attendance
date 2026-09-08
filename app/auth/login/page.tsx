@@ -27,6 +27,8 @@ function LoginPageContent() {
         || hashErrorCode === "user_banned";
     const loginNotice = reason === "login_required"
         ? "Please log in first to access the admin portal."
+        : reason === "password_reset_success"
+            ? "Your password has been updated. Please log in with your new password."
         : isInactiveAccountError
             ? "Your account has been deactivated. Please contact your department head, team lead, or an administrator for support."
             : authError === "auth-failed"
@@ -173,7 +175,7 @@ function LoginPageContent() {
                             </label>
                         </div>
 
-                        <Link href="#" className="text-[12px] text-neutral-500 dark:text-white/40 hover:text-neutral-800 dark:hover:text-white transition-colors">
+                        <Link href="/auth/forgot-password" className="text-[12px] text-neutral-500 dark:text-white/40 hover:text-neutral-800 dark:hover:text-white transition-colors">
                             Forgot Password?
                         </Link>
                     </div>
