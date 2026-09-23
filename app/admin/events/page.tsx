@@ -1,5 +1,6 @@
 import { createClient } from "@/utils/supabase/server";
 import { requireAdminManagementAuth } from "@/lib/rbac";
+import { isEmailTestModeEnabled } from "@/lib/email";
 import EventsClient from "./EventsClient";
 
 export const metadata = {
@@ -46,7 +47,8 @@ export default async function AdminEventsPage() {
     let workersQuery = supabase
         .from('profiles')
         .select('id, first_name, last_name, worker_id, department, department_id')
-        .eq('role', 'worker')
+        .eq('is_active', true)
+        .eq('email_notifications_enabled', true)
         .order('first_name', { ascending: true });
 
     if (!scope.isSuperAdmin) {
@@ -98,6 +100,7 @@ export default async function AdminEventsPage() {
             managedDepartments={departmentsForSelector}
             activeEventIds={activeEventIds}
             workers={workers}
+            automaticEmailTestMode={isEmailTestModeEnabled()}
         />
     );
 }

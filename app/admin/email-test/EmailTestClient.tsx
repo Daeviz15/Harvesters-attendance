@@ -139,9 +139,17 @@ function SchedulerRunnerSection({
         success?: boolean;
         message?: string;
         error?: string;
-        summary?: { claimed: number; sent: number; remindersQueued: number; followUpsQueued: number };
+        summary?: {
+            claimed: number;
+            sent: number;
+            remindersQueued: number;
+            followUpsQueued: number;
+            summariesQueued: number;
+            summariesClaimed: number;
+            summariesSent: number;
+        };
     } | null>(null);
-    const schedulerDescription = `On localhost, there is no automated background cron. Click this button to manually trigger the queue processor and send any due reminders (${reminderLeadMinutes} mins prior) or follow-ups (${followupDelayMinutes} mins post-event).`;
+    const schedulerDescription = `On localhost, there is no automated background cron. Click this button to manually trigger due reminders (${reminderLeadMinutes} mins prior), worker follow-ups, and separate privacy-preserving leadership summaries (${followupDelayMinutes} mins post-event).`;
 
     const handleRunScheduler = async () => {
         setRunning(true);
@@ -205,6 +213,9 @@ function SchedulerRunnerSection({
                                     <div className="text-xs font-mono bg-black/10 dark:bg-black/40 p-3 rounded-lg space-y-1">
                                         <p>• Reminder Jobs Queued: {result.summary.remindersQueued}</p>
                                         <p>• Follow-Up Jobs Queued: {result.summary.followUpsQueued}</p>
+                                        <p>• Leadership Summaries Queued: {result.summary.summariesQueued}</p>
+                                        <p>• Leadership Summaries Claimed: {result.summary.summariesClaimed}</p>
+                                        <p>• Leadership Summaries Sent: {result.summary.summariesSent}</p>
                                         <p>• Jobs Claimed: {result.summary.claimed}</p>
                                         <p>• Emails Sent: {result.summary.sent}</p>
                                     </div>

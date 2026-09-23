@@ -594,7 +594,6 @@ export async function sendEventReminderEmail({
 
 export interface SendMissedAttendanceEmailParams {
     toEmail: string;
-    ccEmails?: string[];
     firstName: string;
     eventTitle: string;
     eventStart: Date;
@@ -602,11 +601,11 @@ export interface SendMissedAttendanceEmailParams {
     timezone: string;
     departmentName?: string | null;
     notificationId?: string;
+    isTest?: boolean;
 }
 
 export async function sendMissedAttendanceEmail({
     toEmail,
-    ccEmails = [],
     firstName,
     eventTitle,
     eventStart,
@@ -614,6 +613,7 @@ export async function sendMissedAttendanceEmail({
     timezone,
     departmentName,
     notificationId,
+    isTest = false,
 }: SendMissedAttendanceEmailParams): Promise<EmailSendResult> {
     const dateFormatter = new Intl.DateTimeFormat("en-NG", {
         dateStyle: "full",
@@ -631,12 +631,14 @@ export async function sendMissedAttendanceEmail({
     const safeEventTime = escapeHtml(eventTime);
     const safeDepartmentName = departmentName ? escapeHtml(departmentName) : null;
     const dashboardUrl = getPublicAssetUrl("/dashboard");
+    const subjectPrefix = isTest ? "[TEST] " : "";
     const subjectEventTitle = sanitizeHeaderText(eventTitle, "today's event");
 
     const html = renderEmailShell({
         preheader: `We noticed no attendance was recorded for ${eventTitle}. We hope everything is okay.`,
-        eyebrow: "Attendance Follow-up",
+        eyebrow: isTest ? "Test Email — Attendance Follow-up" : "Attendance Follow-up",
         content: `
+            ${isTest ? `<div style="margin:0 0 20px;padding:10px 12px;border-radius:8px;background:#172554;border:1px solid #1d4ed8;color:#bfdbfe;font-size:12px;font-weight:700;text-align:center;">SAFE TEST MODE — NO PRODUCTION RECIPIENT FAN-OUT</div>` : ""}
             <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#ffffff;">Hello ${safeFirstName}, <span style="color:#34A853;">we missed you today</span></h1>
             <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#a1a1aa;">We noticed that no attendance was recorded for you at the event below, and we wanted to check that everything is okay.</p>
             <p style="margin:0 0 24px;font-size:14px;line-height:1.7;color:#a1a1aa;">If you attended but could not check in, please reply or let your department head know so the attendance record can be reviewed. If you could not attend, you may also reply if there is any support you need.</p>
@@ -652,10 +654,12 @@ export async function sendMissedAttendanceEmail({
             <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
                 <tr><td align="center"><a href="${dashboardUrl}" target="_blank" style="display:inline-block;width:100%;max-width:320px;background-color:#34A853;color:#ffffff;font-size:15px;font-weight:700;text-align:center;text-decoration:none;padding:14px 24px;border-radius:8px;box-sizing:border-box;">Review Attendance Dashboard &rarr;</a></td></tr>
             </table>
-            <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#71717a;text-align:center;">Relevant attendance leaders have been copied so they can help resolve any check-in issue.</p>`,
+            <p style="margin:24px 0 0;font-size:12px;line-height:1.6;color:#71717a;text-align:center;">This message was sent only to you. Attendance leaders receive a separate summary without worker names or email addresses.</p>`,
     });
 
     const text = [
+        `${isTest ? "TEST — " : ""}Attendance follow-up`,
+        "",
         `Hello ${firstName}, we missed you today.`,
         "",
         `No attendance was recorded for you at ${eventTitle}. We hope everything is okay.`,
@@ -667,12 +671,131 @@ export async function sendMissedAttendanceEmail({
         "If you could not attend, you may reply if there is any support you need.",
         "",
         `Review your attendance dashboard: ${dashboardUrl}`,
+        isTest ? "This is a test email. No non-allowlisted recipient was contacted." : null,
     ].filter(Boolean).join("\n");
 
     return sendEmail({
         to: toEmail,
-        cc: ccEmails.length > 0 ? ccEmails : undefined,
-        subject: `We missed you at ${subjectEventTitle} | Harvesters Globe Attendance`,
+        subject: `${subjectPrefix}We missed you at ${subjectEventTitle} | Harvesters Globe Attendance`,
+        text,
+        html,
+    }, notificationId);
+}
+
+export interface SendAttendanceSummaryEmailParams {
+    toEmail: string;
+    firstName: string;
+    eventTitle: string;
+    eventStart: Date;
+    eventEnd: Date;
+    timezone: string;
+    scopeName: string;
+    scopeType: "department" | "team" | "global";
+    expectedCount: number;
+    checkedInCount: number;
+    approvedLeaveCount: number;
+    missedCount: number;
+    notificationId: string;
+    isTest?: boolean;
+}
+
+export async function sendAttendanceSummaryEmail({
+    toEmail,
+    firstName,
+    eventTitle,
+    eventStart,
+    eventEnd,
+    timezone,
+    scopeName,
+    scopeType,
+    expectedCount,
+    checkedInCount,
+    approvedLeaveCount,
+    missedCount,
+    notificationId,
+    isTest = false,
+}: SendAttendanceSummaryEmailParams): Promise<EmailSendResult> {
+    const dateFormatter = new Intl.DateTimeFormat("en-NG", {
+        dateStyle: "full",
+        timeZone: timezone,
+    });
+    const timeFormatter = new Intl.DateTimeFormat("en-NG", {
+        timeStyle: "short",
+        timeZone: timezone,
+    });
+    const eventDate = dateFormatter.format(eventStart);
+    const eventTime = `${timeFormatter.format(eventStart)}–${timeFormatter.format(eventEnd)}`;
+    const safeFirstName = escapeHtml(firstName);
+    const safeEventTitle = escapeHtml(eventTitle);
+    const safeEventDate = escapeHtml(eventDate);
+    const safeEventTime = escapeHtml(eventTime);
+    const safeScopeName = escapeHtml(scopeName);
+    const reportsUrl = getPublicAssetUrl("/admin/reports");
+    const scopeLabel = scopeType === "global"
+        ? "Global"
+        : scopeType === "team"
+            ? "Team"
+            : "Department";
+    const sanitizedEventTitle = sanitizeHeaderText(eventTitle, "Event");
+    const sanitizedScopeName = sanitizeHeaderText(scopeName, scopeLabel);
+    const subjectPrefix = isTest ? "[TEST] " : "";
+    const testBanner = isTest
+        ? `<div style="margin:0 0 20px;padding:10px 12px;border-radius:8px;background:#172554;border:1px solid #1d4ed8;color:#bfdbfe;font-size:12px;font-weight:700;text-align:center;">SAFE TEST MODE — NO PRODUCTION RECIPIENT FAN-OUT</div>`
+        : "";
+
+    const html = renderEmailShell({
+        preheader: `${scopeLabel} attendance totals for ${eventTitle}.`,
+        eyebrow: `${scopeLabel} Attendance Summary`,
+        content: `
+            ${testBanner}
+            <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#ffffff;">Hello ${safeFirstName},</h1>
+            <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#a1a1aa;">Here is the aggregate attendance summary for your authorized scope. Worker names and email addresses are intentionally excluded from this message.</p>
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#141414;border-radius:12px;border:1px solid #262626;padding:20px;margin-bottom:20px;">
+                <tr><td>
+                    <div style="font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px;">Event</div>
+                    <div style="font-size:18px;font-weight:700;color:#ffffff;margin-bottom:16px;">${safeEventTitle}</div>
+                    <div style="font-size:13px;line-height:1.6;color:#a1a1aa;"><strong style="color:#ffffff;">${scopeLabel}:</strong> ${safeScopeName}</div>
+                    <div style="font-size:13px;line-height:1.6;color:#a1a1aa;margin-top:4px;"><strong style="color:#ffffff;">Date:</strong> ${safeEventDate}</div>
+                    <div style="font-size:13px;line-height:1.6;color:#a1a1aa;margin-top:4px;"><strong style="color:#ffffff;">Time:</strong> ${safeEventTime}</div>
+                </td></tr>
+            </table>
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom:26px;">
+                <tr>
+                    <td width="50%" style="padding:8px 8px 8px 0;"><div style="background:#141414;border:1px solid #262626;border-radius:10px;padding:16px;"><div style="font-size:11px;color:#71717a;text-transform:uppercase;">Expected</div><div style="margin-top:5px;font-size:24px;font-weight:700;color:#ffffff;">${expectedCount}</div></div></td>
+                    <td width="50%" style="padding:8px 0 8px 8px;"><div style="background:#0d2114;border:1px solid #166534;border-radius:10px;padding:16px;"><div style="font-size:11px;color:#86efac;text-transform:uppercase;">Checked in</div><div style="margin-top:5px;font-size:24px;font-weight:700;color:#4ade80;">${checkedInCount}</div></div></td>
+                </tr>
+                <tr>
+                    <td width="50%" style="padding:8px 8px 8px 0;"><div style="background:#172033;border:1px solid #1e3a8a;border-radius:10px;padding:16px;"><div style="font-size:11px;color:#93c5fd;text-transform:uppercase;">Approved leave</div><div style="margin-top:5px;font-size:24px;font-weight:700;color:#60a5fa;">${approvedLeaveCount}</div></div></td>
+                    <td width="50%" style="padding:8px 0 8px 8px;"><div style="background:#2a1515;border:1px solid #7f1d1d;border-radius:10px;padding:16px;"><div style="font-size:11px;color:#fca5a5;text-transform:uppercase;">No check-in</div><div style="margin-top:5px;font-size:24px;font-weight:700;color:#f87171;">${missedCount}</div></div></td>
+                </tr>
+            </table>
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                <tr><td align="center"><a href="${reportsUrl}" target="_blank" style="display:inline-block;width:100%;max-width:320px;background-color:#34A853;color:#ffffff;font-size:15px;font-weight:700;text-align:center;text-decoration:none;padding:14px 24px;border-radius:8px;box-sizing:border-box;">Open Secure Attendance Reports &rarr;</a></td></tr>
+            </table>
+            <p style="margin:22px 0 0;font-size:11px;line-height:1.6;color:#71717a;text-align:center;">Sign-in and your current administrative scope are verified before report details are displayed.</p>`,
+    });
+
+    const text = [
+        `${isTest ? "TEST — " : ""}${scopeLabel} attendance summary`,
+        "",
+        `Hello ${firstName},`,
+        `Event: ${eventTitle}`,
+        `${scopeLabel}: ${scopeName}`,
+        `Date: ${eventDate}`,
+        `Time: ${eventTime}`,
+        "",
+        `Expected: ${expectedCount}`,
+        `Checked in: ${checkedInCount}`,
+        `Approved leave: ${approvedLeaveCount}`,
+        `No check-in: ${missedCount}`,
+        "",
+        "Worker names and email addresses are intentionally excluded from this message.",
+        `Open secure attendance reports: ${reportsUrl}`,
+    ].join("\n");
+
+    return sendEmail({
+        to: toEmail,
+        subject: `${subjectPrefix}Attendance summary: ${sanitizedEventTitle} — ${sanitizedScopeName}`,
         text,
         html,
     }, notificationId);

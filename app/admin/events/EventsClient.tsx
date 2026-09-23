@@ -146,7 +146,7 @@ type ManagedDepartment = {
     team_id?: string | null;
 };
 
-export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, isTeamAdmin, managedDepartments, activeEventIds = [], workers = [] }: {
+export default function EventsClient({ initialEvents, activeLocations, isSuperAdmin, isTeamAdmin, managedDepartments, activeEventIds = [], workers = [], automaticEmailTestMode = false }: {
     initialEvents: EventType[],
     activeLocations: LocationBasic[],
     isSuperAdmin: boolean,
@@ -154,6 +154,7 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
     managedDepartments: ManagedDepartment[],
     activeEventIds?: string[],
     workers?: { id: string, first_name: string, last_name: string, worker_id: string, department: string, department_id?: string | null }[],
+    automaticEmailTestMode?: boolean,
 }) {
     const router = useRouter();
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -162,6 +163,8 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
     const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>("");
     const [targetWorkerIds, setTargetWorkerIds] = useState<string[]>([]);
+    const [emailNotificationsEnabled, setEmailNotificationsEnabled] = useState(false);
+    const [confirmedAllEligibleRecipients, setConfirmedAllEligibleRecipients] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -208,6 +211,8 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         setScheduleFrequency("weekly");
         setSelectedLocations([]);
         setTargetWorkerIds([]);
+        setEmailNotificationsEnabled(false);
+        setConfirmedAllEligibleRecipients(false);
         setSelectedDepartmentId(!isSuperAdmin && !isTeamAdmin && managedDepartments.length === 1 ? managedDepartments[0].id : "");
         setError(null);
         setIsModalOpen(true);
@@ -218,6 +223,8 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         setScheduleFrequency(getFrequency(event));
         setSelectedLocations(event.location_ids || []);
         setTargetWorkerIds(event.email_target_worker_ids || []);
+        setEmailNotificationsEnabled(event.email_notifications_enabled);
+        setConfirmedAllEligibleRecipients(false);
         setSelectedDepartmentId(event.department_id || "");
         setError(null);
         setIsModalOpen(true);
@@ -535,7 +542,11 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                                 <select
                                                     id="event_department"
                                                     value={selectedDepartmentId}
-                                                    onChange={(e) => setSelectedDepartmentId(e.target.value)}
+                                                    onChange={(e) => {
+                                                        setSelectedDepartmentId(e.target.value);
+                                                        setTargetWorkerIds([]);
+                                                        setConfirmedAllEligibleRecipients(false);
+                                                    }}
                                                     required={!isSuperAdmin && !isTeamAdmin}
                                                     className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black border border-neutral-200 dark:border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 text-neutral-900 dark:text-white"
                                                 >
@@ -745,7 +756,13 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                             <input
                                                 type="checkbox"
                                                 name="email_notifications_enabled"
-                                                defaultChecked={editingEvent?.email_notifications_enabled || false}
+                                                checked={emailNotificationsEnabled}
+                                                onChange={(event) => {
+                                                    setEmailNotificationsEnabled(event.target.checked);
+                                                    if (!event.target.checked) {
+                                                        setConfirmedAllEligibleRecipients(false);
+                                                    }
+                                                }}
                                                 className="w-4 h-4 mt-0.5 text-[#34A853] rounded border-neutral-300 dark:border-neutral-600 focus:ring-[#34A853]"
                                             />
                                             <span>
@@ -756,22 +773,53 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                                 <span className="block mt-1 text-xs leading-5 text-neutral-500 dark:text-neutral-400">
                                                     Sends a reminder before the event and follows up after it ends with workers who have no attendance record. Delivery timing is controlled by the secured scheduler.
                                                 </span>
-                                                <span className="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-md bg-[#34A853]/10 border border-[#34A853]/20 text-[11px] font-medium text-[#34A853]">
-                                                    <ShieldCheck className="w-3.5 h-3.5" />
-                                                    Test Protection: All emails strictly send to <strong>daeviz15felix@gmail.com</strong>
-                                                </span>
+                                                {automaticEmailTestMode ? (
+                                                    <span className="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-[11px] font-medium text-blue-500 dark:text-blue-400">
+                                                        <ShieldCheck className="w-3.5 h-3.5" />
+                                                        Safe test mode: only server-configured allowlisted recipients can receive automatic emails.
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1.5 mt-2.5 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-500/20 text-[11px] font-medium text-amber-600 dark:text-amber-400">
+                                                        <AlertTriangle className="w-3.5 h-3.5" />
+                                                        Production delivery: messages go to the real eligible recipients selected below.
+                                                    </span>
+                                                )}
                                             </span>
                                         </label>
 
                                         {/* Target Workers Selector */}
                                         <div className="mt-4 pl-8 border-t border-neutral-200/50 dark:border-white/5 pt-4">
                                             <WorkerPicker
-                                                workers={workers}
+                                                workers={selectedDepartmentId
+                                                    ? workers.filter((worker) => worker.department_id === selectedDepartmentId)
+                                                    : workers}
                                                 selectedWorkerIds={targetWorkerIds}
-                                                onChange={setTargetWorkerIds}
+                                                onChange={(workerIds) => {
+                                                    setTargetWorkerIds(workerIds);
+                                                    if (workerIds.length > 0) {
+                                                        setConfirmedAllEligibleRecipients(false);
+                                                    }
+                                                }}
                                                 label="Target Specific Workers for Automatic Emails"
                                                 description="Leave blank to automatically deliver reminder and follow-up emails to all eligible workers."
                                             />
+                                            {emailNotificationsEnabled && targetWorkerIds.length === 0 && (
+                                                <label className="mt-4 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-200">
+                                                    <input
+                                                        type="checkbox"
+                                                        name="confirm_all_eligible_email_recipients"
+                                                        checked={confirmedAllEligibleRecipients}
+                                                        onChange={(event) => setConfirmedAllEligibleRecipients(event.target.checked)}
+                                                        className="mt-0.5 h-4 w-4 rounded border-amber-500/50 text-[#34A853] focus:ring-[#34A853]"
+                                                    />
+                                                    <span>
+                                                        I confirm that this event may email every eligible active profile in its scope
+                                                        {selectedDepartmentId
+                                                            ? ` (up to ${workers.filter((worker) => worker.department_id === selectedDepartmentId).length} profiles)`
+                                                            : ` (up to ${workers.length} profiles)`}.
+                                                    </span>
+                                                </label>
+                                            )}
                                         </div>
                                     </div>
 

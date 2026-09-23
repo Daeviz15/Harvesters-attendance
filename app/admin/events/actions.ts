@@ -37,6 +37,10 @@ const eventFormSchema = z.object({
         (value) => value === "on" || value === "true",
         z.boolean(),
     ),
+    confirm_all_eligible_email_recipients: z.preprocess(
+        (value) => value === "on" || value === "true",
+        z.boolean(),
+    ),
     email_target_worker_ids: z.array(z.string().uuid()).nullable().optional(),
 });
 type EventPayload = {
@@ -159,6 +163,7 @@ function parseEventFormData(formData: FormData): EventFormResult {
         location_ids: parsedLocations,
         department_id: rawDeptId || undefined,
         email_notifications_enabled: formData.get("email_notifications_enabled"),
+        confirm_all_eligible_email_recipients: formData.get("confirm_all_eligible_email_recipients"),
         email_target_worker_ids: parsedTargetWorkers,
     });
 
@@ -182,8 +187,19 @@ function parseEventFormData(formData: FormData): EventFormResult {
         location_ids,
         department_id,
         email_notifications_enabled,
+        confirm_all_eligible_email_recipients,
         email_target_worker_ids,
     } = validatedFields.data;
+
+    if (
+        email_notifications_enabled
+        && (!email_target_worker_ids || email_target_worker_ids.length === 0)
+        && !confirm_all_eligible_email_recipients
+    ) {
+        return {
+            error: "Confirm that automatic emails may be sent to every eligible worker in this event scope.",
+        };
+    }
 
     if (endTime <= startTime) {
         return { error: "End time must be later than start time." };
@@ -242,6 +258,7 @@ async function resolveEventScope(scope: AdminAuthScope, payload: EventPayload) {
             .from("departments")
             .select("id, team_id")
             .eq("id", payload.department_id)
+            .eq("is_active", true)
             .maybeSingle();
 
         if (error || !department) {
@@ -277,7 +294,8 @@ async function validateTargetWorkersInScope(scope: AdminAuthScope, payload: Even
         .from("profiles")
         .select("id, department_id")
         .in("id", uniqueTargetIds)
-        .eq("role", "worker");
+        .eq("is_active", true)
+        .eq("email_notifications_enabled", true);
 
     if (!scope.isSuperAdmin) {
         workersQuery = workersQuery.in("department_id", scope.managedDepartmentIds);
