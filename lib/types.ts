@@ -38,4 +38,50 @@ export interface LeaveRequest {
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   review_note?: string | null;
+  returned_early_at?: string | null;
+  returned_early_by?: string | null;
+  return_note?: string | null;
+}
+
+export interface UpcomingBirthday {
+  first_name: string;
+  last_name: string;
+  avatar_url: string | null;
+  department_name: string;
+  birthday_month: number;
+  birthday_day: number;
+  next_birthday: string;
+  days_until: number;
+}
+
+export interface UpcomingEvent {
+  eventId: string;
+  title: string;
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+  occurrenceKey: string;
+  timezone: string;
+  locationName: string | null;
+  isInProgress: boolean;
+}
+
+export type AdminNotificationEventType =
+  | "leave_requested"
+  | "leave_approved"
+  | "leave_rejected"
+  | "leave_returned_early"
+  | "worker_deactivated"
+  | "worker_reactivated";
+
+export interface AdminNotification {
+  id: string;
+  recipient_user_id: string;
+  event_type: AdminNotificationEventType;
+  actor_user_id: string | null;
+  subject_user_id: string | null;
+  title: string;
+  message: string;
+  action_url: string;
+  read_at: string | null;
+  created_at: string;
 }

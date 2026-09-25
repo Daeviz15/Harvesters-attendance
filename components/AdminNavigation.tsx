@@ -9,6 +9,8 @@ import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import ThemeToggle from "./ThemeToggle";
+import AdminNotificationBell from "./AdminNotificationBell";
+import type { AdminNotification } from "@/lib/types";
 
 const allNavLinks = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard, superAdminOnly: false },
@@ -24,6 +26,9 @@ const allNavLinks = [
 
 interface AdminNavigationProps {
     initial: string;
+    userId: string;
+    initialNotifications: AdminNotification[];
+    initialUnreadCount: number;
     isSuperAdmin?: boolean;
     isReportsOnlyAdmin?: boolean;
     scopeSummary?: string;
@@ -126,6 +131,9 @@ function AdminSidebarContent({
 
 export default function AdminNavigation({
     initial,
+    userId,
+    initialNotifications,
+    initialUnreadCount,
     isSuperAdmin = true,
     isReportsOnlyAdmin = false,
     scopeSummary = "Admin Portal",
@@ -170,16 +178,17 @@ export default function AdminNavigation({
                 />
             </aside>
 
-            {/* MOBILE HEADER */}
-            <header className="md:hidden h-20 border-b border-neutral-200 dark:border-white/10 bg-white/50 dark:bg-background/50 backdrop-blur-xl sticky top-0 z-40 flex items-center justify-between px-6">
-                <div className="flex items-center gap-3">
+            {/* Fixed header for both mobile and desktop admin surfaces. */}
+            <header className="fixed inset-x-0 top-0 z-40 flex h-20 items-center justify-between border-b border-neutral-200 bg-white/90 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-background/90 sm:px-6 md:left-64 lg:px-8">
+                <div className="flex min-w-0 items-center gap-3">
                     <button
                         onClick={() => setIsMobileMenuOpen(true)}
-                        className="p-2 -ml-2 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                        className="-ml-2 rounded-lg p-2 text-neutral-600 transition-colors hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-white/5 md:hidden"
+                        aria-label="Open admin navigation"
                     >
                         <Menu className="w-6 h-6" />
                     </button>
-                    <div className="relative h-7 w-7">
+                    <div className="relative h-7 w-7 md:hidden">
                         <Image
                             src="/logo.png"
                             alt="Harvesters Logo"
@@ -188,9 +197,30 @@ export default function AdminNavigation({
                             className="object-contain dark:invert-0 invert"
                         />
                     </div>
+                    <div className="hidden min-w-0 items-center gap-3 md:flex">
+                        <h1 className="shrink-0 text-xl font-bold text-neutral-900 dark:text-white">
+                            Admin Overview
+                        </h1>
+                        <span className="truncate rounded-full border border-[#34A853]/20 bg-[#34A853]/10 px-3 py-1 text-xs font-semibold text-[#34A853] dark:bg-[#34A853]/20">
+                            {scopeSummary}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+                    <Link
+                        href="/dashboard"
+                        className="mr-1 hidden text-xs font-semibold uppercase tracking-wider text-neutral-500 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white lg:block"
+                    >
+                        Switch to Worker View
+                    </Link>
+                    {!isReportsOnlyAdmin && (
+                        <AdminNotificationBell
+                            userId={userId}
+                            initialNotifications={initialNotifications}
+                            initialUnreadCount={initialUnreadCount}
+                        />
+                    )}
                     <ThemeToggle />
                     <div className="h-9 w-9 rounded-full bg-[#34A853]/10 flex items-center justify-center border border-[#34A853]/20 text-[#34A853] font-bold shadow-inner text-sm">
                         {initial}
@@ -221,6 +251,7 @@ export default function AdminNavigation({
                                 <button
                                     onClick={() => setIsMobileMenuOpen(false)}
                                     className="p-2 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 rounded-lg transition-colors"
+                                    aria-label="Close admin navigation"
                                 >
                                     <X className="w-5 h-5" />
                                 </button>

@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog, AttendanceHistoryResponse } from '@/lib/types';
 import { validateDateOfBirth } from '@/lib/date-of-birth';
+import { APP_TIME_ZONE, getDateKeyInTimeZone } from '@/lib/business-time';
 
 type CheckInEvent = {
     location_ids: string[] | null;
@@ -25,6 +26,11 @@ const leaveRequestSchema = z.object({
     startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Please select a valid start date."),
     endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Please select a valid end date."),
     reason: z.string().trim().min(5, "Please provide a brief reason.").max(500, "Reason cannot exceed 500 characters."),
+});
+
+const earlyLeaveReturnSchema = z.object({
+    leaveRequestId: z.string().uuid("Invalid leave request."),
+    returnNote: z.string().trim().max(500, "Return note cannot exceed 500 characters.").optional(),
 });
 
 function parseDateOnly(value: string) {
@@ -157,6 +163,30 @@ export async function verifyAndCheckIn(formData: FormData) {
         return { error: 'Your account is no longer active. Please contact an administrator.' };
     }
 
+    // Friendly fail-fast check. A database trigger repeats this rule at write
+    // time so a direct API call or a concurrent leave change cannot bypass it.
+    const currentBusinessDate = getDateKeyInTimeZone(new Date(), APP_TIME_ZONE);
+    const { data: activeLeaveRows, error: activeLeaveError } = await supabase
+        .from('leave_requests')
+        .select('id, end_date')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .lte('start_date', currentBusinessDate)
+        .gte('end_date', currentBusinessDate)
+        .is('returned_early_at', null)
+        .limit(1);
+
+    if (activeLeaveError) {
+        console.error('[Dashboard] Failed to verify approved leave before check-in:', activeLeaveError);
+        return { error: 'Could not verify your leave status. Please try again.' };
+    }
+
+    if ((activeLeaveRows?.length || 0) > 0) {
+        return {
+            error: `You are currently on approved leave through ${activeLeaveRows?.[0]?.end_date}. End your leave early before checking in.`,
+        };
+    }
+
     // Defense-in-depth: If the session is department/team-scoped, verify worker membership.
     if (eventDeptId || eventTeamId) {
         let isAuthorized = false;
@@ -239,18 +269,22 @@ export async function verifyAndCheckIn(formData: FormData) {
     // 6. Check if the user is already checked in to THIS session
     const { data: activeSession } = await supabase
         .from('attendance_logs')
-        .select('id')
+        .select('id, check_in_time')
         .eq('user_id', user.id)
         .eq('session_id', sessionId)
         .eq('status', 'active')
         .maybeSingle();
 
     if (activeSession) {
-        return { error: 'You are already checked in for this session.' };
+        return {
+            success: true,
+            alreadyCheckedIn: true,
+            checkedInAt: activeSession.check_in_time,
+        };
     }
 
     // Insert the check-in record
-    const { error: dbError } = await supabase
+    const { data: insertedAttendance, error: dbError } = await supabase
         .from('attendance_logs')
         .insert({
             user_id: user.id,
@@ -260,19 +294,46 @@ export async function verifyAndCheckIn(formData: FormData) {
             check_in_lat: lat,
             check_in_lng: lng,
             status: 'active'
-        });
+        })
+        .select('check_in_time')
+        .single();
 
     if (dbError) {
-        // Catch the new unique constraint to return a friendly error
+        if (dbError.message?.includes('LEAVE_ACTIVE')) {
+            return { error: 'You are currently on approved leave. End your leave early before checking in.' };
+        }
+        // A concurrent retry may win the insert race. Read the canonical row
+        // and return the same successful state instead of surfacing an error.
         if (dbError.code === '23505' || dbError.message.includes('unique')) {
-            return { error: 'You are already checked in. You must check out before checking in again.' };
+            const { data: existingAttendance } = await supabase
+                .from('attendance_logs')
+                .select('check_in_time')
+                .eq('user_id', user.id)
+                .eq('session_id', sessionId)
+                .eq('status', 'active')
+                .maybeSingle();
+
+            if (existingAttendance) {
+                revalidatePath('/dashboard');
+                return {
+                    success: true,
+                    alreadyCheckedIn: true,
+                    checkedInAt: existingAttendance.check_in_time,
+                };
+            }
+
+            return { error: 'A check-in already exists. Refresh the page to view your current attendance status.' };
         }
         console.error("Supabase insert error:", dbError);
         return { error: 'Database error: Could not log check-in.' };
     }
 
     revalidatePath('/dashboard');
-    return { success: true };
+    return {
+        success: true,
+        alreadyCheckedIn: false,
+        checkedInAt: insertedAttendance.check_in_time,
+    };
 }
 
 export async function manualCheckOut(formData: FormData) {
@@ -418,8 +479,7 @@ export async function submitLeaveRequest(formData: FormData) {
     // Server-side date validation
     const start = parseDateOnly(startDate);
     const end = parseDateOnly(endDate);
-    const today = new Date();
-    const todayUtc = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+    const todayUtc = parseDateOnly(getDateKeyInTimeZone(new Date(), APP_TIME_ZONE));
 
     if (start < todayUtc) {
         return { error: "Start Date cannot be in the past." };
@@ -454,6 +514,9 @@ export async function submitLeaveRequest(formData: FormData) {
 
     if (error) {
         console.error("Leave request submission error:", error);
+        if (error.message?.includes('LEAVE_OVERLAP')) {
+            return { error: "You already have a pending or approved leave request for these dates." };
+        }
         return { error: "Failed to submit request. Please try again." };
     }
 
@@ -479,7 +542,7 @@ export async function fetchMyLeaveRequests() {
 
     const { data, error } = await supabase
         .from('leave_requests')
-        .select('id, user_id, leave_type, start_date, end_date, reason, status, created_at, reviewed_at, review_note')
+        .select('id, user_id, leave_type, start_date, end_date, reason, status, created_at, reviewed_at, review_note, returned_early_at, returned_early_by, return_note')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
 
@@ -489,6 +552,59 @@ export async function fetchMyLeaveRequests() {
     }
 
     return data;
+}
+
+/**
+ * Ends the authenticated worker's currently active approved leave.
+ * Ownership and lifecycle validation are repeated atomically in Postgres.
+ */
+export async function endMyLeaveEarly(formData: FormData) {
+    const parsed = earlyLeaveReturnSchema.safeParse({
+        leaveRequestId: formData.get('leaveRequestId'),
+        returnNote: formData.get('returnNote') || undefined,
+    });
+
+    if (!parsed.success) {
+        return { error: parsed.error.issues[0]?.message || 'Invalid early return request.' };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        return { error: 'Authentication required. Please log in.' };
+    }
+
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return { error: 'Your account is no longer active. Please contact an administrator.' };
+    }
+
+    const { error } = await supabase.rpc('end_my_leave_early', {
+        p_leave_request_id: parsed.data.leaveRequestId,
+        p_return_note: parsed.data.returnNote || null,
+    });
+
+    if (error) {
+        console.error('[Dashboard] Failed to end approved leave early:', error);
+        if (error.message?.includes('already been ended early')) {
+            return { error: 'This leave has already been ended early. Refreshing the page should show your current status.' };
+        }
+        if (error.message?.includes('Only currently active leave')) {
+            return { error: 'Only a leave that is active today can be ended early.' };
+        }
+        if (error.message?.includes('Only approved leave')) {
+            return { error: 'This leave is not approved and cannot be ended early.' };
+        }
+        if (error.message?.includes('Leave request not found')) {
+            return { error: 'This leave request is unavailable or does not belong to your account.' };
+        }
+        return { error: 'Could not resume duty right now. Please try again.' };
+    }
+
+    revalidatePath('/dashboard');
+    revalidatePath('/admin/leave-requests');
+    return { success: true };
 }
 
 /**

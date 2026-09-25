@@ -367,6 +367,9 @@ export async function manualWorkerCheckIn(params: { workerId: string; sessionId:
 
         if (insertError) {
             console.error("Manual Check-In Insert Error:", insertError);
+            if (insertError.message?.includes("LEAVE_ACTIVE")) {
+                return { error: "This worker is currently on approved leave. They must resume duty before check-in." };
+            }
             return { error: "Failed to record worker check-in." };
         }
 

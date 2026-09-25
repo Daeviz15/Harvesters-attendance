@@ -14,7 +14,7 @@ interface GeolocationState {
 
 type ActiveLocation = { id: string, name: string, latitude: number, longitude: number, radius: number };
 
-export function useGeolocation(activeLocations: ActiveLocation[] = []) {
+export function useGeolocation(activeLocations: ActiveLocation[] = [], enabled = true) {
     const activeLocationsKey = JSON.stringify(activeLocations);
     const [state, setState] = useState<GeolocationState>({
         lat: null,
@@ -24,10 +24,26 @@ export function useGeolocation(activeLocations: ActiveLocation[] = []) {
         locationName: null,
         distance: null,
         error: null,
-        isLoading: true,
+        isLoading: enabled,
     });
 
     useEffect(() => {
+        if (!enabled) {
+            const timeoutId = window.setTimeout(() => {
+                setState({
+                    lat: null,
+                    lng: null,
+                    accuracy: null,
+                    isWithinPerimeter: false,
+                    locationName: null,
+                    distance: null,
+                    error: null,
+                    isLoading: false,
+                });
+            }, 0);
+            return () => window.clearTimeout(timeoutId);
+        }
+
         const hasGeolocation = "geolocation" in navigator;
         if (!hasGeolocation) {
             const timeoutId = window.setTimeout(() => {
@@ -68,9 +84,6 @@ export function useGeolocation(activeLocations: ActiveLocation[] = []) {
                 const finalDistance = minDistance === Infinity ? null : minDistance;
 
                 
-                console.log(`[GEO DEBUG] Your GPS: ${latitude}, ${longitude}`);
-                console.log(`[GEO DEBUG] Distance: ${finalDistance?.toFixed(1)}m | Accuracy: ±${accuracy?.toFixed(0)}m | Within: ${isWithinPerimeter}`);
-
                 setState({
                     lat: latitude,
                     lng: longitude,
@@ -126,7 +139,7 @@ export function useGeolocation(activeLocations: ActiveLocation[] = []) {
         );
 
         return () => navigator.geolocation.clearWatch(watchId);
-    }, [activeLocationsKey]);
+    }, [activeLocationsKey, enabled]);
 
     return state;
 }

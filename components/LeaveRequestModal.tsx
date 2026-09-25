@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, CalendarDays, ChevronDown, Send, Clock, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { X, CalendarDays, ChevronDown, Send, Clock, CheckCircle2, XCircle, Loader2, RotateCcw } from "lucide-react";
 import { submitLeaveRequest, fetchMyLeaveRequests } from "@/app/dashboard/actions";
 import type { LeaveRequest, LeaveStatus } from "@/lib/types";
 
@@ -115,7 +115,15 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
         }
     };
 
-    const getStatusBadge = (status: LeaveStatus) => {
+    const getStatusBadge = (status: LeaveStatus, returnedEarlyAt?: string | null) => {
+        if (returnedEarlyAt) {
+            return (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 text-[11px] font-medium">
+                    <RotateCcw className="w-3 h-3" /> Returned Early
+                </span>
+            );
+        }
+
         switch (status) {
             case "approved":
                 return (
@@ -409,7 +417,7 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                                 <p className="text-[14px] font-medium text-white/90">{req.leave_type}</p>
                                                                 <p className="text-[12px] text-white/40 mt-0.5">{req.start_date} — {req.end_date}</p>
                                                             </div>
-                                                            {getStatusBadge(req.status)}
+                                                            {getStatusBadge(req.status, req.returned_early_at)}
                                                         </div>
                                                         <p className="text-[13px] text-white/50 leading-relaxed">{req.reason}</p>
 
@@ -426,6 +434,19 @@ export default function LeaveRequestModal({ isOpen, onClose }: LeaveRequestModal
                                                                 {req.reviewed_at && (
                                                                     <p className="mt-2 text-[11px] text-white/30">
                                                                         Reviewed on {formatReviewedAt(req.reviewed_at)}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
+
+                                                        {req.returned_early_at && (
+                                                            <div className="mt-3 rounded-xl border border-blue-500/15 bg-blue-500/5 p-3">
+                                                                <p className="text-[11px] font-semibold uppercase tracking-wider text-blue-300/70">
+                                                                    Duty resumed {formatReviewedAt(req.returned_early_at)}
+                                                                </p>
+                                                                {req.return_note && (
+                                                                    <p className="mt-1 text-[13px] leading-relaxed text-white/60">
+                                                                        {req.return_note}
                                                                     </p>
                                                                 )}
                                                             </div>

@@ -385,6 +385,24 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
         remindersQueued = Number(enqueueSummary?.reminder_jobs_created || 0);
         followUpsQueued = Number(enqueueSummary?.followup_jobs_created || 0);
 
+        // The primary enqueue function preserves the original approved-leave
+        // behavior. This narrow second pass adds only follow-ups made eligible
+        // by an audited early return, with the same unique outbox constraint.
+        const { data: returnedEarlyFollowUps, error: returnedEarlyFollowUpError } = await supabase.rpc(
+            "enqueue_due_returned_early_followups",
+            {
+                p_reference_time: new Date().toISOString(),
+                p_followup_delay_minutes: config.followupDelayMinutes,
+                p_max_lateness_minutes: config.maxLatenessMinutes,
+            },
+        );
+
+        if (returnedEarlyFollowUpError) {
+            throw new Error(`Unable to enqueue early-return follow-ups: ${returnedEarlyFollowUpError.message}`);
+        }
+
+        followUpsQueued += Number(returnedEarlyFollowUps || 0);
+
         const { data: summariesEnqueued, error: summaryEnqueueError } = await supabase.rpc(
             "enqueue_due_attendance_summaries",
             {
@@ -399,6 +417,18 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
         }
 
         summariesQueued = Number(summariesEnqueued || 0);
+
+        const { error: summaryRecalculationError } = await supabase.rpc(
+            "recalculate_pending_attendance_summary_counts",
+            {
+                p_reference_time: new Date().toISOString(),
+                p_max_lateness_minutes: config.maxLatenessMinutes,
+            },
+        );
+
+        if (summaryRecalculationError) {
+            throw new Error(`Unable to reconcile attendance summary counts: ${summaryRecalculationError.message}`);
+        }
     }
 
     let claimed = 0;

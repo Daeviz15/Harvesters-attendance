@@ -3,6 +3,9 @@ import { createClient } from '@/utils/supabase/server';
 import DashboardClient from './DashboardClient';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog } from '@/lib/types'; 
+import { APP_TIME_ZONE, getDateKeyInTimeZone } from '@/lib/business-time';
+import { getUpcomingBirthdays } from '@/lib/upcoming-birthdays';
+import { getMyNextEventOccurrence } from '@/lib/upcoming-events';
 
 type BroadcastEventJoin = { title: string } | { title: string }[] | null;
 type ActiveBroadcastSession = {
@@ -32,6 +35,7 @@ function shouldPromptForMissingBirthday(profile: { date_of_birth: string | null 
 }
 
 export default async function DashboardServerPage() {
+    const serverNow = new Date().toISOString();
     const supabase = await createClient();
     const { data: { user }, error } = await supabase.auth.getUser();
 
@@ -48,6 +52,31 @@ export default async function DashboardServerPage() {
     if (profile?.is_active === false) {
         redirect('/auth/login?reason=account_inactive');
     }
+
+    const currentBusinessDate = getDateKeyInTimeZone(new Date(), APP_TIME_ZONE);
+    const { data: activeLeaveRows, error: activeLeaveError } = await supabase
+        .from('leave_requests')
+        .select('id, leave_type, start_date, end_date')
+        .eq('user_id', user.id)
+        .eq('status', 'approved')
+        .lte('start_date', currentBusinessDate)
+        .gte('end_date', currentBusinessDate)
+        .is('returned_early_at', null)
+        .order('end_date', { ascending: true })
+        .limit(1);
+
+    if (activeLeaveError) {
+        console.error('[Dashboard] Failed to load active approved leave:', activeLeaveError);
+    }
+
+    const activeLeave = activeLeaveRows?.[0]
+        ? {
+            id: activeLeaveRows[0].id,
+            leaveType: activeLeaveRows[0].leave_type,
+            startDate: activeLeaveRows[0].start_date,
+            endDate: activeLeaveRows[0].end_date,
+        }
+        : null;
 
     let username = "User";
     let initials = "U";
@@ -68,13 +97,6 @@ export default async function DashboardServerPage() {
             initials = username.substring(0, 2).toUpperCase();
         }
     }
-
-    const { data: activeSession } = await supabase
-        .from('attendance_logs')
-        .select('id, check_in_time')
-        .eq('user_id', user.id)
-        .eq('status', 'active')
-        .maybeSingle();
 
     // 1. Fetch all active departments to resolve user's department IDs (via profile, headship, or exact name match)
     const { data: allDepartments } = await supabase
@@ -124,7 +146,7 @@ export default async function DashboardServerPage() {
     // - Session or Event created by this user
     // - Event department matches user's department/managed departments
     // - Team-wide event matches user's team
-    const visibleSession = ((activeBroadcastSessions || []) as ActiveBroadcastSession[]).find((s) => {
+    const visibleSessions = ((activeBroadcastSessions || []) as ActiveBroadcastSession[]).filter((s) => {
         const sessionCreatedBy = s.created_by;
         const event = Array.isArray(s.event) ? s.event[0] : s.event;
         const eventCreatedBy = event?.created_by;
@@ -139,10 +161,40 @@ export default async function DashboardServerPage() {
         return false;
     });
 
+    // If eligible sessions overlap, keep the worker on the session they have
+    // already joined. Otherwise, use the most recently started visible session.
+    const visibleSessionIds = visibleSessions.map((session) => session.id);
+    const { data: activeSessionRows, error: activeSessionError } = visibleSessionIds.length > 0
+        ? await supabase
+            .from('attendance_logs')
+            .select('id, session_id, check_in_time')
+            .eq('user_id', user.id)
+            .eq('status', 'active')
+            .in('session_id', visibleSessionIds)
+            .order('check_in_time', { ascending: false })
+            .limit(1)
+        : { data: [], error: null };
+
+    if (activeSessionError) {
+        console.error('[Dashboard] Failed to load current-session attendance:', activeSessionError);
+    }
+
+    const activeSession = activeSessionRows?.[0] ?? null;
+    const visibleSession = activeSession
+        ? visibleSessions.find((session) => session.id === activeSession.session_id) ?? visibleSessions[0]
+        : visibleSessions[0];
+
     const formattedBroadcast = visibleSession ? {
         id: visibleSession.id,
         title: getBroadcastTitle(visibleSession.event)
     } : null;
+
+    // The RPC also returns an in-progress scheduled occurrence. The client
+    // keeps that occurrence hidden until it ends, preventing the following
+    // event from appearing while session automation catches up.
+    const upcomingEvent = formattedBroadcast
+        ? null
+        : await getMyNextEventOccurrence({ referenceTime: serverNow });
 
     const { data: historyData } = await supabase
         .from('attendance_logs')
@@ -172,6 +224,12 @@ export default async function DashboardServerPage() {
         || !!headDeptName
     );
 
+    const upcomingBirthdays = await getUpcomingBirthdays({
+        adminView: false,
+        daysAhead: 45,
+        limit: 8,
+    });
+
     return (
         <DashboardClient
             key={`${formattedBroadcast?.id ?? 'no-broadcast'}:${activeSession?.id ?? 'not-checked-in'}:${activeSession?.check_in_time ?? 'no-check-in-time'}`}
@@ -182,14 +240,19 @@ export default async function DashboardServerPage() {
             team={team}
             workerId={workerId}
             initialIsCheckedIn={!!activeSession}
+            initialCheckedInAt={activeSession?.check_in_time ?? null}
             initialHistory={initialHistory}
             initialHasMore={initialHasMore}
             avatarUrl={profile?.avatar_url || null}
             shouldPromptForBirthday={shouldPromptForMissingBirthday(profile)}
             initialBroadcastSession={formattedBroadcast}
+            upcomingEvent={upcomingEvent}
+            serverNow={serverNow}
             activeLocations={activeLocations || []}
             headDepartmentName={headDeptName}
             canAccessAdmin={canAccessAdmin}
+            initialActiveLeave={activeLeave}
+            upcomingBirthdays={upcomingBirthdays}
         />
     );
 }

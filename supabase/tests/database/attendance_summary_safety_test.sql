@@ -70,8 +70,7 @@ checks(test_number, passed, description) AS (
                 ), 'automatic session creation captures its expected roster'),
             (11, definitions.enqueue_definition ILIKE '%COUNT(*) FILTER%'
                     AND definitions.enqueue_definition NOT ILIKE '%ARRAY_AGG(%'
-                    AND definitions.enqueue_definition NOT ILIKE '%STRING_AGG(%profile_row%'
-                    AND definitions.enqueue_definition NOT ILIKE '%STRING_AGG(%auth_user%',
+                    AND definitions.enqueue_definition !~* 'STRING_AGG\s*\([^)]*(profile_row|auth_user)',
                 'summary payload is aggregate counts rather than a worker list'),
             (12, definitions.enqueue_definition ILIKE '%leader.role <> ''reports_admin''%'
                     AND definitions.enqueue_definition ILIKE '%leader.role = ''team_admin''%'

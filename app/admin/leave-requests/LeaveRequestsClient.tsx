@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import {
@@ -13,9 +13,12 @@ import {
     Search,
     UserRound,
     XCircle,
+    RotateCcw,
 } from "lucide-react";
 import { reviewLeaveRequest, type AdminLeaveRequestRow } from "./actions";
 import type { LeaveStatus } from "@/lib/types";
+import { createClient } from "@/utils/supabase/client";
+import { APP_TIME_ZONE } from "@/lib/business-time";
 
 interface LeaveRequestsClientProps {
     requests: AdminLeaveRequestRow[];
@@ -47,6 +50,14 @@ function getDurationDays(startDate: string, endDate: string) {
     return Math.max(1, Math.floor(diff / 86_400_000) + 1);
 }
 
+function formatDateTime(value: string) {
+    return new Intl.DateTimeFormat("en-NG", {
+        timeZone: APP_TIME_ZONE,
+        dateStyle: "medium",
+        timeStyle: "short",
+    }).format(new Date(value));
+}
+
 function StatusBadge({ status }: { status: LeaveStatus }) {
     if (status === "approved") {
         return (
@@ -74,6 +85,44 @@ function StatusBadge({ status }: { status: LeaveStatus }) {
     );
 }
 
+function LifecycleBadge({ lifecycle }: { lifecycle: AdminLeaveRequestRow["lifecycle"] }) {
+    if (lifecycle === "returned_early") {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-400">
+                <RotateCcw className="h-3.5 w-3.5" />
+                Returned early
+            </span>
+        );
+    }
+
+    if (lifecycle === "active") {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-400">
+                <Clock className="h-3.5 w-3.5" />
+                Currently on leave
+            </span>
+        );
+    }
+
+    if (lifecycle === "upcoming") {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-xs font-semibold text-violet-400">
+                Upcoming
+            </span>
+        );
+    }
+
+    if (lifecycle === "completed") {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-neutral-500/20 bg-neutral-500/10 px-2.5 py-1 text-xs font-semibold text-neutral-400">
+                Completed
+            </span>
+        );
+    }
+
+    return null;
+}
+
 export default function LeaveRequestsClient({
     requests,
     totalCount,
@@ -94,6 +143,24 @@ export default function LeaveRequestsClient({
     const [isPending, startTransition] = useTransition();
 
     const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+
+    useEffect(() => {
+        const supabase = createClient();
+        const channel = supabase
+            .channel("admin-leave-requests-realtime")
+            .on("postgres_changes", {
+                event: "UPDATE",
+                schema: "public",
+                table: "leave_requests",
+            }, () => {
+                router.refresh();
+            })
+            .subscribe();
+
+        return () => {
+            void supabase.removeChannel(channel);
+        };
+    }, [router]);
 
     const setQuery = (updates: Record<string, string | null>) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -269,6 +336,7 @@ export default function LeaveRequestsClient({
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <h2 className="text-lg font-bold text-neutral-900 dark:text-white">{requesterName}</h2>
                                                 <StatusBadge status={request.status} />
+                                                {request.status === "approved" && <LifecycleBadge lifecycle={request.lifecycle} />}
                                             </div>
                                             <p className="mt-1 text-sm text-neutral-500 dark:text-white/50">
                                                 {request.requester?.worker_id || "No worker ID"} · {request.requester?.department || "No department"} · {request.requester?.team || "No team"}
@@ -302,6 +370,21 @@ export default function LeaveRequestsClient({
                                                         : "an admin"}
                                                     {request.review_note ? ` — ${request.review_note}` : ""}
                                                 </p>
+                                            )}
+                                            {request.returned_early_at && (
+                                                <div className="mt-3 rounded-xl border border-blue-500/15 bg-blue-500/5 p-3 text-sm text-blue-300/80">
+                                                    <p className="font-semibold">
+                                                        Duty resumed early on {formatDateTime(request.returned_early_at)}
+                                                        {request.returner
+                                                            ? ` by ${`${request.returner.first_name} ${request.returner.last_name}`.trim()}`
+                                                            : ""}
+                                                    </p>
+                                                    {request.return_note && (
+                                                        <p className="mt-1 leading-6 text-neutral-600 dark:text-white/55">
+                                                            {request.return_note}
+                                                        </p>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
                                     </div>

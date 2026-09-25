@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requireAdminManagementAuth as requireAdminAuth } from "@/lib/rbac";
 import { createClient } from "@/utils/supabase/server";
 import type { LeaveStatus } from "@/lib/types";
+import { APP_TIME_ZONE, getDateKeyInTimeZone } from "@/lib/business-time";
 
 const PAGE_SIZE = 25;
 
@@ -25,6 +26,9 @@ export interface AdminLeaveRequestRow {
     created_at: string;
     reviewed_at: string | null;
     review_note: string | null;
+    returned_early_at: string | null;
+    return_note: string | null;
+    lifecycle: "pending" | "rejected" | "upcoming" | "active" | "returned_early" | "completed";
     requester: {
         id: string;
         first_name: string;
@@ -37,6 +41,11 @@ export interface AdminLeaveRequestRow {
         avatar_url: string | null;
     } | null;
     reviewer: {
+        id: string;
+        first_name: string;
+        last_name: string;
+    } | null;
+    returner: {
         id: string;
         first_name: string;
         last_name: string;
@@ -118,7 +127,7 @@ export async function getAdminLeaveRequests(
     let query = supabase
         .from("leave_requests")
         .select(
-            "id, user_id, leave_type, start_date, end_date, reason, status, created_at, reviewed_at, review_note, reviewed_by",
+            "id, user_id, leave_type, start_date, end_date, reason, status, created_at, reviewed_at, review_note, reviewed_by, returned_early_at, returned_early_by, return_note",
             { count: "exact" },
         );
 
@@ -175,11 +184,14 @@ export async function getAdminLeaveRequests(
         reviewed_at: string | null;
         review_note: string | null;
         reviewed_by: string | null;
+        returned_early_at: string | null;
+        returned_early_by: string | null;
+        return_note: string | null;
     };
 
     const rows = (leaveResponse.data || []) as LeaveRow[];
     const relatedProfileIds = Array.from(new Set(
-        rows.flatMap((row) => [row.user_id, row.reviewed_by]).filter((value): value is string => Boolean(value)),
+        rows.flatMap((row) => [row.user_id, row.reviewed_by, row.returned_early_by]).filter((value): value is string => Boolean(value)),
     ));
 
     const profilesById = new Map<string, AdminLeaveRequestRow["requester"]>();
@@ -199,10 +211,24 @@ export async function getAdminLeaveRequests(
         }
     }
 
+    const currentBusinessDate = getDateKeyInTimeZone(new Date(), APP_TIME_ZONE);
+
     return {
         data: {
             requests: rows.map((row) => {
                 const reviewerProfile = row.reviewed_by ? profilesById.get(row.reviewed_by) : null;
+                const returnerProfile = row.returned_early_by ? profilesById.get(row.returned_early_by) : null;
+                const lifecycle: AdminLeaveRequestRow["lifecycle"] = row.status === "pending"
+                    ? "pending"
+                    : row.status === "rejected"
+                        ? "rejected"
+                        : row.returned_early_at
+                            ? "returned_early"
+                            : currentBusinessDate < row.start_date
+                                ? "upcoming"
+                                : currentBusinessDate > row.end_date
+                                    ? "completed"
+                                    : "active";
                 return {
                     id: row.id,
                     user_id: row.user_id,
@@ -214,12 +240,22 @@ export async function getAdminLeaveRequests(
                     created_at: row.created_at,
                     reviewed_at: row.reviewed_at,
                     review_note: row.review_note,
+                    returned_early_at: row.returned_early_at,
+                    return_note: row.return_note,
+                    lifecycle,
                     requester: profilesById.get(row.user_id) || null,
                     reviewer: reviewerProfile
                         ? {
                             id: reviewerProfile.id,
                             first_name: reviewerProfile.first_name,
                             last_name: reviewerProfile.last_name,
+                        }
+                        : null,
+                    returner: returnerProfile
+                        ? {
+                            id: returnerProfile.id,
+                            first_name: returnerProfile.first_name,
+                            last_name: returnerProfile.last_name,
                         }
                         : null,
                 };
@@ -258,6 +294,9 @@ export async function reviewLeaveRequest(formData: FormData) {
 
     if (error) {
         console.error("[LeaveRequests] Review failed:", error);
+        if (error.message?.includes("LEAVE_OVERLAP")) {
+            return { error: "This leave overlaps another pending or approved request for the worker." };
+        }
         return { error: error.message || "Could not update leave request." };
     }
 
