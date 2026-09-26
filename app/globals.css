@@ -62,7 +62,7 @@ html.lenis, html.lenis-smooth {
   pointer-events: none;
 }
 
-/* Hide all scrollbars globally but keep functionality */
+/* Hide all scrollbars globally by default but keep functionality */
 ::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -71,5 +71,63 @@ html.lenis, html.lenis-smooth {
 * {
   -ms-overflow-style: none;
   scrollbar-width: none;
+}
+
+/* Desktop Visible Scrollbar for Dashboard on large screens */
+@media (min-width: 768px) {
+  .dashboard-desktop-scroll {
+    scrollbar-width: thin !important;
+    scrollbar-color: rgba(52, 168, 83, 0.45) transparent !important;
+  }
+
+  .dashboard-desktop-scroll::-webkit-scrollbar {
+    display: block !important;
+    width: 7px !important;
+  }
+
+  .dashboard-desktop-scroll::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+
+  .dashboard-desktop-scroll::-webkit-scrollbar-thumb {
+    background: rgba(52, 168, 83, 0.35) !important;
+    border-radius: 9999px !important;
+  }
+
+  .dashboard-desktop-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(52, 168, 83, 0.75) !important;
+  }
+}
+
+/* Sleek Organic Water Ripple Animation (Composite-only transform & opacity for 60fps GPU acceleration) */
+@keyframes water-ripple {
+  0% {
+    transform: scale(0.98);
+    opacity: 0.75;
+    box-shadow: 0 0 0 0 rgba(52, 168, 83, 0.4);
+  }
+  40% {
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+    box-shadow: 0 0 30px 15px rgba(52, 168, 83, 0);
+  }
+}
+
+.water-ripple-1 {
+  animation: water-ripple 2.7s cubic-bezier(0.12, 0.5, 0.35, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.water-ripple-2 {
+  animation: water-ripple 2.7s cubic-bezier(0.12, 0.5, 0.35, 1) 0.9s infinite;
+  will-change: transform, opacity;
+}
+
+.water-ripple-3 {
+  animation: water-ripple 2.7s cubic-bezier(0.12, 0.5, 0.35, 1) 1.8s infinite;
+  will-change: transform, opacity;
 }
 

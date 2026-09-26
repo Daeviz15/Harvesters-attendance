@@ -1,11 +1,15 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
+import { createAdminClient } from '@/utils/supabase/admin';
 import DashboardClient from './DashboardClient';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
 import type { AttendanceLog } from '@/lib/types'; 
 import { APP_TIME_ZONE, getDateKeyInTimeZone } from '@/lib/business-time';
 import { getUpcomingBirthdays } from '@/lib/upcoming-birthdays';
 import { getMyNextEventOccurrence } from '@/lib/upcoming-events';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
 type BroadcastEventJoin = { title: string } | { title: string }[] | null;
 type ActiveBroadcastSession = {
@@ -14,11 +18,13 @@ type ActiveBroadcastSession = {
     created_by: string | null;
     event: {
         title: string;
+        location_ids: string[] | null;
         department_id: string | null;
         team_id: string | null;
         created_by: string | null;
     } | {
         title: string;
+        location_ids: string[] | null;
         department_id: string | null;
         team_id: string | null;
         created_by: string | null;
@@ -137,7 +143,7 @@ export default async function DashboardServerPage() {
     // 2. Fetch active broadcast sessions with event & creator scoping details
     const { data: activeBroadcastSessions } = await supabase
         .from('attendance_sessions')
-        .select('id, event_id, created_by, event:events(title, department_id, team_id, created_by)')
+        .select('id, event_id, created_by, event:events(title, location_ids, department_id, team_id, created_by)')
         .eq('status', 'active')
         .order('start_time', { ascending: false });
 
@@ -184,9 +190,13 @@ export default async function DashboardServerPage() {
         ? visibleSessions.find((session) => session.id === activeSession.session_id) ?? visibleSessions[0]
         : visibleSessions[0];
 
+    const visibleEvent = visibleSession
+        ? (Array.isArray(visibleSession.event) ? visibleSession.event[0] : visibleSession.event)
+        : null;
     const formattedBroadcast = visibleSession ? {
         id: visibleSession.id,
-        title: getBroadcastTitle(visibleSession.event)
+        title: getBroadcastTitle(visibleSession.event),
+        locationIds: visibleEvent?.location_ids ?? [],
     } : null;
 
     // The RPC also returns an in-progress scheduled occurrence. The client
@@ -214,21 +224,56 @@ export default async function DashboardServerPage() {
             status: row.status,
         }));
 
-    const { data: activeLocations } = await supabase
-        .from('locations')
-        .select('id, name, latitude, longitude, radius')
-        .eq('is_active', true);
+    // Only send the locations explicitly assigned to the visible event. The
+    // client uses this for guidance while the check-in action repeats the same
+    // event-specific lookup before inserting attendance.
+    let activeLocations: {
+        id: string;
+        name: string;
+        latitude: number;
+        longitude: number;
+        radius: number;
+        max_check_in_accuracy_meters: number;
+        check_in_distance_buffer_meters: number;
+    }[] = [];
+
+    if (formattedBroadcast && formattedBroadcast.locationIds.length > 0) {
+        const { data, error: activeLocationsError } = await supabase
+            .from('locations')
+            .select('id, name, latitude, longitude, radius, max_check_in_accuracy_meters, check_in_distance_buffer_meters')
+            .eq('is_active', true)
+            .in('id', formattedBroadcast.locationIds);
+
+        if (activeLocationsError) {
+            console.error('[Dashboard] Failed to load locations assigned to the active event:', activeLocationsError);
+        } else {
+            activeLocations = data || [];
+        }
+    }
 
     const canAccessAdmin = !!profile && (
         ["admin", "super_admin", "team_admin", "reports_admin"].includes(profile.role)
         || !!headDeptName
     );
 
+    const isSuperAdmin = !!profile && (profile.role === 'admin' || profile.role === 'super_admin');
+
     const upcomingBirthdays = await getUpcomingBirthdays({
-        adminView: false,
+        adminView: isSuperAdmin,
         daysAhead: 45,
         limit: 8,
     });
+
+    const { data: latestAssistanceRequest } = formattedBroadcast
+        ? await createAdminClient()
+            .from('check_in_assistance_requests')
+            .select('id, status, worker_message, resolution_note, created_at, resolved_at')
+            .eq('user_id', user.id)
+            .eq('session_id', formattedBroadcast.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+        : { data: null };
 
     return (
         <DashboardClient
@@ -248,11 +293,12 @@ export default async function DashboardServerPage() {
             initialBroadcastSession={formattedBroadcast}
             upcomingEvent={upcomingEvent}
             serverNow={serverNow}
-            activeLocations={activeLocations || []}
+            activeLocations={activeLocations}
             headDepartmentName={headDeptName}
             canAccessAdmin={canAccessAdmin}
             initialActiveLeave={activeLeave}
             upcomingBirthdays={upcomingBirthdays}
+            initialAssistanceRequest={latestAssistanceRequest ?? null}
         />
     );
 }

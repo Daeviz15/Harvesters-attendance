@@ -14,6 +14,7 @@ const adminNotificationSchema = z.object({
     "leave_returned_early",
     "worker_deactivated",
     "worker_reactivated",
+    "check_in_assistance_requested",
   ]),
   actor_user_id: z.string().uuid().nullable(),
   subject_user_id: z.string().uuid().nullable(),

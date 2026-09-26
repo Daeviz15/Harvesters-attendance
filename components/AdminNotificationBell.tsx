@@ -7,6 +7,7 @@ import {
   CalendarClock,
   Check,
   CheckCheck,
+  MapPinned,
   UserCheck,
   UserX,
 } from "lucide-react";
@@ -42,6 +43,7 @@ function NotificationIcon({ eventType }: { eventType: AdminNotification["event_t
   if (eventType === "worker_deactivated") return <UserX className="h-4 w-4" />;
   if (eventType === "worker_reactivated") return <UserCheck className="h-4 w-4" />;
   if (eventType === "leave_returned_early") return <CheckCheck className="h-4 w-4" />;
+  if (eventType === "check_in_assistance_requested") return <MapPinned className="h-4 w-4" />;
   return <CalendarClock className="h-4 w-4" />;
 }
 

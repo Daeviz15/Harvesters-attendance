@@ -534,13 +534,21 @@ export async function sendEventReminderEmail({
     const safeEventTitle = escapeHtml(eventTitle);
     const safeFormattedStart = escapeHtml(formattedStart);
     const safeLocationName = locationName ? escapeHtml(locationName) : null;
+    const isInstant = reminderLeadMinutes <= 0;
     const dashboardUrl = getPublicAssetUrl("/dashboard");
     const subjectPrefix = isTest ? "[TEST] " : "";
     const subjectEventTitle = sanitizeHeaderText(eventTitle, "Upcoming event");
+    const subject = isInstant
+        ? `${subjectPrefix}${subjectEventTitle} is starting now | Harvesters Globe Attendance`
+        : `${subjectPrefix}${subjectEventTitle} starts in ${reminderLeadMinutes} minutes | Harvesters Globe Attendance`;
 
     const html = renderEmailShell({
-        preheader: `Reminder: ${eventTitle} starts in ${reminderLeadMinutes} minutes. Please check in on arrival.`,
-        eyebrow: isTest ? "Test Email — No Event Scheduled" : "Event Reminder",
+        preheader: isInstant
+            ? `${eventTitle} is starting now. Please check in on arrival.`
+            : `Reminder: ${eventTitle} starts in ${reminderLeadMinutes} minutes. Please check in on arrival.`,
+        eyebrow: isTest
+            ? (isInstant ? "Test Email — Event Started" : "Test Email — No Event Scheduled")
+            : (isInstant ? "Event Started" : "Event Reminder"),
         content: `
             <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#ffffff;">Hello ${safeFirstName},</h1>
             <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#a1a1aa;">This <strong style="color:#ffffff;">${safeEventTitle}</strong> is not just another service, it is a prophetic moment. We are gathering as a church family for a powerful time of encounters.</p>
@@ -563,7 +571,7 @@ export async function sendEventReminderEmail({
     });
 
     const text = [
-        `${isTest ? "TEST — " : ""}Event reminder`,
+        `${isTest ? "TEST — " : ""}${isInstant ? "Event started" : "Event reminder"}`,
         "",
         `Hello ${firstName},`,
         "",
@@ -586,7 +594,7 @@ export async function sendEventReminderEmail({
 
     return sendEmail({
         to: toEmail,
-        subject: `${subjectPrefix}${subjectEventTitle} starts in ${reminderLeadMinutes} minutes | Harvesters Globe Attendance`,
+        subject,
         text,
         html,
     }, notificationId);

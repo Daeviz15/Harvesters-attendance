@@ -126,43 +126,48 @@ export default function UpcomingEventCountdown({
     return (
         <section
             aria-labelledby="upcoming-event-title"
-            className="mb-8 max-w-3xl overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent shadow-lg shadow-blue-950/5"
+            className="mb-4 max-w-xl overflow-hidden rounded-2xl border border-[#34A853]/25 bg-gradient-to-r from-[#34A853]/10 via-[#34A853]/[0.03] to-transparent shadow-sm shadow-[#34A853]/5"
         >
-            <div className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-                <div className="flex min-w-0 items-start gap-4">
-                    <div className="shrink-0 rounded-2xl bg-blue-500/15 p-3 text-blue-500 dark:text-blue-400">
-                        <CalendarClock className="h-6 w-6" aria-hidden="true" />
+            <div className="flex flex-col gap-3 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:px-4 sm:py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="shrink-0 rounded-xl bg-[#34A853]/15 p-2 text-[#34A853]">
+                        <CalendarClock className="h-5 w-5" aria-hidden="true" />
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-blue-600 dark:text-blue-400">
-                            Up next
-                        </p>
-                        <h2 id="upcoming-event-title" className="mt-1 truncate text-xl font-bold text-neutral-900 dark:text-white" title={event.title}>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#34A853]">
+                                Up next
+                            </span>
+                        </div>
+                        <h2 id="upcoming-event-title" className="truncate text-sm sm:text-base font-bold text-neutral-900 dark:text-white" title={event.title}>
                             {event.title}
                         </h2>
-                        <time dateTime={event.scheduledStartAt} className="mt-2 block text-sm font-medium text-neutral-600 dark:text-white/55">
-                            {formattedStart}
-                        </time>
-                        {event.locationName && (
-                            <p className="mt-2 flex items-center gap-1.5 text-xs text-neutral-500 dark:text-white/40">
-                                <MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                                <span className="truncate" title={event.locationName}>{event.locationName}</span>
-                            </p>
-                        )}
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-600 dark:text-white/55 mt-0.5">
+                            <time dateTime={event.scheduledStartAt} className="font-medium">
+                                {formattedStart}
+                            </time>
+                            {event.locationName && (
+                                <span className="flex items-center gap-1 text-neutral-500 dark:text-white/40">
+                                    <span>•</span>
+                                    <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+                                    <span className="truncate max-w-[170px]" title={event.locationName}>{event.locationName}</span>
+                                </span>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                <div className="shrink-0" aria-label={`Starts in ${remaining.days} days, ${remaining.hours} hours, ${remaining.minutes} minutes`}>
-                    <p className="mb-2 text-center text-[10px] font-bold uppercase tracking-[0.18em] text-neutral-500 dark:text-white/35">
+                <div className="shrink-0 pt-1 sm:pt-0" aria-label={`Starts in ${remaining.days} days, ${remaining.hours} hours, ${remaining.minutes} minutes`}>
+                    <p className="mb-1 text-left sm:text-right text-[9px] font-bold uppercase tracking-[0.16em] text-neutral-500 dark:text-white/40">
                         Starts in
                     </p>
-                    <div className="flex items-center justify-center gap-2" aria-live="off">
+                    <div className="flex items-center justify-start sm:justify-end gap-1.5" aria-live="off">
                         {countdownParts.map((part) => (
-                            <div key={part.label} className="min-w-14 rounded-2xl border border-neutral-200 bg-white/70 px-3 py-2 text-center dark:border-white/10 dark:bg-white/5">
-                                <span className="block font-mono text-xl font-black tabular-nums text-neutral-900 dark:text-white">
+                            <div key={part.label} className="min-w-10 sm:min-w-11 rounded-xl border border-neutral-200/80 bg-white/70 px-2 py-1 text-center dark:border-white/10 dark:bg-white/5">
+                                <span className="block font-mono text-sm sm:text-base font-black tabular-nums text-neutral-900 dark:text-white">
                                     {String(part.value).padStart(2, "0")}
                                 </span>
-                                <span className="mt-0.5 block text-[9px] font-bold uppercase tracking-wider text-neutral-500 dark:text-white/35">
+                                <span className="block text-[8px] font-bold uppercase tracking-wider text-neutral-500 dark:text-white/40">
                                     {part.label}
                                 </span>
                             </div>

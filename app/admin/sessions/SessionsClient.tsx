@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
-import { Activity, Calendar, Play, Square, Clock, Loader2, AlertTriangle, X, UserPlus, UserCheck, Search, User, Check } from "lucide-react";
-import { beginSession, endSession, extendSessionTime, searchWorkersForCheckIn, manualWorkerCheckIn } from "./actions";
+import Link from "next/link";
+import { Activity, Calendar, Square, Clock, Loader2, AlertTriangle, X, UserPlus, UserCheck, Search, User, Check, Radio } from "lucide-react";
+import { endSession, extendSessionTime, searchWorkersForCheckIn, manualWorkerCheckIn } from "./actions";
 import { createClient } from "@/utils/supabase/client";
 import { PROXY_CHECK_IN_RESTRICTED_MESSAGE } from "@/lib/admin-permissions";
 
@@ -294,17 +295,6 @@ export default function SessionsClient({
         };
     }, [refreshSessions, supabase]);
 
-    const handleBeginSession = async (eventId: string) => {
-        setIsSubmitting(eventId);
-        const result = await beginSession(eventId);
-        if (result.error) {
-            alert(result.error);
-            setIsSubmitting(null);
-        } else {
-            setIsSubmitting(null);
-            refreshSessions();
-        }
-    };
 
     const handleEndSession = (sessionId: string) => {
         setSessionToEnd(sessionId);
@@ -343,7 +333,7 @@ export default function SessionsClient({
             <div>
                 <h1 className="text-2xl font-bold text-neutral-900 dark:text-white">Session Controller</h1>
                 <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-1">
-                    Start sessions to broadcast to workers and allow check-ins.
+                    Monitor real-time attendance broadcasts and active event sessions.
                 </p>
             </div>
 
@@ -360,8 +350,96 @@ export default function SessionsClient({
                 )}
             </AnimatePresence>
 
-            {/* ACTIVE SESSIONS PANEL */}
-            {activeSessions.length > 0 && (
+            {activeSessions.length === 0 ? (
+                /* EMPTY STATE: AWAITING EVENT */
+                <div className="space-y-10">
+                    <motion.div
+                        initial={{ opacity: 0, y: 15 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-white dark:bg-[#0a0a0a] border border-neutral-200 dark:border-white/10 rounded-3xl p-8 sm:p-12 text-center relative overflow-hidden shadow-sm"
+                    >
+                        {/* Ambient glowing backdrop */}
+                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-[#34A853]/5 rounded-full blur-3xl pointer-events-none" />
+
+                        {/* Status beacon badge */}
+                        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#34A853]/10 border border-[#34A853]/20 text-[#34A853] text-xs font-bold uppercase tracking-wider mb-6 relative z-10">
+                            <span className="w-2 h-2 rounded-full bg-[#34A853] animate-pulse" />
+                            Awaiting Live Event
+                        </div>
+
+                        {/* Concentric radar beacon icon */}
+                        <div className="relative w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+                            <span className="absolute inset-0 rounded-full border border-[#34A853]/20 animate-ping opacity-30" />
+                            <div className="w-16 h-16 rounded-full bg-[#34A853]/10 border border-[#34A853]/20 flex items-center justify-center text-[#34A853]">
+                                <Radio className="w-8 h-8 animate-pulse" />
+                            </div>
+                        </div>
+
+                        <h2 className="text-xl sm:text-2xl font-bold text-neutral-900 dark:text-white mb-2 relative z-10">
+                            No Active Events Yet
+                        </h2>
+                        <p className="text-sm text-neutral-500 dark:text-neutral-400 max-w-md mx-auto leading-relaxed mb-8 relative z-10">
+                            There are no live attendance sessions broadcasting right now. When an event reaches its scheduled time or is quick-started from the Events page, live controls and check-ins will appear here automatically.
+                        </p>
+
+                        <div className="flex items-center justify-center relative z-10">
+                            <Link
+                                href="/admin/events"
+                                className="inline-flex items-center gap-2 bg-[#34A853] hover:bg-[#2b8a44] text-white px-5 py-3 rounded-xl text-sm font-semibold transition-all shadow-sm shadow-[#34A853]/20 hover:scale-[1.02] active:scale-[0.98]"
+                            >
+                                <Calendar className="w-4 h-4" />
+                                <span>Go to Events to Quick Start</span>
+                            </Link>
+                        </div>
+                    </motion.div>
+
+                    {/* UPCOMING SCHEDULED EVENTS (READ-ONLY) */}
+                    {events.length > 0 && (
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-sm font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider flex items-center gap-2">
+                                    <Clock className="w-4 h-4 text-[#34A853]" />
+                                    Upcoming Scheduled Events
+                                </h2>
+                                <Link
+                                    href="/admin/events"
+                                    className="text-xs font-semibold text-[#34A853] hover:underline flex items-center gap-1"
+                                >
+                                    <span>Manage in Events</span>
+                                    <span>&rarr;</span>
+                                </Link>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {events.map((event) => (
+                                    <div
+                                        key={event.id}
+                                        className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-5 shadow-sm flex flex-col justify-between"
+                                    >
+                                        <div>
+                                            <div className="flex items-center justify-between mb-3">
+                                                <div className="w-9 h-9 rounded-full bg-[#34A853]/10 flex items-center justify-center text-[#34A853]">
+                                                    <Calendar className="w-4 h-4" />
+                                                </div>
+                                                <span className="px-2.5 py-0.5 rounded-full bg-neutral-100 dark:bg-white/5 text-neutral-600 dark:text-neutral-400 text-xs font-medium capitalize">
+                                                    {event.schedule_frequency || "One-time"}
+                                                </span>
+                                            </div>
+                                            <h3 className="font-semibold text-neutral-900 dark:text-white line-clamp-1">
+                                                {event.title}
+                                            </h3>
+                                            <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
+                                                {getEventSchedule(event)}
+                                            </p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                /* ACTIVE SESSIONS PANEL */
                 <div className="mb-10">
                     <h2 className="text-sm font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-4 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
@@ -460,61 +538,6 @@ export default function SessionsClient({
                     </div>
                 </div>
             )}
-
-            {/* AVAILABLE EVENTS */}
-            <div>
-                <h2 className="text-sm font-bold text-neutral-400 dark:text-neutral-500 uppercase tracking-wider mb-4">
-                    Available Events
-                </h2>
-                
-                {events.length === 0 ? (
-                    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-8 text-center">
-                        <p className="text-neutral-500 dark:text-neutral-400 text-sm">
-                            No events found. Go to the Events tab to create one first.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {events.map((event) => {
-                            const isActive = activeSessions.some(s => s.event_id === event.id);
-                            
-                            if (isActive) return null; // Don't show active events in this list
-
-                            return (
-                                <div 
-                                    key={event.id}
-                                    className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-5 shadow-sm flex flex-col justify-between"
-                                >
-                                    <div className="mb-6">
-                                        <div className="w-10 h-10 rounded-full bg-[#34A853]/10 flex items-center justify-center text-[#34A853] mb-3">
-                                            <Calendar className="w-5 h-5" />
-                                        </div>
-                                        <h3 className="font-semibold text-neutral-900 dark:text-white line-clamp-1">
-                                            {event.title}
-                                        </h3>
-                                        <p className="mt-1 text-xs font-medium text-neutral-500 dark:text-neutral-400">
-                                            {getEventSchedule(event)}
-                                        </p>
-                                    </div>
-                                    
-                                    <button
-                                        onClick={() => handleBeginSession(event.id)}
-                                        disabled={isSubmitting === event.id}
-                                        className="w-full flex items-center justify-center gap-2 bg-neutral-100 dark:bg-white/5 hover:bg-[#34A853] hover:text-white text-neutral-700 dark:text-neutral-300 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50 group"
-                                    >
-                                        {isSubmitting === event.id ? (
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                        ) : (
-                                            <Play className="w-4 h-4 group-hover:fill-current" />
-                                        )}
-                                        Begin Session
-                                    </button>
-                                </div>
-                            );
-                        })}
-                    </div>
-                )}
-            </div>
 
             {/* End Session Confirmation Modal */}
             <AnimatePresence>

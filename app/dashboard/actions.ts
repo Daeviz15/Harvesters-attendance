@@ -1,7 +1,8 @@
 'use server';
 
 import { createClient } from '@/utils/supabase/server';
-import { calculateDistanceInMeters } from '@/lib/geolocation';
+import { createAdminClient } from '@/utils/supabase/admin';
+import { assessLocationConfirmation } from '@/lib/location-confirmation';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { HISTORY_PAGE_SIZE } from '@/lib/constants';
@@ -16,9 +17,38 @@ type CheckInEvent = {
     created_by: string | null;
 } | null;
 
-const locationSchema = z.object({
-    lat: z.coerce.number().min(-90).max(90),
-    lng: z.coerce.number().min(-180).max(180)
+const checkInLocationSchema = z.object({
+    lat: z.coerce.number().finite().min(-90).max(90),
+    lng: z.coerce.number().finite().min(-180).max(180),
+    accuracy: z.coerce.number().finite().min(0).max(10_000),
+    positionTimestamp: z.coerce.number().finite().int().positive(),
+});
+
+const optionalFormNumber = z.preprocess(
+    (value) => value === null || value === '' ? undefined : value,
+    z.coerce.number().finite().optional(),
+);
+
+const checkInAssistanceSchema = z.object({
+    sessionId: z.string().uuid('Invalid attendance session.'),
+    reportedStatus: z.enum(['low_accuracy', 'not_confirmed', 'unavailable']),
+    reportedAccuracyMeters: optionalFormNumber.refine(
+        (value) => value === undefined || (value >= 0 && value <= 10_000),
+        'Invalid location accuracy.',
+    ),
+    nearestLocationId: z.preprocess(
+        (value) => value === null || value === '' ? undefined : value,
+        z.string().uuid().optional(),
+    ),
+    nearestDistanceMeters: optionalFormNumber.refine(
+        (value) => value === undefined || (value >= 0 && value <= 1_000_000),
+        'Invalid location distance.',
+    ),
+    positionTimestamp: z.preprocess(
+        (value) => value === null || value === '' ? undefined : value,
+        z.coerce.number().finite().int().positive().optional(),
+    ),
+    workerMessage: z.string().trim().max(500, 'Your message cannot exceed 500 characters.').optional(),
 });
 
 const leaveRequestSchema = z.object({
@@ -116,24 +146,27 @@ export async function verifyAndCheckIn(formData: FormData) {
     if (!sessionId) {
         return { error: 'No active session broadcast detected. Please wait for an Admin to start a session.' };
     }
-    const latStr = formData.get('lat');
-    const lngStr = formData.get('lng');
-
-
-    if (latStr === null || lngStr === null || latStr === '' || lngStr === '') {
-        return { error: 'Missing GPS coordinates. Please ensure location services are enabled.' };
-    }
-
-    const parsed = locationSchema.safeParse({ lat: latStr, lng: lngStr });
+    const parsed = checkInLocationSchema.safeParse({
+        lat: formData.get('lat'),
+        lng: formData.get('lng'),
+        accuracy: formData.get('accuracy'),
+        positionTimestamp: formData.get('positionTimestamp'),
+    });
     if (!parsed.success) {
-        return { error: 'Invalid GPS coordinates provided.' };
+        return { error: 'A fresh, accurate location reading is required. Refresh your location and try again.' };
     }
 
-    const { lat, lng } = parsed.data;
-
-
-    const accuracyStr = formData.get('accuracy');
-    const accuracy = accuracyStr ? Math.min(Number(accuracyStr) || 0, 300) : 0;
+    const { lat, lng, accuracy, positionTimestamp } = parsed.data;
+    const receivedAt = Date.now();
+    // Allow up to 15 minutes age for mobile/browser GPS readings, plus 5 minutes clock skew tolerance
+    const maxAgeMs = 15 * 60_000;
+    const maxClockSkewMs = 5 * 60_000;
+    if (
+        positionTimestamp > receivedAt + maxClockSkewMs
+        || positionTimestamp < receivedAt - maxAgeMs
+    ) {
+        return { error: 'Your location reading is out of date. Tap "Refresh location" and try again.' };
+    }
 
     const supabase = await createClient();
 
@@ -235,7 +268,7 @@ export async function verifyAndCheckIn(formData: FormData) {
 
     const { data: activeLocations, error: locError } = await supabase
         .from('locations')
-        .select('latitude, longitude, radius, name, id')
+        .select('latitude, longitude, radius, name, id, max_check_in_accuracy_meters, check_in_distance_buffer_meters')
         .eq('is_active', true)
         .in('id', allowedLocationIds);
 
@@ -244,22 +277,17 @@ export async function verifyAndCheckIn(formData: FormData) {
     }
 
 
-    let isWithinAnyPerimeter = false;
-    let closestDistance = Infinity;
-
-    for (const loc of activeLocations) {
-        const distance = calculateDistanceInMeters(lat, lng, loc.latitude, loc.longitude);
-        if (distance < closestDistance) closestDistance = distance;
-
-        const effectiveDistance = distance - accuracy;
-        if (effectiveDistance <= loc.radius) {
-            isWithinAnyPerimeter = true;
-            break;
-        }
+    const locationConfirmation = assessLocationConfirmation(lat, lng, accuracy, activeLocations);
+    if (locationConfirmation.status === 'low_accuracy') {
+        return {
+            error: `Your phone's GPS is still too rough (about ${Math.round(accuracy)} m). Step outside briefly or near a window for a better reading, then try again.`,
+        };
     }
 
-    if (!isWithinAnyPerimeter) {
-        return { error: `Verification failed: You are approximately ${Math.round(closestDistance)} meters away from the nearest allowed event location.` };
+    if (locationConfirmation.status !== 'confirmed') {
+        return {
+            error: 'Your phone\'s GPS reading doesn\'t match the venue yet. Try moving closer to a window or door and tap "Refresh location" — this often helps indoors.',
+        };
     }
 
     // 5. Use the profile already fetched above for the check-in record
@@ -293,6 +321,8 @@ export async function verifyAndCheckIn(formData: FormData) {
             team,
             check_in_lat: lat,
             check_in_lng: lng,
+            check_in_accuracy_meters: accuracy,
+            check_in_position_timestamp: new Date(positionTimestamp).toISOString(),
             status: 'active'
         })
         .select('check_in_time')
@@ -333,6 +363,125 @@ export async function verifyAndCheckIn(formData: FormData) {
         success: true,
         alreadyCheckedIn: false,
         checkedInAt: insertedAttendance.check_in_time,
+    };
+}
+
+/**
+ * Reports a check-in problem to the worker's scoped event leaders.
+ *
+ * This action deliberately sends no latitude/longitude and cannot create an
+ * attendance record. Postgres repeats authentication, event-scope, leave,
+ * rate-limit, and duplicate-request checks atomically.
+ */
+export async function requestCheckInAssistance(formData: FormData) {
+    const parsed = checkInAssistanceSchema.safeParse({
+        sessionId: formData.get('sessionId'),
+        reportedStatus: formData.get('reportedStatus'),
+        reportedAccuracyMeters: formData.get('reportedAccuracyMeters'),
+        nearestLocationId: formData.get('nearestLocationId'),
+        nearestDistanceMeters: formData.get('nearestDistanceMeters'),
+        positionTimestamp: formData.get('positionTimestamp'),
+        workerMessage: formData.get('workerMessage')?.toString() || undefined,
+    });
+
+    if (!parsed.success) {
+        return { error: parsed.error.issues[0]?.message || 'Please check the assistance request.' };
+    }
+
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        return { error: 'Authentication required. Please log in.' };
+    }
+
+    const activeProfile = await getActiveProfileForUser(supabase, user.id);
+    if (!activeProfile) {
+        return { error: 'Your account is no longer active. Please contact an administrator.' };
+    }
+
+    const input = parsed.data;
+    const rawLat = formData.get('lat')?.toString();
+    const rawLng = formData.get('lng')?.toString();
+    let formattedMessage = input.workerMessage || null;
+    if (rawLat && rawLng && !isNaN(Number(rawLat)) && !isNaN(Number(rawLng))) {
+        const coordsTag = `[Coords: ${Number(rawLat).toFixed(6)}, ${Number(rawLng).toFixed(6)}]`;
+        formattedMessage = formattedMessage ? `${formattedMessage.trim()} ${coordsTag}` : coordsTag;
+    }
+
+    const { data, error } = await supabase.rpc('request_my_check_in_assistance', {
+        p_session_id: input.sessionId,
+        p_reported_status: input.reportedStatus,
+        p_reported_accuracy_meters: input.reportedAccuracyMeters ?? null,
+        p_nearest_location_id: input.nearestLocationId ?? null,
+        p_nearest_distance_meters: input.nearestDistanceMeters ?? null,
+        p_position_timestamp: input.positionTimestamp
+            ? new Date(input.positionTimestamp).toISOString()
+            : null,
+        p_worker_message: formattedMessage,
+    });
+
+    if (error) {
+        console.error('[Dashboard] Failed to request check-in assistance:', {
+            code: error.code,
+            message: error.message,
+        });
+
+        if (error.message.includes('no longer active')) {
+            return { error: 'This event is no longer accepting check-ins.' };
+        }
+        if (error.message.includes('Attendance has already been recorded')) {
+            return { error: 'Your attendance is already recorded. Refresh the dashboard to see it.' };
+        }
+        if (error.message.includes('Resume duty')) {
+            return { error: 'You are on approved leave. Resume duty before requesting check-in help.' };
+        }
+        if (error.code === '42900' || error.message.includes('Too many assistance requests')) {
+            return { error: 'You have sent several requests recently. Please speak directly with an event leader.' };
+        }
+        if (error.code === '42883') {
+            return { error: 'Check-in assistance is not configured yet. Please contact an administrator.' };
+        }
+        return { error: 'We could not notify your event leaders. Please try again.' };
+    }
+
+    const result = Array.isArray(data) ? data[0] : data;
+    revalidatePath('/admin/check-in-assistance');
+
+    return {
+        success: true,
+        requestId: result?.request_id as string | undefined,
+        alreadyOpen: result?.already_open === true,
+    };
+}
+
+export async function fetchMyAssistanceStatus(sessionId: string) {
+    if (!sessionId) return { request: null, isCheckedIn: false, checkedInAt: null };
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { request: null, isCheckedIn: false, checkedInAt: null };
+
+    const adminSupabase = createAdminClient();
+    const { data: request } = await adminSupabase
+        .from('check_in_assistance_requests')
+        .select('id, status, worker_message, resolution_note, created_at, resolved_at')
+        .eq('user_id', user.id)
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+    const { data: attendance } = await adminSupabase
+        .from('attendance_logs')
+        .select('id, check_in_time')
+        .eq('user_id', user.id)
+        .eq('session_id', sessionId)
+        .eq('status', 'active')
+        .maybeSingle();
+
+    return {
+        request: request ?? null,
+        isCheckedIn: !!attendance,
+        checkedInAt: attendance?.check_in_time ?? null,
     };
 }
 
@@ -622,3 +771,20 @@ export async function checkSessionAlive(sessionId: string): Promise<boolean> {
 
     return !!data;
 }
+
+/**
+ * Lightweight check to see if any attendance session is currently active.
+ * Used by DashboardClient when no broadcast is currently displayed to detect
+ * when an admin quick-starts or begins a session without needing a full browser reload.
+ */
+export async function checkHasLiveSession(): Promise<boolean> {
+    const supabase = await createClient();
+    const { data } = await supabase
+        .from('attendance_sessions')
+        .select('id')
+        .eq('status', 'active')
+        .limit(1);
+
+    return (data && data.length > 0) || false;
+}
+

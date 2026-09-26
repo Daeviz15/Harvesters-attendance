@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck, ClipboardList, ArrowLeftRight } from "lucide-react";
+import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck, ClipboardList, ArrowLeftRight, CircleHelp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -16,6 +16,7 @@ const allNavLinks = [
     { name: "Dashboard", href: "/admin", icon: LayoutDashboard, superAdminOnly: false },
     { name: "Events", href: "/admin/events", icon: Calendar, superAdminOnly: false },
     { name: "Live Session", href: "/admin/sessions", icon: Activity, superAdminOnly: false },
+    { name: "Check-in Help", href: "/admin/check-in-assistance", icon: CircleHelp, superAdminOnly: false },
     { name: "Workers", href: "/admin/workers", icon: Users, superAdminOnly: false },
     { name: "Leave Requests", href: "/admin/leave-requests", icon: ClipboardList, superAdminOnly: false },
     { name: "Departments", href: "/admin/departments", icon: Building2, superAdminOnly: true },
@@ -47,6 +48,7 @@ function AdminSidebarContent({
     isReportsOnlyAdmin?: boolean;
     scopeSummary?: string;
 }) {
+    const router = useRouter();
     const navLinks = allNavLinks.filter((link) => {
         if (isReportsOnlyAdmin) return link.href === "/admin/reports";
         if (link.developmentOnly && process.env.NODE_ENV !== "development") return false;
@@ -112,6 +114,8 @@ function AdminSidebarContent({
             <div className="p-4 border-t border-neutral-200 dark:border-white/10 shrink-0">
                 <Link
                     href="/dashboard"
+                    prefetch={false}
+                    onClick={() => router.refresh()}
                     className="mb-2 flex w-full items-center gap-3 px-4 py-3 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-white/5 dark:text-neutral-400 dark:hover:text-white rounded-xl transition-colors font-medium text-sm"
                 >
                     <ArrowLeftRight className="w-5 h-5 shrink-0" />
@@ -210,6 +214,8 @@ export default function AdminNavigation({
                 <div className="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
                     <Link
                         href="/dashboard"
+                        prefetch={false}
+                        onClick={() => router.refresh()}
                         className="mr-1 hidden text-xs font-semibold uppercase tracking-wider text-neutral-500 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white lg:block"
                     >
                         Switch to Worker View

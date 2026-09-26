@@ -11,6 +11,8 @@ type LocationType = {
     latitude: number;
     longitude: number;
     radius: number;
+    max_check_in_accuracy_meters: number;
+    check_in_distance_buffer_meters: number;
     is_active: boolean;
     created_at: string;
 };
@@ -21,17 +23,43 @@ export default function LocationsClient({ initialLocations }: { initialLocations
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [editingLocation, setEditingLocation] = useState<LocationType | null>(null);
+    const [isDetectingCoords, setIsDetectingCoords] = useState(false);
+    const [detectedCoords, setDetectedCoords] = useState<{ lat: string; lng: string } | null>(null);
 
     const formRef = useRef<HTMLFormElement>(null);
 
+    const handleDetectCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser.");
+            return;
+        }
+        setIsDetectingCoords(true);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                setIsDetectingCoords(false);
+                setDetectedCoords({
+                    lat: pos.coords.latitude.toFixed(6),
+                    lng: pos.coords.longitude.toFixed(6),
+                });
+            },
+            (err) => {
+                setIsDetectingCoords(false);
+                alert("Could not get current coordinates: " + err.message);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
+
     const openCreateModal = () => {
         setEditingLocation(null);
+        setDetectedCoords(null);
         setError(null);
         setIsModalOpen(true);
     };
 
     const openEditModal = (loc: LocationType) => {
         setEditingLocation(loc);
+        setDetectedCoords(null);
         setError(null);
         setIsModalOpen(true);
     };
@@ -144,7 +172,7 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <h3 className="font-semibold text-neutral-900 dark:text-white/90 text-lg break-words">{loc.name}</h3>
-                                        <p className="text-sm text-neutral-500 dark:text-white/50">{loc.radius} meters radius</p>
+                                        <p className="text-sm text-neutral-500 dark:text-white/50">{loc.radius} metres check-in radius</p>
                                     </div>
                                 </div>
                             </div>
@@ -157,6 +185,17 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                 <div className="bg-neutral-50 dark:bg-white/5 rounded-xl p-3 min-w-0">
                                     <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-white/40 mb-1">Longitude</p>
                                     <p className="font-mono text-sm text-neutral-700 dark:text-white/70 break-all">{loc.longitude}</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                                <div className="bg-neutral-50 dark:bg-white/5 rounded-xl p-3 min-w-0">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-white/40 mb-1">Required GPS accuracy</p>
+                                    <p className="font-mono text-sm text-neutral-700 dark:text-white/70">≤ {loc.max_check_in_accuracy_meters} m</p>
+                                </div>
+                                <div className="bg-neutral-50 dark:bg-white/5 rounded-xl p-3 min-w-0">
+                                    <p className="text-[11px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-white/40 mb-1">GPS drift buffer</p>
+                                    <p className="font-mono text-sm text-neutral-700 dark:text-white/70">+ {loc.check_in_distance_buffer_meters} m</p>
                                 </div>
                             </div>
 
@@ -242,35 +281,51 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                     />
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                                    <div className="space-y-1.5">
-                                        <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Latitude</label>
-                                        <input
-                                            name="latitude"
-                                            type="number"
-                                            step="any"
-                                            required
-                                            defaultValue={editingLocation?.latitude ?? ""}
-                                            placeholder="6.4531"
-                                            className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
-                                        />
+                                <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Location Coordinates</label>
+                                        <button
+                                            type="button"
+                                            onClick={handleDetectCurrentLocation}
+                                            disabled={isDetectingCoords}
+                                            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#34A853] hover:text-[#2b8a44] transition-colors"
+                                        >
+                                            {isDetectingCoords ? <Loader2 className="w-3 h-3 animate-spin" /> : <MapPin className="w-3 h-3" />}
+                                            {isDetectingCoords ? "Detecting..." : "Use current device location"}
+                                        </button>
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Longitude</label>
-                                        <input
-                                            name="longitude"
-                                            type="number"
-                                            step="any"
-                                            required
-                                            defaultValue={editingLocation?.longitude ?? ""}
-                                            placeholder="3.4312"
-                                            className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
-                                        />
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                        <div className="space-y-1">
+                                            <span className="text-xs text-neutral-500 dark:text-white/50">Latitude</span>
+                                            <input
+                                                key={`lat-${detectedCoords?.lat || editingLocation?.latitude || 'new'}`}
+                                                name="latitude"
+                                                type="number"
+                                                step="any"
+                                                required
+                                                defaultValue={detectedCoords ? detectedCoords.lat : (editingLocation?.latitude ?? "")}
+                                                placeholder="6.4531"
+                                                className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <span className="text-xs text-neutral-500 dark:text-white/50">Longitude</span>
+                                            <input
+                                                key={`lng-${detectedCoords?.lng || editingLocation?.longitude || 'new'}`}
+                                                name="longitude"
+                                                type="number"
+                                                step="any"
+                                                required
+                                                defaultValue={detectedCoords ? detectedCoords.lng : (editingLocation?.longitude ?? "")}
+                                                placeholder="3.4312"
+                                                className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div className="space-y-1.5">
-                                    <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Radius Threshold (Meters)</label>
+                                    <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Check-in Radius (Metres)</label>
                                     <input
                                         name="radius"
                                         type="number"
@@ -279,7 +334,38 @@ export default function LocationsClient({ initialLocations }: { initialLocations
                                         placeholder="100"
                                         className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
                                     />
-                                    <p className="text-xs text-neutral-500 dark:text-white/40 mt-1">Recommended: 100 meters to account for GPS drift.</p>
+                                    <p className="text-xs text-neutral-500 dark:text-white/40 mt-1">The physical boundary around the venue. Use a measured site radius, not an estimated GPS reading.</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">Maximum GPS Accuracy (Metres)</label>
+                                        <input
+                                            name="maxCheckInAccuracyMeters"
+                                            type="number"
+                                            min="10"
+                                            max="250"
+                                            required
+                                            defaultValue={editingLocation?.max_check_in_accuracy_meters ?? 100}
+                                            placeholder="100"
+                                            className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
+                                        />
+                                        <p className="text-xs text-neutral-500 dark:text-white/40">Readings less accurate than this are not accepted.</p>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-neutral-700 dark:text-white/80">GPS Drift Buffer (Metres)</label>
+                                        <input
+                                            name="checkInDistanceBufferMeters"
+                                            type="number"
+                                            min="0"
+                                            max="50"
+                                            required
+                                            defaultValue={editingLocation?.check_in_distance_buffer_meters ?? 25}
+                                            placeholder="25"
+                                            className="w-full px-4 py-2.5 bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-white/10 rounded-xl text-neutral-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#34A853]/50 transition-all font-mono text-sm"
+                                        />
+                                        <p className="text-xs text-neutral-500 dark:text-white/40">A small calibrated tolerance; it does not use the phone&apos;s claimed accuracy.</p>
+                                    </div>
                                 </div>
 
                                 <div className="pt-4 flex flex-col-reverse sm:flex-row gap-2 sm:gap-3">

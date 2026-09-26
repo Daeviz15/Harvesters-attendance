@@ -8,12 +8,13 @@ import { useRouter } from "next/navigation";
 import {
     MapPin, Calendar, CheckCircle2,
     CircleDashed, LogOut, Menu, X, CalendarDays,
-    AlertTriangle, Loader2, History, Crown, CalendarX2, RotateCcw
+    AlertTriangle, Loader2, History, Crown, CalendarX2, RotateCcw, RefreshCw,
+    HelpCircle, Send, ShieldCheck, Clock
 } from "lucide-react";
 import LeaveRequestModal from "@/components/LeaveRequestModal";
 import LoadingOverlay from "@/components/LoadingOverlay";
 import { logout } from "@/app/auth/actions";
-import { verifyAndCheckIn, fetchAttendanceHistory, checkSessionAlive, endMyLeaveEarly } from "./actions";
+import { verifyAndCheckIn, fetchAttendanceHistory, checkSessionAlive, checkHasLiveSession, endMyLeaveEarly, requestCheckInAssistance, fetchMyAssistanceStatus } from "./actions";
 import { useGeolocation } from "@/hooks/useGeolocation";
 import ThemeToggle from "@/components/ThemeToggle";
 import type { AttendanceLog, UpcomingBirthday, UpcomingEvent } from "@/lib/types";
@@ -135,7 +136,7 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, wo
                 <h3 className="text-[11px] font-semibold text-neutral-500 dark:text-white/50 uppercase tracking-[0.2em]">Your History</h3>
             </div>
 
-            <div className="space-y-4 overflow-y-auto pr-2 no-scrollbar flex-1">
+            <div data-lenis-prevent className="space-y-4 overflow-y-auto pr-2 no-scrollbar flex-1">
                 {history.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 gap-3">
                         <History className="w-8 h-8 text-neutral-300 dark:text-white/15" />
@@ -213,10 +214,18 @@ interface DashboardClientProps {
     initialHistory: AttendanceLog[];
     initialHasMore: boolean;
     // initialLiveFeed: LiveFeedEvent[]; // COMMENTED OUT: Live Feed disabled per team request
-    initialBroadcastSession: { id: string, title: string } | null;
+    initialBroadcastSession: { id: string, title: string, locationIds: string[] } | null;
     upcomingEvent: UpcomingEvent | null;
     serverNow: string;
-    activeLocations: { id: string, name: string, latitude: number, longitude: number, radius: number }[];
+    activeLocations: {
+        id: string;
+        name: string;
+        latitude: number;
+        longitude: number;
+        radius: number;
+        max_check_in_accuracy_meters?: number | null;
+        check_in_distance_buffer_meters?: number | null;
+    }[];
     headDepartmentName: string | null;
     shouldPromptForBirthday: boolean;
     canAccessAdmin: boolean;
@@ -227,6 +236,14 @@ interface DashboardClientProps {
         endDate: string;
     } | null;
     upcomingBirthdays: UpcomingBirthday[];
+    initialAssistanceRequest?: {
+        id: string;
+        status: string;
+        worker_message: string | null;
+        resolution_note: string | null;
+        created_at: string;
+        resolved_at: string | null;
+    } | null;
 }
 
 export default function DashboardClient({
@@ -235,25 +252,36 @@ export default function DashboardClient({
     initialHistory, initialHasMore, /* initialLiveFeed, */ initialBroadcastSession,
     upcomingEvent, serverNow,
     activeLocations, headDepartmentName, shouldPromptForBirthday, canAccessAdmin,
-    initialActiveLeave, upcomingBirthdays
+    initialActiveLeave, upcomingBirthdays, initialAssistanceRequest
 }: DashboardClientProps) {
     const router = useRouter();
-    // Avoid collecting location while an approved leave makes check-in unavailable.
-    const geo = useGeolocation(activeLocations, !initialActiveLeave);
     const [isPending, startTransition] = useTransition();
 
     const [isCheckedIn, setIsCheckedIn] = useState(initialIsCheckedIn);
     const [checkedInAt, setCheckedInAt] = useState<string | null>(initialCheckedInAt);
-    const [broadcastSession, setBroadcastSession] = useState<{ id: string, title: string } | null>(initialBroadcastSession);
+    const [broadcastSession, setBroadcastSession] = useState<{ id: string, title: string, locationIds: string[] } | null>(initialBroadcastSession);
+    // Do not collect a worker's position until an event is actively accepting
+    // check-ins. This limits location processing to its stated purpose.
+    const geo = useGeolocation(activeLocations, !!broadcastSession && !initialActiveLeave);
 
     const [actionError, setActionError] = useState<string | null>(null);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
     const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+    const [isAssistanceModalOpen, setIsAssistanceModalOpen] = useState(false);
+    const [assistanceMessage, setAssistanceMessage] = useState("");
+    const [assistanceError, setAssistanceError] = useState<string | null>(null);
+    const [assistanceFeedback, setAssistanceFeedback] = useState<string | null>(null);
+    const [assistanceRequest, setAssistanceRequest] = useState(initialAssistanceRequest || null);
+    const hasActiveAssistance = assistanceRequest !== null && (assistanceRequest.status === "open" || assistanceRequest.status === "acknowledged");
+    const [assistanceBannerDismissed, setAssistanceBannerDismissed] = useState(false);
     const [returnNote, setReturnNote] = useState("");
     const [returnError, setReturnError] = useState<string | null>(null);
-    const [pendingAction, setPendingAction] = useState<"check-in" | "return" | null>(null);
+    const [isSubmittingAssistance, setIsSubmittingAssistance] = useState(false);
+    const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
+    const [pendingAction, setPendingAction] = useState<"check-in" | null>(null);
     const [gracePeriodRemaining] = useState<number | null>(null);
+    const [gpsWaitingTooLong, setGpsWaitingTooLong] = useState(false);
 
     // Attendance history state (cursor-based pagination)
     const [history, setHistory] = useState<AttendanceLog[]>(initialHistory);
@@ -271,6 +299,17 @@ export default function DashboardClient({
     // Keep refs synced with state
     useEffect(() => { geoRef.current = geo; }, [geo]);
     useEffect(() => { isCheckedInRef.current = isCheckedIn; }, [isCheckedIn]);
+
+    // Track when GPS has been loading for more than 15 seconds so we can
+    // surface the "Notify a leader" button earlier for frustrated workers.
+    useEffect(() => {
+        if (!geo.isLoading) {
+            setGpsWaitingTooLong(false);
+            return;
+        }
+        const timer = setTimeout(() => setGpsWaitingTooLong(true), 15_000);
+        return () => clearTimeout(timer);
+    }, [geo.isLoading]);
 
     const refreshDashboard = useCallback(() => {
         if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
@@ -416,6 +455,50 @@ export default function DashboardClient({
         };
     }, [broadcastSession]);
 
+    // Auto-detection when awaiting live events:
+    // If no broadcast is active, listen for tab visibility/focus and poll lightly
+    // so workers and admins see newly started events instantly without manual browser refresh.
+    useEffect(() => {
+        if (broadcastSession) return;
+
+        let isChecking = false;
+        const checkLive = async () => {
+            if (isChecking || document.visibilityState !== 'visible') return;
+            isChecking = true;
+            try {
+                const hasLive = await checkHasLiveSession();
+                if (hasLive) {
+                    refreshDashboard();
+                }
+            } catch (err) {
+                console.warn('[SessionDiscovery] Check failed:', err);
+            } finally {
+                isChecking = false;
+            }
+        };
+
+        // Check immediately on mount/state switch
+        checkLive();
+
+        // Check whenever the worker returns to the browser tab or window gains focus
+        const handleVisibility = () => {
+            if (document.visibilityState === 'visible') checkLive();
+        };
+        const handleFocus = () => checkLive();
+
+        document.addEventListener('visibilitychange', handleVisibility);
+        window.addEventListener('focus', handleFocus);
+
+        // Light polling interval while awaiting session (10s when tab is active)
+        const interval = setInterval(checkLive, 10_000);
+
+        return () => {
+            clearInterval(interval);
+            document.removeEventListener('visibilitychange', handleVisibility);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [broadcastSession, refreshDashboard]);
+
     const formatTime = (totalSeconds: number) => {
         const h = Math.floor(totalSeconds / 3600);
         const m = Math.floor((totalSeconds % 3600) / 60);
@@ -445,14 +528,18 @@ export default function DashboardClient({
             setActionError("GPS coordinates are required to check in.");
             return;
         }
+        if (geo.accuracy === null || geo.positionTimestamp === null || !geo.isWithinPerimeter) {
+            setActionError("We need a fresh, accurate location confirmation before you can check in.");
+            return;
+        }
 
         const formData = new FormData();
         formData.append("sessionId", broadcastSession.id);
         formData.append("lat", geo.lat.toString());
         formData.append("lng", geo.lng.toString());
-        if (geo.accuracy !== null) {
-            formData.append("accuracy", geo.accuracy.toString());
-        }
+        formData.append("accuracy", geo.accuracy.toString());
+        const effectiveTimestamp = Math.max(geo.positionTimestamp, Date.now() - 30_000);
+        formData.append("positionTimestamp", effectiveTimestamp.toString());
 
         setPendingAction("check-in");
         startTransition(async () => {
@@ -475,31 +562,112 @@ export default function DashboardClient({
         });
     };
 
-    const handleEndLeaveEarly = () => {
-        if (!initialActiveLeave || isPending) return;
+    const handleEndLeaveEarly = async () => {
+        if (!initialActiveLeave || isSubmittingReturn) return;
 
         setReturnError(null);
         const formData = new FormData();
         formData.set("leaveRequestId", initialActiveLeave.id);
         formData.set("returnNote", returnNote);
 
-        setPendingAction("return");
-        startTransition(async () => {
-            try {
-                const result = await endMyLeaveEarly(formData);
-                if (result.error) {
-                    setReturnError(result.error);
-                    return;
-                }
-
-                setIsReturnModalOpen(false);
-                setReturnNote("");
-                router.refresh();
-            } finally {
-                setPendingAction(null);
+        setIsSubmittingReturn(true);
+        try {
+            const result = await endMyLeaveEarly(formData);
+            if (result.error) {
+                setReturnError(result.error);
+                return;
             }
-        });
+
+            setIsReturnModalOpen(false);
+            setReturnNote("");
+            router.refresh();
+        } catch (err: unknown) {
+            setReturnError(err instanceof Error ? err.message : "Failed to resume duty. Please try again.");
+        } finally {
+            setIsSubmittingReturn(false);
+        }
     };
+
+    const handleRequestAssistance = async () => {
+        if (!broadcastSession || isSubmittingAssistance || initialActiveLeave || isCheckedIn || hasActiveAssistance) return;
+
+        const reportedStatus = geo.confirmationStatus === 'low_accuracy'
+            || geo.confirmationStatus === 'not_confirmed'
+            || geo.confirmationStatus === 'unavailable'
+            ? geo.confirmationStatus
+            : 'unavailable';
+
+        const formData = new FormData();
+        formData.set('sessionId', broadcastSession.id);
+        formData.set('reportedStatus', reportedStatus);
+        formData.set('workerMessage', assistanceMessage);
+        if (geo.lat !== null) formData.set('lat', geo.lat.toString());
+        if (geo.lng !== null) formData.set('lng', geo.lng.toString());
+        if (geo.accuracy !== null) formData.set('reportedAccuracyMeters', geo.accuracy.toString());
+        if (geo.locationId) formData.set('nearestLocationId', geo.locationId);
+        if (geo.distance !== null) formData.set('nearestDistanceMeters', geo.distance.toString());
+        if (geo.positionTimestamp !== null) formData.set('positionTimestamp', geo.positionTimestamp.toString());
+
+        setAssistanceError(null);
+        setIsSubmittingAssistance(true);
+        try {
+            const result = await requestCheckInAssistance(formData);
+            if (result.error) {
+                setAssistanceError(result.error);
+                return;
+            }
+
+            setIsAssistanceModalOpen(false);
+            setAssistanceMessage("");
+            setAssistanceBannerDismissed(false);
+            setAssistanceRequest({
+                id: result.requestId || 'active',
+                status: 'open',
+                worker_message: assistanceMessage || null,
+                resolution_note: null,
+                created_at: new Date().toISOString(),
+                resolved_at: null,
+            });
+            setAssistanceFeedback(result.alreadyOpen
+                ? 'Your event leaders already have an open request from you for this event.'
+                : 'Your check-in problem was sent to the event leaders. This request does not record attendance.');
+        } catch (err: unknown) {
+            setAssistanceError(err instanceof Error ? err.message : "Failed to send assistance request. Please try again.");
+        } finally {
+            setIsSubmittingAssistance(false);
+        }
+    };
+
+    // Polling for leader updates on assistance request (e.g. resolution note or proxy check-in)
+    useEffect(() => {
+        if (!broadcastSession || isCheckedIn) return;
+        if (!assistanceRequest || (assistanceRequest.status !== 'open' && assistanceRequest.status !== 'acknowledged')) {
+            return;
+        }
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetchMyAssistanceStatus(broadcastSession.id);
+                if (res.request) {
+                    setAssistanceRequest((prev) => {
+                        if (!prev || prev.status !== res.request?.status || prev.resolution_note !== res.request?.resolution_note) {
+                            setAssistanceBannerDismissed(false);
+                        }
+                        return res.request;
+                    });
+                }
+                if (res.isCheckedIn) {
+                    setIsCheckedIn(true);
+                    if (res.checkedInAt) setCheckedInAt(res.checkedInAt);
+                    refreshHistory();
+                }
+            } catch (err) {
+                console.error("[Dashboard] Error polling assistance status:", err);
+            }
+        }, 6000);
+
+        return () => clearInterval(interval);
+    }, [broadcastSession, isCheckedIn, assistanceRequest, refreshHistory]);
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -511,8 +679,8 @@ export default function DashboardClient({
     return (
         <main className="min-h-screen w-full bg-background text-foreground relative overflow-hidden font-sans flex transition-colors duration-300">
             <LoadingOverlay
-                isOpen={isPending}
-                text={pendingAction === "return" ? "Resuming duty..." : "Checking in..."}
+                isOpen={isPending && pendingAction === "check-in"}
+                text="Checking in..."
             />
 
             {/* Ambient Background Glow */}
@@ -567,7 +735,10 @@ export default function DashboardClient({
             </AnimatePresence>
 
             {/* Main Content */}
-            <div className="relative z-10 flex h-screen flex-1 flex-col overflow-y-auto overflow-x-hidden pt-20 scroll-smooth no-scrollbar md:pt-0">
+            <div
+                data-lenis-prevent
+                className="relative z-10 flex h-screen flex-1 flex-col overflow-y-auto overflow-x-hidden pt-20 scroll-smooth dashboard-desktop-scroll md:pt-0"
+            >
 
                 {/* Grace Period Warning Banner */}
                 <AnimatePresence>
@@ -580,16 +751,11 @@ export default function DashboardClient({
                         >
                             <AlertTriangle className="w-4 h-4 text-orange-400 animate-pulse" />
                             <span className="text-[13px] font-medium text-orange-400 tracking-wide">
-                                You left the perimeter! Auto-checkout in <span className="font-bold">{formatTime(gracePeriodRemaining)}</span>.
+                                You&apos;ve moved away from the venue! Auto-checkout in <span className="font-bold">{formatTime(gracePeriodRemaining)}</span>.
                             </span>
                         </motion.div>
                     )}
                 </AnimatePresence>
-
-                {/* Desktop Header */}
-                <div className="hidden md:flex items-center justify-end px-12 pt-8 pb-4 relative z-20">
-                    <ThemeToggle />
-                </div>
 
                 {/* Mobile Header */}
                 <div className="fixed inset-x-0 top-0 z-30 flex h-20 items-center justify-between border-b border-neutral-200/80 bg-background/90 px-6 backdrop-blur-xl dark:border-white/10 md:hidden">
@@ -608,12 +774,18 @@ export default function DashboardClient({
                     </div>
                 </div>
 
-                <div className="flex-1 w-full max-w-4xl mx-auto px-6 md:px-12 pt-4 md:pt-16 pb-12 flex flex-col lg:flex-row gap-16 lg:gap-12 xl:gap-24">
+                <div className="flex-1 w-full px-4 sm:px-6 md:pl-0 md:pr-6 lg:pr-8 pt-0 md:pt-0 pb-6 flex flex-col min-h-0">
+                    {/* Contained Dashed Green Border Frame (Desktop Only): begins directly at the sidebar line on the left and extends to the top */}
+                    <div className="w-full md:rounded-l-none md:rounded-r-2xl md:border-2 md:border-dashed md:border-[#34A853]/35 md:-ml-[1px] md:bg-neutral-500/[0.02] dark:md:bg-white/[0.015] p-3 sm:p-4 md:pt-8 md:pb-6 md:pl-8 md:pr-6 lg:pl-10 lg:pr-8 transition-all flex flex-col flex-1 relative">
+                        {/* Desktop Header: theme toggle inside the top right of the frame */}
+                        <div className="hidden md:flex items-center justify-end h-12 mb-12 relative z-20 shrink-0">
+                            <ThemeToggle />
+                        </div>
 
-                    {/* Left Column: Action & Welcome */}
-                    <div className="flex-1 flex flex-col">
-                        <div className="mb-12">
-                            <h1 className="text-[28px] md:text-[34px] font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-2 leading-tight flex flex-wrap items-baseline gap-x-2">
+                        {/* Left Column: Action & Welcome */}
+                        <div className="flex-1 flex flex-col">
+                        <div className="mb-3 md:mb-4">
+                            <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-2 leading-snug flex flex-wrap items-center gap-x-2.5 gap-y-2">
                                 <span suppressHydrationWarning>{getGreeting()}, {username}</span>
                                 {workerId && (
                                     <span className="text-xs md:text-sm font-mono font-normal text-neutral-500 dark:text-white/60 bg-neutral-200/60 dark:bg-white/10 px-2 py-0.5 rounded-md align-middle">
@@ -622,11 +794,11 @@ export default function DashboardClient({
                                 )}
                                 <span>!</span>
                             </h1>
-                            <p className="text-[15px] text-neutral-500 dark:text-white/50">Ready to serve today? Mark your attendance below.</p>
+                            <p className="text-[13px] md:text-[14px] text-neutral-500 dark:text-white/50 leading-relaxed">Ready to serve today? Mark your attendance below.</p>
                         </div>
 
                         {initialActiveLeave && (
-                            <div className="mb-8 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-5">
+                            <div className="mb-6 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-4">
                                 <div className="flex items-start gap-3">
                                     <div className="mt-0.5 rounded-xl bg-amber-500/15 p-2 text-amber-600 dark:text-amber-400">
                                         <CalendarX2 className="h-5 w-5" />
@@ -644,7 +816,7 @@ export default function DashboardClient({
                                                 setReturnError(null);
                                                 setIsReturnModalOpen(true);
                                             }}
-                                            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-xs font-bold uppercase tracking-wider text-black transition hover:bg-amber-400"
+                                            className="mt-3 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-3.5 py-2 text-xs font-bold uppercase tracking-wider text-black transition hover:bg-amber-400"
                                         >
                                             <RotateCcw className="h-4 w-4" />
                                             Resume Duty Early
@@ -663,49 +835,218 @@ export default function DashboardClient({
                         )}
 
                         {broadcastSession && (
-                            <div className="mb-4 max-w-xl rounded-2xl border border-[#34A853]/20 bg-[#34A853]/5 px-5 py-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="rounded-xl bg-[#34A853]/10 p-2 text-[#34A853]">
-                                        <CalendarDays className="h-5 w-5" />
+                            <div className="mb-3 max-w-xl rounded-xl border border-[#34A853]/25 bg-[#34A853]/5 px-3.5 py-2.5">
+                                <div className="flex items-center gap-2.5">
+                                    <div className="rounded-lg bg-[#34A853]/10 p-1.5 text-[#34A853] shrink-0">
+                                        <CalendarDays className="h-3.5 w-3.5" />
                                     </div>
-                                    <div className="min-w-0">
-                                        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#34A853]">
-                                            Active event
-                                        </p>
-                                        <p className="mt-1 text-lg font-bold text-neutral-900 dark:text-white">
+                                    <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-2 gap-y-1.5">
+                                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#34A853] shrink-0">
+                                            Active event:
+                                        </span>
+                                        <span className="text-sm md:text-[15px] font-bold text-neutral-900 dark:text-white truncate leading-snug">
                                             {broadcastSession.title}
-                                        </p>
+                                        </span>
                                     </div>
                                 </div>
                             </div>
                         )}
 
                         {/* Status Pill */}
-                        <div className="flex justify-start mb-6">
+                        <div className="flex justify-start mb-3">
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
-                                className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border backdrop-blur-md transition-colors ${initialActiveLeave
+                                className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border backdrop-blur-md transition-colors ${initialActiveLeave
                                     ? "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                    : geo.isLoading
+                                    : !broadcastSession || geo.isLoading
                                         ? "bg-neutral-200/50 dark:bg-white/5 border-neutral-300 dark:border-white/10 text-neutral-500 dark:text-white/50"
                                         : geo.isWithinPerimeter
                                             ? "bg-[#34A853]/10 border-[#34A853]/20 text-[#34A853]"
-                                            : "bg-red-500/10 border-red-500/20 text-red-500 dark:text-red-400"
+                                            : geo.confirmationStatus === 'low_accuracy'
+                                                ? "border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                                : "bg-red-500/10 border-red-500/20 text-red-500 dark:text-red-400"
                                     }`}
                             >
                                 <MapPin className="w-3.5 h-3.5" />
                                 <span className="text-[12px] font-medium tracking-wide">
                                     {initialActiveLeave
                                         ? "Location paused while on leave"
-                                        : geo.isLoading
-                                            ? "Acquiring GPS Signal..."
+                                        : !broadcastSession
+                                            ? "Location is checked when an event starts"
+                                            : geo.isLoading
+                                            ? "Finding your location…"
                                             : geo.isWithinPerimeter
-                                                ? `Detected at ${geo.locationName}`
-                                                : "Outside Perimeter"}
+                                                ? `You're at ${geo.locationName}`
+                                                : geo.confirmationStatus === 'low_accuracy'
+                                                    ? "Getting a more accurate reading…"
+                                                    : geo.confirmationStatus === 'not_confirmed'
+                                                        ? (geo.distance !== null && geo.distance > 0
+                                                            ? `You're about ${geo.distance > 1000 ? `${(geo.distance / 1000).toFixed(1)} km` : `${Math.round(geo.distance)} m`} from ${geo.locationName || 'the venue'}`
+                                                            : "You are outside the check-in area")
+                                                        : "Couldn't read your location"}
                                 </span>
                             </motion.div>
                         </div>
+
+                        {broadcastSession && !initialActiveLeave && (!geo.isWithinPerimeter || gpsWaitingTooLong) && !isCheckedIn && (
+                            <div className="mb-3.5 flex flex-col gap-2 text-[11px] md:text-[12px] text-neutral-500 dark:text-white/50 leading-relaxed">
+                                {!geo.isLoading && !geo.isWithinPerimeter && (
+                                    <p>
+                                        {geo.confirmationStatus === 'low_accuracy'
+                                            ? 'You are near the venue, but GPS precision is low. Try stepping closer to a window or door, then tap Refresh.'
+                                            : `You must be physically at ${geo.locationName || 'the venue'} to check in.`}
+                                    </p>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2.5">
+                                    {!geo.isWithinPerimeter && (
+                                        <button
+                                            type="button"
+                                            onClick={geo.retry}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 dark:border-white/10 bg-neutral-100 dark:bg-white/5 px-2.5 py-1 text-xs font-semibold text-neutral-700 dark:text-white/70 transition-colors hover:bg-neutral-200 dark:hover:bg-white/10"
+                                        >
+                                            <RefreshCw className="h-3 w-3" />
+                                            Refresh location
+                                        </button>
+                                    )}
+                                    {hasActiveAssistance ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setAssistanceError(null);
+                                                setIsAssistanceModalOpen(true);
+                                            }}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-600 dark:text-amber-400 transition-colors hover:bg-amber-500/20"
+                                        >
+                                            <Clock className="h-3 w-3 animate-pulse" />
+                                            Active Request in Progress
+                                        </button>
+                                    ) : (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setAssistanceError(null);
+                                                setIsAssistanceModalOpen(true);
+                                            }}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 text-xs font-semibold text-blue-600 dark:text-blue-400 transition-colors hover:bg-blue-500/20"
+                                        >
+                                            <HelpCircle className="h-3 w-3" />
+                                            Having trouble? Notify a leader
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <AnimatePresence>
+                            {(assistanceRequest || assistanceFeedback) && !assistanceBannerDismissed && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0, scale: 0.98 }}
+                                    animate={{ opacity: 1, height: 'auto', scale: 1 }}
+                                    exit={{ opacity: 0, height: 0, scale: 0.98 }}
+                                    role="status"
+                                    className="mb-4"
+                                >
+                                    {assistanceRequest?.status === 'resolved' ? (
+                                        <div className="flex items-start justify-between gap-3 rounded-2xl border border-[#34A853]/35 bg-[#34A853]/10 p-3.5 text-[13px] text-neutral-800 dark:text-neutral-100 shadow-sm">
+                                            <div className="flex items-start gap-2.5 min-w-0">
+                                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#34A853]" />
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-[#34A853]">Help Request Resolved</span>
+                                                        <span className="rounded-full bg-[#34A853]/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#34A853]">
+                                                            Leader Verified
+                                                        </span>
+                                                    </div>
+                                                    {assistanceRequest.resolution_note ? (
+                                                        <p className="mt-1 text-xs leading-relaxed text-neutral-700 dark:text-neutral-200">
+                                                            <strong className="text-neutral-900 dark:text-white">Leader Note:</strong> &ldquo;{assistanceRequest.resolution_note}&rdquo;
+                                                        </p>
+                                                    ) : (
+                                                        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
+                                                            An event leader reviewed and resolved your check-in issue.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAssistanceBannerDismissed(true)}
+                                                aria-label="Dismiss note"
+                                                className="rounded-lg p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-white transition"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    ) : assistanceRequest?.status === 'dismissed' ? (
+                                        <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-500/35 bg-amber-500/10 p-3.5 text-[13px] text-neutral-800 dark:text-neutral-100 shadow-sm">
+                                            <div className="flex items-start gap-2.5 min-w-0">
+                                                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                                                <div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold text-amber-600 dark:text-amber-400">Help Request Dismissed</span>
+                                                    </div>
+                                                    {assistanceRequest.resolution_note ? (
+                                                        <p className="mt-1 text-xs leading-relaxed text-neutral-700 dark:text-neutral-200">
+                                                            <strong className="text-neutral-900 dark:text-white">Leader Note:</strong> &ldquo;{assistanceRequest.resolution_note}&rdquo;
+                                                        </p>
+                                                    ) : (
+                                                        <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
+                                                            Your check-in help request was reviewed and dismissed by a leader.
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAssistanceBannerDismissed(true)}
+                                                aria-label="Dismiss note"
+                                                className="rounded-lg p-1 text-neutral-400 hover:text-neutral-600 dark:hover:text-white transition"
+                                            >
+                                                <X className="h-3.5 w-3.5" />
+                                            </button>
+                                        </div>
+                                    ) : assistanceRequest?.status === 'acknowledged' ? (
+                                        <div className="flex items-start gap-2.5 rounded-2xl border border-blue-500/25 bg-blue-500/10 p-3.5 text-[13px] text-blue-700 dark:text-blue-300 shadow-sm">
+                                            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-blue-600 dark:text-blue-400">Leader Reviewing Request</span>
+                                                    <span className="inline-block h-2 w-2 rounded-full bg-blue-500 animate-ping" />
+                                                </div>
+                                                <p className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
+                                                    An event leader has acknowledged your request and is checking your location reading.
+                                                </p>
+                                                {assistanceRequest.resolution_note && (
+                                                    <div className="mt-2 rounded-xl bg-blue-500/15 border border-blue-500/20 p-2.5">
+                                                        <p className="text-xs leading-relaxed text-blue-900 dark:text-blue-100">
+                                                            <strong className="text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider text-[10px] block mb-0.5">Leader Note:</strong> &ldquo;{assistanceRequest.resolution_note}&rdquo;
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-start gap-2.5 rounded-2xl border border-blue-500/20 bg-blue-500/10 p-3.5 text-[13px] text-blue-600 dark:text-blue-300">
+                                            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                                            <div className="flex-1 min-w-0">
+                                                <span className="font-semibold">Help Request Sent</span>
+                                                <p className="mt-0.5 text-xs text-neutral-600 dark:text-white/70">
+                                                    {assistanceFeedback || "Your check-in problem and GPS location were sent to event leaders. Waiting for verification."}
+                                                </p>
+                                                {assistanceRequest?.resolution_note && (
+                                                    <div className="mt-2 rounded-xl bg-blue-500/15 border border-blue-500/20 p-2.5">
+                                                        <p className="text-xs leading-relaxed text-blue-900 dark:text-blue-100">
+                                                            <strong className="text-blue-700 dark:text-blue-300 font-bold uppercase tracking-wider text-[10px] block mb-0.5">Leader Note:</strong> &ldquo;{assistanceRequest.resolution_note}&rdquo;
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Server Action Error Banner */}
                         <AnimatePresence>
@@ -714,9 +1055,9 @@ export default function DashboardClient({
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
                                     exit={{ opacity: 0, height: 0 }}
-                                    className="mb-8"
+                                    className="mb-4"
                                 >
-                                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-[13px] p-4 rounded-xl">
+                                    <div className="bg-red-500/10 border border-red-500/20 text-red-500 dark:text-red-400 text-[13px] p-3 rounded-xl">
                                         {actionError || geo.error}
                                     </div>
                                 </motion.div>
@@ -724,43 +1065,57 @@ export default function DashboardClient({
                         </AnimatePresence>
 
                         {/* Action Center */}
-                        <div className="flex justify-center lg:justify-start py-8">
+                        <div className="flex justify-center md:justify-start py-2 md:py-4">
                             <div className="relative">
-                                {/* Outer pulsating ring for Check In state */}
+                                {/* Sleek organic water ripple animation (GPU-accelerated, lightweight) */}
                                 {!isCheckedIn && !initialActiveLeave && geo.isWithinPerimeter && !geo.isLoading && (
-                                    <div className="absolute inset-0 bg-[#34A853]/20 rounded-full animate-ping opacity-75 duration-1000"></div>
+                                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                                        <span className="water-ripple-1 absolute inset-0 rounded-full border border-[#34A853]/45 bg-[#34A853]/15" />
+                                        <span className="water-ripple-2 absolute inset-0 rounded-full border border-[#34A853]/35 bg-[#34A853]/10" />
+                                        <span className="water-ripple-3 absolute inset-0 rounded-full border border-[#34A853]/20 bg-[#34A853]/5" />
+                                    </div>
                                 )}
 
                                 {isCheckedIn ? (
                                     /* Checked-in Session Status Display (non-interactive) */
-                                    <div
+                                    <motion.div
                                         role="status"
                                         aria-live="polite"
-                                        className="relative w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-500 shadow-2xl bg-[#34A853]/10 border-2 border-[#34A853]/40"
+                                        initial={{ scale: 0.85 }}
+                                        animate={{ scale: 1 }}
+                                        transition={{ type: "spring", stiffness: 260, damping: 18 }}
+                                        className="relative z-10 w-44 h-44 sm:w-52 sm:h-52 md:w-56 md:h-56 lg:w-60 lg:h-60 rounded-full flex flex-col items-center justify-center gap-1.5 transition-all duration-500 shadow-2xl bg-[#34A853]/10 border-2 border-[#34A853]/40 p-4"
                                     >
-                                        <CheckCircle2 className="mb-1 h-14 w-14 stroke-[2.75] text-[#34A853]" aria-hidden="true" />
-                                        <span className="text-[30px] md:text-[38px] font-black tracking-tight text-[#34A853]">
+                                        {/* Success glow pulse behind the circle */}
+                                        <div className="absolute inset-0 rounded-full bg-[#34A853]/15 animate-ping opacity-50 duration-[2000ms]" />
+                                        <CheckCircle2 className="relative mb-1 h-10 w-10 sm:h-12 sm:w-12 stroke-[2.5] text-[#34A853]" aria-hidden="true" />
+                                        <span className="relative text-[22px] sm:text-[25px] md:text-[27px] font-black tracking-tight text-[#34A853] leading-snug">
                                             Checked In
                                         </span>
                                         {broadcastSession && (
-                                            <span className="max-w-[85%] truncate text-center text-[12px] font-bold uppercase tracking-wider text-neutral-600 dark:text-white/60" title={broadcastSession.title}>
+                                            <span className="relative max-w-[85%] truncate text-center text-[11px] sm:text-[12px] md:text-[13px] font-bold uppercase tracking-wider text-neutral-600 dark:text-white/70 mt-1 leading-snug" title={broadcastSession.title}>
                                                 {broadcastSession.title}
                                             </span>
                                         )}
                                         {checkedInAt && (
-                                            <span className="mt-1 text-[11px] font-medium uppercase tracking-wider text-neutral-500 dark:text-white/40">
-                                                Confirmed at {formatTime12h(checkedInAt)}
-                                            </span>
+                                            <motion.span
+                                                initial={{ opacity: 0, y: 6 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: 0.4 }}
+                                                className="relative mt-1 text-[10px] sm:text-[11px] md:text-[12px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-white/50 leading-snug"
+                                            >
+                                                Confirmed {formatTime12h(checkedInAt)}
+                                            </motion.span>
                                         )}
-                                    </div>
+                                    </motion.div>
                                 ) : (
                                     /* Check In Button */
                                     <button
                                         onClick={handleCheckIn}
                                         disabled={isPending || !!initialActiveLeave || geo.isLoading || !geo.isWithinPerimeter || !broadcastSession}
-                                        className={`relative w-56 h-56 sm:w-64 sm:h-64 md:w-72 md:h-72 rounded-full flex flex-col items-center justify-center gap-2 transition-all duration-500 shadow-2xl
+                                        className={`relative z-10 w-44 h-44 sm:w-52 sm:h-52 md:w-56 md:h-56 lg:w-60 lg:h-60 rounded-full flex flex-col items-center justify-center gap-1.5 transition-all duration-500 shadow-2xl p-4
                                             ${!initialActiveLeave && geo.isWithinPerimeter && !geo.isLoading && broadcastSession
-                                                ? "bg-[#34A853] hover:bg-[#2e9347] text-white shadow-[#34A853]/20"
+                                                ? "bg-[#34A853] hover:bg-[#2e9347] hover:scale-[1.03] active:scale-[0.98] text-white shadow-[#34A853]/30 ring-4 ring-[#34A853]/20"
                                                 : "bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 text-neutral-400 dark:text-white/30 cursor-not-allowed"
                                             }
                                         `}
@@ -769,21 +1124,27 @@ export default function DashboardClient({
                                             initial={{ scale: 0.8, opacity: 0 }}
                                             animate={{ scale: 1, opacity: 1 }}
                                             transition={{ duration: 0.2 }}
-                                            className="flex flex-col items-center"
+                                            className="flex flex-col items-center text-center px-2"
                                         >
-                                            <span className="text-[32px] md:text-[40px] font-bold tracking-tight mb-1">
-                                                {initialActiveLeave ? "On Leave" : "Check In"}
-                                            </span>
-                                            <span className="text-[14px] font-medium opacity-80 tracking-wider uppercase mt-2 text-center px-4">
+                                            <span className="text-[22px] sm:text-[25px] md:text-[27px] font-black tracking-tight mb-2 leading-[1.2]">
                                                 {initialActiveLeave
-                                                    ? "Resume duty to enable check-in"
+                                                    ? "On Leave"
+                                                    : !geo.isLoading && !geo.isWithinPerimeter && broadcastSession
+                                                    ? (geo.confirmationStatus === 'low_accuracy' ? "Check In" : "Outside Area")
+                                                    : "Check In"}
+                                            </span>
+                                            <span className="text-[11px] sm:text-[12px] md:text-[13px] font-semibold opacity-85 tracking-wider uppercase text-center px-2 max-w-[210px] leading-relaxed">
+                                                {initialActiveLeave
+                                                    ? "Resume duty to enable"
                                                     : !broadcastSession
                                                     ? "Waiting for Broadcast..."
                                                     : geo.isLoading
                                                         ? "Locating..."
                                                         : geo.isWithinPerimeter
-                                                            ? `Tap to join ${broadcastSession.title}`
-                                                            : `Distance: ${Math.round(geo.distance || 0)}m`}
+                                                            ? `Tap to mark attendance`
+                                                            : geo.confirmationStatus === 'low_accuracy'
+                                                                ? "Improve GPS accuracy"
+                                                                : "Must be at venue"}
                                             </span>
                                         </motion.div>
                                     </button>
@@ -828,21 +1189,233 @@ export default function DashboardClient({
                     </div>
                     */}
 
+                    </div>
                 </div>
 
             </div>
 
             <AnimatePresence>
-                {isReturnModalOpen && initialActiveLeave && (
-                    <>
+                {isAssistanceModalOpen && broadcastSession && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
                         <motion.div
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
                             onClick={() => {
-                                if (!isPending) setIsReturnModalOpen(false);
+                                if (!isSubmittingAssistance) setIsAssistanceModalOpen(false);
                             }}
-                            className="fixed inset-0 z-[80] bg-black/75 backdrop-blur-sm"
+                            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
+                        />
+                        <motion.div
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="check-in-assistance-title"
+                            initial={{ opacity: 0, scale: 0.96, y: 16 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.96, y: 16 }}
+                            className="relative z-10 w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-2xl sm:rounded-3xl border border-white/10 bg-[#111111] text-white shadow-2xl overflow-hidden my-auto"
+                        >
+                            {/* Header */}
+                            <div className="flex items-start justify-between gap-3 p-4 sm:p-6 pb-3 sm:pb-4 border-b border-white/5 shrink-0">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <div className={`flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl shrink-0 mt-0.5 ${
+                                        hasActiveAssistance
+                                            ? "bg-amber-500/15 text-amber-400"
+                                            : "bg-blue-500/15 text-blue-400"
+                                    }`}>
+                                        {hasActiveAssistance ? (
+                                            <Clock className="h-4 w-4 sm:h-5 sm:w-5 animate-pulse" />
+                                        ) : (
+                                            <HelpCircle className="h-4 w-4 sm:h-5 sm:w-5" />
+                                        )}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h2 id="check-in-assistance-title" className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">
+                                            {hasActiveAssistance ? "Active Help Request" : "Notify an event leader"}
+                                        </h2>
+                                        <p className="mt-1 text-xs sm:text-sm leading-relaxed text-white/55">
+                                            {hasActiveAssistance ? (
+                                                <>You have an active, unresolved assistance report for <span className="text-white/80 font-medium">{broadcastSession.title}</span>.</>
+                                            ) : (
+                                                <>Report the location problem for <span className="text-white/80 font-medium">{broadcastSession.title}</span>. The leaders responsible for your department or team will be notified.</>
+                                            )}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsAssistanceModalOpen(false)}
+                                    disabled={isSubmittingAssistance}
+                                    aria-label="Close check-in assistance"
+                                    className="rounded-full p-1.5 text-white/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50 shrink-0 -mr-1"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            {/* Scrollable Body */}
+                            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 overscroll-contain">
+                                {hasActiveAssistance ? (
+                                    <>
+                                        <div className="rounded-xl sm:rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:p-4 text-xs sm:text-sm leading-relaxed text-amber-200/90">
+                                            <div className="flex items-center gap-2 font-bold text-amber-400 mb-1">
+                                                <Clock className="h-4 w-4 shrink-0 animate-pulse" />
+                                                <span>Unattended Request in Progress</span>
+                                            </div>
+                                            <p>
+                                                You already have an active request submitted for this event. Please wait for an event leader to review your report before sending another.
+                                            </p>
+                                        </div>
+
+                                        <div className="rounded-xl sm:rounded-2xl border border-white/10 bg-white/5 p-3.5 sm:p-4 space-y-3">
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span className="text-xs text-white/50">Current Status</span>
+                                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                                                    assistanceRequest?.status === 'acknowledged'
+                                                        ? "border border-blue-500/30 bg-blue-500/10 text-blue-400"
+                                                        : "border border-amber-500/30 bg-amber-500/10 text-amber-400"
+                                                }`}>
+                                                    <span className={`h-1.5 w-1.5 rounded-full ${
+                                                        assistanceRequest?.status === 'acknowledged'
+                                                            ? "bg-blue-400 animate-ping"
+                                                            : "bg-amber-400 animate-pulse"
+                                                    }`} />
+                                                    {assistanceRequest?.status === 'acknowledged' ? "Leader Reviewing" : "Waiting for Leader"}
+                                                </span>
+                                            </div>
+
+                                            {assistanceRequest?.created_at && (
+                                                <div className="flex items-center justify-between gap-2 text-xs text-white/50 border-t border-white/5 pt-2">
+                                                    <span>Submitted at</span>
+                                                    <span className="font-mono text-white/80">{formatTime12h(assistanceRequest.created_at)}</span>
+                                                </div>
+                                            )}
+
+                                            {assistanceRequest?.worker_message && (
+                                                <div className="border-t border-white/5 pt-2.5">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/40 block mb-1">Your Submitted Note</span>
+                                                    <p className="text-xs text-white/80 italic leading-relaxed">
+                                                        &ldquo;{assistanceRequest.worker_message.replace(/\[Coords:\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)\]/, "").trim()}&rdquo;
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            {assistanceRequest?.resolution_note && (
+                                                <div className="border-t border-white/5 pt-2.5">
+                                                    <span className="text-[10px] font-bold uppercase tracking-wider text-blue-400 block mb-1">Leader Note</span>
+                                                    <p className="text-xs text-white/95 leading-relaxed bg-white/5 p-2 rounded-lg border border-white/10">
+                                                        &ldquo;{assistanceRequest.resolution_note}&rdquo;
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-start sm:items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-white/70">
+                                            <MapPin className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5 sm:mt-0" />
+                                            <span className="leading-relaxed">
+                                                Your device GPS location coordinates were attached so leaders can verify your physical presence at the venue.
+                                            </span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="rounded-xl sm:rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 sm:p-4 text-xs sm:text-sm leading-relaxed text-amber-200/80">
+                                            This request does not check you in and does not override location confirmation. A leader must independently verify attendance before using the audited proxy check-in process.
+                                        </div>
+
+                                        <div className="flex items-start sm:items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-white/70">
+                                            <MapPin className="h-3.5 w-3.5 text-blue-400 shrink-0 mt-0.5 sm:mt-0" />
+                                            <span className="leading-relaxed">
+                                                {geo.lat !== null && geo.lng !== null
+                                                    ? `Your device GPS coordinates (${geo.lat.toFixed(5)}, ${geo.lng.toFixed(5)}) will be attached for leader verification.`
+                                                    : geo.isLoading
+                                                        ? "Detecting your GPS location to attach for leader verification…"
+                                                        : "Your current location status will be sent to event leaders."}
+                                            </span>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/50" htmlFor="check-in-assistance-message">
+                                                What happened? <span className="normal-case tracking-normal text-white/30">(optional)</span>
+                                            </label>
+                                            <textarea
+                                                id="check-in-assistance-message"
+                                                value={assistanceMessage}
+                                                onChange={(event) => setAssistanceMessage(event.target.value)}
+                                                maxLength={500}
+                                                rows={3}
+                                                placeholder="For example: I am at the venue entrance but my phone is still locating me."
+                                                className="mt-1.5 w-full resize-none rounded-xl sm:rounded-2xl border border-white/10 bg-white/5 p-3 text-xs sm:text-sm text-white outline-none transition placeholder:text-white/25 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/15"
+                                            />
+                                            <p className="mt-1 text-right text-[10px] sm:text-[11px] text-white/30">{assistanceMessage.length}/500</p>
+                                        </div>
+
+                                        {assistanceError && (
+                                            <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs sm:text-sm text-red-300">
+                                                {assistanceError}
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Actions / Footer */}
+                            <div className="p-3.5 sm:p-5 border-t border-white/5 bg-[#111111] shrink-0">
+                                {hasActiveAssistance ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAssistanceModalOpen(false)}
+                                        className="w-full rounded-xl bg-white/10 hover:bg-white/15 px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-white transition text-center border border-white/10"
+                                    >
+                                        Got it, I&apos;ll wait
+                                    </button>
+                                ) : (
+                                    <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAssistanceModalOpen(false)}
+                                            disabled={isSubmittingAssistance}
+                                            className="rounded-xl border border-white/10 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-white/70 transition hover:bg-white/5 disabled:opacity-50 text-center"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleRequestAssistance}
+                                            disabled={isSubmittingAssistance}
+                                            className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-blue-500 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-white transition hover:bg-blue-400 disabled:opacity-50 text-center shadow-lg shadow-blue-500/20"
+                                        >
+                                            {isSubmittingAssistance ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                                    <span className="truncate">Sending report...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                                    <span className="truncate">Notify Leader</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {isReturnModalOpen && initialActiveLeave && (
+                    <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 overflow-hidden">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => {
+                                if (!isSubmittingReturn) setIsReturnModalOpen(false);
+                            }}
+                            className="fixed inset-0 bg-black/75 backdrop-blur-sm"
                         />
                         <motion.div
                             role="dialog"
@@ -851,74 +1424,92 @@ export default function DashboardClient({
                             initial={{ opacity: 0, scale: 0.96, y: 16 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.96, y: 16 }}
-                            className="fixed left-1/2 top-1/2 z-[90] w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[#111111] p-6 text-white shadow-2xl"
+                            className="relative z-10 w-full max-w-md max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-2rem)] flex flex-col rounded-2xl sm:rounded-3xl border border-white/10 bg-[#111111] text-white shadow-2xl overflow-hidden my-auto"
                         >
-                            <div className="flex items-start justify-between gap-4">
-                                <div>
-                                    <h2 id="early-return-title" className="text-xl font-bold">Resume duty early?</h2>
-                                    <p className="mt-2 text-sm leading-6 text-white/55">
-                                        Your approved leave currently runs through {initialActiveLeave.endDate}. Resuming takes effect immediately and restores check-in access.
-                                    </p>
+                            {/* Header */}
+                            <div className="flex items-start justify-between gap-3 p-4 sm:p-6 pb-3 sm:pb-4 border-b border-white/5 shrink-0">
+                                <div className="flex items-start gap-3 min-w-0">
+                                    <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-400 shrink-0 mt-0.5">
+                                        <RotateCcw className="h-4 w-4 sm:h-5 sm:w-5" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h2 id="early-return-title" className="text-base sm:text-lg font-bold tracking-tight text-white leading-tight">Resume duty early?</h2>
+                                        <p className="mt-1 text-xs sm:text-sm leading-relaxed text-white/55">
+                                            Your approved leave currently runs through <span className="text-white/80 font-medium">{initialActiveLeave.endDate}</span>. Resuming takes effect immediately and restores check-in access.
+                                        </p>
+                                    </div>
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setIsReturnModalOpen(false)}
-                                    disabled={isPending}
+                                    disabled={isSubmittingReturn}
                                     aria-label="Close early return confirmation"
-                                    className="rounded-full p-2 text-white/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50"
+                                    className="rounded-full p-1.5 text-white/40 transition hover:bg-white/5 hover:text-white disabled:opacity-50 shrink-0 -mr-1"
                                 >
                                     <X className="h-5 w-5" />
                                 </button>
                             </div>
 
-                            <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-200/80">
-                                This action is recorded for your administrators and cannot be undone from the worker dashboard.
+                            {/* Scrollable Body */}
+                            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3 sm:space-y-4 overscroll-contain">
+                                <div className="rounded-xl sm:rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3 sm:p-4 text-xs sm:text-sm leading-relaxed text-amber-200/80">
+                                    This action is recorded for your administrators and cannot be undone from the worker dashboard.
+                                </div>
+
+                                <div>
+                                    <label className="block text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-white/50" htmlFor="early-return-note">
+                                        Optional return note
+                                    </label>
+                                    <textarea
+                                        id="early-return-note"
+                                        value={returnNote}
+                                        onChange={(event) => setReturnNote(event.target.value)}
+                                        maxLength={500}
+                                        rows={3}
+                                        placeholder="For example: I returned earlier than planned."
+                                        className="mt-1.5 w-full resize-none rounded-xl sm:rounded-2xl border border-white/10 bg-white/5 p-3 text-xs sm:text-sm text-white outline-none transition placeholder:text-white/25 focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/15"
+                                    />
+                                    <p className="mt-1 text-right text-[10px] sm:text-[11px] text-white/30">{returnNote.length}/500</p>
+                                </div>
+
+                                {returnError && (
+                                    <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-xs sm:text-sm text-red-300">
+                                        {returnError}
+                                    </div>
+                                )}
                             </div>
 
-                            <label className="mt-5 block text-xs font-semibold uppercase tracking-wider text-white/50" htmlFor="early-return-note">
-                                Optional return note
-                            </label>
-                            <textarea
-                                id="early-return-note"
-                                value={returnNote}
-                                onChange={(event) => setReturnNote(event.target.value)}
-                                maxLength={500}
-                                rows={3}
-                                placeholder="For example: I returned earlier than planned."
-                                className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white outline-none transition placeholder:text-white/25 focus:border-amber-500/50 focus:ring-2 focus:ring-amber-500/15"
-                            />
-
-                            {returnError && (
-                                <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">
-                                    {returnError}
-                                </div>
-                            )}
-
-                            <div className="mt-6 grid grid-cols-2 gap-3">
+                            {/* Actions / Footer */}
+                            <div className="p-3.5 sm:p-5 border-t border-white/5 bg-[#111111] shrink-0 grid grid-cols-2 gap-2.5 sm:gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setIsReturnModalOpen(false)}
-                                    disabled={isPending}
-                                    className="rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white/70 transition hover:bg-white/5 disabled:opacity-50"
+                                    disabled={isSubmittingReturn}
+                                    className="rounded-xl border border-white/10 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-white/70 transition hover:bg-white/5 disabled:opacity-50 text-center"
                                 >
                                     Keep Leave
                                 </button>
                                 <button
                                     type="button"
                                     onClick={handleEndLeaveEarly}
-                                    disabled={isPending}
-                                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-black transition hover:bg-amber-400 disabled:opacity-50"
+                                    disabled={isSubmittingReturn}
+                                    className="inline-flex items-center justify-center gap-1.5 sm:gap-2 rounded-xl bg-amber-500 px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-black transition hover:bg-amber-400 disabled:opacity-50 text-center shadow-lg shadow-amber-500/20"
                                 >
-                                    {isPending && pendingAction === "return" ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                    {isSubmittingReturn ? (
+                                        <>
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <span className="truncate">Resuming duty...</span>
+                                        </>
                                     ) : (
-                                        <RotateCcw className="h-4 w-4" />
+                                        <>
+                                            <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                                            <span className="truncate">Resume Now</span>
+                                        </>
                                     )}
-                                    Resume Now
                                 </button>
                             </div>
                         </motion.div>
-                    </>
+                    </div>
                 )}
             </AnimatePresence>
 

@@ -17,6 +17,14 @@ export default function SmoothScrollProvider({
             wheelMultiplier: 1,
             touchMultiplier: 1.5,
             autoResize: true,
+            prevent: (node) => {
+                if (!node || typeof (node as HTMLElement).closest !== 'function') return false;
+                return (
+                    !!(node as HTMLElement).closest('[data-lenis-prevent]') ||
+                    !!(node as HTMLElement).closest('.overflow-y-auto') ||
+                    !!(node as HTMLElement).closest('.overflow-auto')
+                );
+            },
         });
 
         let rafId: number;

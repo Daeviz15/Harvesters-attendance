@@ -288,7 +288,7 @@ async function sendNotificationJob(
                 eventStart: parseJobDate(job.event_start_at, "event_start_at"),
                 timezone: requireValue(job.event_timezone, "event_timezone"),
                 locationName: job.location_name,
-                reminderLeadMinutes: job.reminder_lead_minutes || config.reminderLeadMinutes,
+                reminderLeadMinutes: job.reminder_lead_minutes ?? config.reminderLeadMinutes,
                 notificationId: job.id,
                 isTest: delivery.isTest,
             });

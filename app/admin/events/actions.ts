@@ -6,6 +6,7 @@ import { requireAdminManagementAuth as requireAdminAuth, type AdminAuthScope } f
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getEmailTestRecipients, isEmailTestModeEnabled, sendCustomBroadcastEmail } from "@/lib/email";
+import { calculateQuickStartSchedule, recurrenceDayCodes as scheduleRecurrenceDayCodes } from "@/lib/event-schedule-utils";
 
 const validRecurrenceDays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 const validScheduleFrequencies = ["once", "daily", "weekly", "monthly", "yearly"] as const;
@@ -481,6 +482,159 @@ export async function deleteEvent(id: string) {
         revalidatePath("/admin/events");
         revalidatePath("/admin");
         return { success: true };
+    } catch (e: unknown) {
+        return { error: getErrorMessage(e) };
+    }
+}
+
+const quickStartOptionsSchema = z.object({
+    customStartTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Start time must be in HH:MM format.").optional(),
+    customEndTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "End time must be in HH:MM format.").optional(),
+    overrideDurationMinutes: z.number().int().min(1, "Duration must be at least 1 minute.").max(1440, "Duration cannot exceed 24 hours.").optional(),
+}).optional();
+
+export async function quickStartEvent(
+    id: string,
+    options?: {
+        customStartTime?: string;
+        customEndTime?: string;
+        overrideDurationMinutes?: number;
+    }
+) {
+    try {
+        const scope = await requireAdminAuth();
+        const eventId = eventIdSchema.safeParse(id);
+        if (!eventId.success) return { error: "Invalid event selected." };
+
+        const parsedOptions = quickStartOptionsSchema.safeParse(options);
+        if (!parsedOptions.success) {
+            return { error: parsedOptions.error.issues[0]?.message || "Invalid schedule parameters provided." };
+        }
+
+        if (parsedOptions.data?.customStartTime && parsedOptions.data?.customEndTime) {
+            if (parsedOptions.data.customEndTime <= parsedOptions.data.customStartTime) {
+                return { error: "End time must be later than start time." };
+            }
+        }
+
+        const adminSupabase = createAdminClient();
+
+        // Check if an active session already exists for this event
+        const { data: activeSession } = await adminSupabase
+            .from('attendance_sessions')
+            .select('id')
+            .eq('event_id', eventId.data)
+            .eq('status', 'active')
+            .maybeSingle();
+
+        if (activeSession) {
+            return { error: "A live attendance session is already active for this event." };
+        }
+
+        // Fetch existing event
+        const { data: existing, error: fetchError } = await adminSupabase
+            .from('events')
+            .select('*')
+            .eq('id', eventId.data)
+            .maybeSingle();
+
+        if (fetchError || !existing) {
+            return { error: "Event not found." };
+        }
+
+        // RBAC Boundary check
+        if (!scope.isSuperAdmin) {
+            const ownsEvent = existing.created_by === scope.user.id;
+            const managesDept = existing.department_id && scope.managedDepartmentIds.includes(existing.department_id);
+            const managesTeam = existing.team_id && scope.managedTeamIds.includes(existing.team_id);
+            if (!ownsEvent && !managesDept && !managesTeam) {
+                return { error: "You do not have permission to start sessions for this event." };
+            }
+        }
+
+        // Calculate new schedule times using our robust helper
+        const schedule = calculateQuickStartSchedule(existing, options);
+
+        // Prepare event update payload
+        const updatePayload: Record<string, unknown> = {
+            start_time: schedule.newStartTime,
+            end_time: schedule.newEndTime,
+            updated_at: new Date().toISOString(),
+        };
+
+        if (existing.schedule_frequency === "once") {
+            updatePayload.start_date = schedule.newStartDate;
+        } else if (existing.schedule_frequency === "weekly") {
+            updatePayload.recurrence_day = schedule.newWeekday;
+            const dayCode = scheduleRecurrenceDayCodes[schedule.newWeekday];
+            if (dayCode) {
+                updatePayload.recurrence_rule = `FREQ=WEEKLY;INTERVAL=1;BYDAY=${dayCode}`;
+            }
+        }
+
+        const { error: updateError } = await adminSupabase
+            .from('events')
+            .update(updatePayload)
+            .eq('id', eventId.data);
+
+        if (updateError) {
+            console.error("[QuickStart] Failed to update event schedule:", updateError);
+            return { error: "Failed to update event schedule. Please try again." };
+        }
+
+        // Start the attendance session via stored procedure
+        const supabase = await createClient();
+        const { data: sessionId, error: sessionError } = await supabase.rpc('start_attendance_session', {
+            event_uuid: eventId.data,
+            actor_uuid: scope.user.id,
+        });
+
+        if (sessionError) {
+            console.error("[QuickStart] Stored procedure failed to begin session:", sessionError);
+            return { error: `Event schedule was updated to ${schedule.newStartTime}, but session failed to start: ${sessionError.message || "Please check session automation migration."}` };
+        }
+
+        const sessionIdStr = sessionId as string;
+
+        // If event has email notifications enabled, trigger instant start reminders
+        if (existing.email_notifications_enabled && sessionIdStr) {
+            try {
+                const { error: reminderError } = await adminSupabase.rpc('enqueue_instant_session_reminders', {
+                    p_session_id: sessionIdStr,
+                });
+                if (reminderError) {
+                    console.error("[QuickStart] Failed to enqueue instant reminders:", reminderError);
+                } else {
+                    // Trigger immediate background delivery tick so recipients get the email right away
+                    import("@/lib/email-notification-processor")
+                        .then(({ processDueEmailNotifications }) => processDueEmailNotifications())
+                        .then((summary) => {
+                            if (summary.sent > 0 || summary.claimed > 0) {
+                                console.info("[QuickStart] Instant event reminder delivery summary:", summary);
+                            }
+                        })
+                        .catch((err) => {
+                            console.error("[QuickStart] Instant email processor run error:", err);
+                        });
+                }
+            } catch (reminderEnqueueErr) {
+                console.error("[QuickStart] Error triggering instant reminders:", reminderEnqueueErr);
+            }
+        }
+
+        revalidatePath("/admin/events");
+        revalidatePath("/admin/sessions");
+        revalidatePath("/admin");
+        revalidatePath("/dashboard");
+
+        return {
+            success: true,
+            sessionId: sessionId as string,
+            newStartTime: schedule.newStartTime,
+            newEndTime: schedule.newEndTime,
+            newStartDate: schedule.newStartDate,
+            durationMinutes: schedule.durationMinutes,
+        };
     } catch (e: unknown) {
         return { error: getErrorMessage(e) };
     }

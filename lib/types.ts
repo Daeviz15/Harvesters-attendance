@@ -71,7 +71,8 @@ export type AdminNotificationEventType =
   | "leave_rejected"
   | "leave_returned_early"
   | "worker_deactivated"
-  | "worker_reactivated";
+  | "worker_reactivated"
+  | "check_in_assistance_requested";
 
 export interface AdminNotification {
   id: string;
@@ -84,4 +85,37 @@ export interface AdminNotification {
   action_url: string;
   read_at: string | null;
   created_at: string;
+}
+
+export type CheckInAssistanceStatus =
+  | "open"
+  | "acknowledged"
+  | "resolved"
+  | "dismissed"
+  | "expired";
+
+export type CheckInAssistanceDiagnostic =
+  | "low_accuracy"
+  | "not_confirmed"
+  | "unavailable";
+
+export interface CheckInAssistanceRequest {
+  id: string;
+  session_id: string;
+  event_id: string;
+  event_title: string;
+  user_id: string;
+  worker_name: string;
+  worker_code: string | null;
+  department_name: string | null;
+  reported_status: CheckInAssistanceDiagnostic;
+  reported_accuracy_meters: number | null;
+  nearest_location_name: string | null;
+  nearest_distance_meters: number | null;
+  worker_message: string | null;
+  status: CheckInAssistanceStatus;
+  created_at: string;
+  acknowledged_at: string | null;
+  resolved_at: string | null;
+  resolution_note: string | null;
 }

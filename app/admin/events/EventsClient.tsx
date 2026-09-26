@@ -3,9 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff, Mail, ShieldCheck } from "lucide-react";
+import { Plus, Edit2, Trash2, X, AlertCircle, Loader2, Calendar, AlertTriangle, Clock, Repeat, Timer, BellRing, BellOff, Mail, ShieldCheck, Play, CheckCircle2 } from "lucide-react";
 import { createEvent, updateEvent, deleteEvent } from "./actions";
+import Link from "next/link";
 import WorkerPicker from "@/components/ui/WorkerPicker";
+import QuickStartEventModal from "@/components/admin/QuickStartEventModal";
+import { createClient } from "@/utils/supabase/client";
 import ManualBroadcastModal from "@/components/admin/ManualBroadcastModal";
 
 type ScheduleFrequency = "once" | "daily" | "weekly" | "monthly" | "yearly";
@@ -177,6 +180,53 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
         setIsBroadcastModalOpen(true);
     };
 
+    // Quick Start Event Modal state
+    const [quickStartEventItem, setQuickStartEventItem] = useState<EventType | null>(null);
+    const [isQuickStartModalOpen, setIsQuickStartModalOpen] = useState(false);
+    const [quickStartNotice, setQuickStartNotice] = useState<{
+        message: string;
+        eventTitle: string;
+        startTime: string;
+        endTime: string;
+    } | null>(null);
+
+    const openQuickStartModal = (event: EventType) => {
+        setQuickStartEventItem(event);
+        setIsQuickStartModalOpen(true);
+    };
+
+    // Realtime attendance sessions listener (debounced for scale)
+    useEffect(() => {
+        const supabase = createClient();
+        let refreshTimeout: ReturnType<typeof setTimeout> | null = null;
+
+        const debouncedRefresh = () => {
+            if (refreshTimeout) clearTimeout(refreshTimeout);
+            refreshTimeout = setTimeout(() => {
+                router.refresh();
+            }, 300);
+        };
+
+        const channel = supabase
+            .channel(`events_sessions_${Date.now()}`)
+            .on(
+                "postgres_changes",
+                { event: "*", schema: "public", table: "attendance_sessions" },
+                () => {
+                    debouncedRefresh();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            if (refreshTimeout) clearTimeout(refreshTimeout);
+            supabase.removeChannel(channel);
+        };
+    }, [router]);
+
+
+
+
     // For deleting
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [eventToDelete, setEventToDelete] = useState<EventType | null>(null);
@@ -324,6 +374,47 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                 </div>
             </div>
 
+            {quickStartNotice && (
+                <div className="rounded-2xl border border-[#34A853]/30 bg-[#34A853]/10 p-4 text-neutral-900 dark:text-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-[#34A853] text-white flex items-center justify-center shrink-0">
+                            <CheckCircle2 className="w-5 h-5" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold text-neutral-900 dark:text-white">
+                                {quickStartNotice.eventTitle} is now LIVE!
+                            </p>
+                            <p className="text-xs text-neutral-600 dark:text-white/60">
+                                Schedule updated to {quickStartNotice.startTime} – {quickStartNotice.endTime}. Live attendance session is active.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                            href="/dashboard"
+                            prefetch={false}
+                            onClick={() => router.refresh()}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 text-xs font-bold transition-colors shadow-sm"
+                        >
+                            Check In
+                        </Link>
+                        <Link
+                            href="/admin/sessions"
+                            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#34A853] hover:bg-[#2b8a44] text-white text-xs font-bold transition-colors shadow-sm"
+                        >
+                            Live Session
+                        </Link>
+                        <button
+                            type="button"
+                            onClick={() => setQuickStartNotice(null)}
+                            className="p-1.5 text-neutral-400 hover:text-neutral-600 dark:text-white/40 dark:hover:text-white rounded-lg transition-colors"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Events Grid */}
             {initialEvents.length === 0 ? (
                 <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-white/10 rounded-2xl p-12 text-center flex flex-col items-center justify-center">
@@ -398,11 +489,42 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                                     </div>
                                 </div>
 
-                                <div className="mt-6 pt-6 border-t border-neutral-100 dark:border-white/5 flex items-center justify-between">
+                                {/* Quick Start / Live Session Action */}
+                                {isLive ? (
+                                    <Link
+                                        href="/admin/sessions"
+                                        className="w-full mt-4 flex items-center justify-center gap-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all border border-red-500/20 shadow-sm"
+                                    >
+                                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                                        Session Active · Manage Live
+                                    </Link>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => openQuickStartModal(event)}
+                                        className="w-full mt-4 flex items-center justify-center gap-2 bg-[#34A853]/10 hover:bg-[#34A853] text-[#34A853] hover:text-white dark:bg-[#34A853]/15 dark:hover:bg-[#34A853] dark:text-[#4ade80] dark:hover:text-white px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all border border-[#34A853]/20 hover:border-[#34A853] shadow-sm group/btn"
+                                    >
+                                        <Play className="w-3.5 h-3.5 fill-current transition-transform group-hover/btn:scale-110" />
+                                        Quick Start Now
+                                    </button>
+                                )}
+
+                                <div className="mt-5 pt-5 border-t border-neutral-100 dark:border-white/5 flex items-center justify-between">
                                     <span className="text-xs text-neutral-400">
                                         Added {new Date(event.created_at).toLocaleDateString()}
                                     </span>
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                        {!isLive && (
+                                            <button
+                                                type="button"
+                                                onClick={() => openQuickStartModal(event)}
+                                                className="p-2 rounded-lg text-neutral-500 hover:text-[#34A853] hover:bg-[#34A853]/10 transition-colors"
+                                                title="Quick Start Event Now"
+                                                aria-label={`Quick Start ${event.title}`}
+                                            >
+                                                <Play className="w-4 h-4 fill-current text-[#34A853]" />
+                                            </button>
+                                        )}
                                         <button
                                             onClick={() => openBroadcastModal(event)}
                                             className="p-2 rounded-lg text-neutral-500 hover:text-[#34A853] hover:bg-[#34A853]/10 transition-colors"
@@ -988,6 +1110,30 @@ export default function EventsClient({ initialEvents, activeLocations, isSuperAd
                 }}
                 event={broadcastEvent}
                 workers={workers}
+            />
+
+            {/* Quick Start Event Modal */}
+            <QuickStartEventModal
+                isOpen={isQuickStartModalOpen}
+                event={quickStartEventItem}
+                onClose={() => {
+                    setIsQuickStartModalOpen(false);
+                    setQuickStartEventItem(null);
+                }}
+                departmentName={
+                    quickStartEventItem?.department_id
+                        ? managedDepartments.find((d) => d.id === quickStartEventItem.department_id)?.name
+                        : undefined
+                }
+                onSuccess={(result) => {
+                    setQuickStartNotice({
+                        message: "Event started ahead of schedule! Live attendance session is active.",
+                        eventTitle: quickStartEventItem?.title || "Event",
+                        startTime: result.newStartTime,
+                        endTime: result.newEndTime,
+                    });
+                    router.refresh();
+                }}
             />
         </div>
     );

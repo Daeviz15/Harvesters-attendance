@@ -33,11 +33,11 @@ export default async function AdminLayout({
             />
 
             {/* Main Content Area */}
-            <div className="relative z-10 flex min-h-screen min-w-0 max-w-full flex-col overflow-x-hidden pt-20 md:pl-64">
+            <div className="relative z-10 flex h-[100dvh] min-h-[100dvh] min-w-0 max-w-full flex-col overflow-hidden pt-20 md:pl-64">
                 <AdminBirthdayAnnouncement birthdays={upcomingBirthdays} />
 
                 {/* Page Content */}
-                <main className="flex-1 w-full min-w-0 max-w-full p-4 sm:p-6 lg:p-8">
+                <main className="flex-1 w-full min-w-0 max-w-full p-4 sm:p-6 lg:p-8 overflow-y-auto flex flex-col min-h-0">
                     {children}
                 </main>
             </div>

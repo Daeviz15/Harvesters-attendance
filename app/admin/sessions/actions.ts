@@ -1,9 +1,11 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { createAdminClient } from "@/utils/supabase/admin";
 import { requireAdminManagementAuth as requireAdminAuth } from "@/lib/rbac";
 import { canManageWorkerAccess, PROXY_CHECK_IN_RESTRICTED_MESSAGE } from "@/lib/admin-permissions";
 import { revalidatePath } from "next/cache";
+import { calculateQuickStartSchedule, recurrenceDayCodes } from "@/lib/event-schedule-utils";
 
 function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : "An unexpected error occurred.";
@@ -45,7 +47,45 @@ export async function beginSession(eventId: string) {
             }
         }
 
-        const { error } = await supabase.rpc('start_attendance_session', {
+        const adminSupabase = createAdminClient();
+
+        // Prevent modifying schedule if an active session already exists
+        const { data: activeSession } = await adminSupabase
+            .from('attendance_sessions')
+            .select('id')
+            .eq('event_id', eventId)
+            .eq('status', 'active')
+            .maybeSingle();
+
+        if (activeSession) {
+            return { error: "An active session already exists for this event." };
+        }
+
+        // Synchronize event schedule to current time if starting ahead of time
+        const { data: eventData } = await adminSupabase
+            .from('events')
+            .select('*')
+            .eq('id', eventId)
+            .maybeSingle();
+
+        if (eventData) {
+            const schedule = calculateQuickStartSchedule(eventData);
+            const updatePayload: Record<string, unknown> = {
+                start_time: schedule.newStartTime,
+                end_time: schedule.newEndTime,
+                updated_at: new Date().toISOString(),
+            };
+            if (eventData.schedule_frequency === "once") {
+                updatePayload.start_date = schedule.newStartDate;
+            } else if (eventData.schedule_frequency === "weekly") {
+                updatePayload.recurrence_day = schedule.newWeekday;
+                const dayCode = recurrenceDayCodes[schedule.newWeekday];
+                if (dayCode) updatePayload.recurrence_rule = `FREQ=WEEKLY;INTERVAL=1;BYDAY=${dayCode}`;
+            }
+            await adminSupabase.from('events').update(updatePayload).eq('id', eventId);
+        }
+
+        const { data: sessionId, error } = await supabase.rpc('start_attendance_session', {
             event_uuid: eventId,
             actor_uuid: user.id,
         });
@@ -61,6 +101,33 @@ export async function beginSession(eventId: string) {
             return { error: "Failed to begin session. Please try again." };
         }
 
+        const sessionIdStr = sessionId as string;
+
+        if (eventData?.email_notifications_enabled && sessionIdStr) {
+            try {
+                const { error: reminderError } = await adminSupabase.rpc('enqueue_instant_session_reminders', {
+                    p_session_id: sessionIdStr,
+                });
+                if (reminderError) {
+                    console.error("[Sessions] Failed to enqueue instant reminders:", reminderError);
+                } else {
+                    import("@/lib/email-notification-processor")
+                        .then(({ processDueEmailNotifications }) => processDueEmailNotifications())
+                        .then((summary) => {
+                            if (summary.sent > 0 || summary.claimed > 0) {
+                                console.info("[Sessions] Instant event reminder delivery summary:", summary);
+                            }
+                        })
+                        .catch((err) => {
+                            console.error("[Sessions] Instant email processor run error:", err);
+                        });
+                }
+            } catch (reminderEnqueueErr) {
+                console.error("[Sessions] Error triggering instant reminders:", reminderEnqueueErr);
+            }
+        }
+
+        revalidatePath("/admin/events");
         revalidatePath("/admin/sessions");
         revalidatePath("/admin");
         revalidatePath("/dashboard");
@@ -103,6 +170,17 @@ export async function endSession(sessionId: string) {
                 return { error: "Session automation migration is missing. Run supabase_session_automation_migration.sql first." };
             }
             return { error: "Failed to end session. It may have already ended." };
+        }
+
+        // Clean up assistance requests for the completed session so the database does not fill up
+        try {
+            const adminSupabase = createAdminClient();
+            await adminSupabase
+                .from('check_in_assistance_requests')
+                .delete()
+                .eq('session_id', sessionId);
+        } catch (cleanupErr) {
+            console.warn('[Sessions] Failed to auto-clear assistance requests for ended session:', cleanupErr);
         }
 
         revalidatePath("/admin/sessions");
