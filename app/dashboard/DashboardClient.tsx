@@ -20,7 +20,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import type { AttendanceLog, UpcomingBirthday, UpcomingEvent } from "@/lib/types";
 import { createClient } from "@/utils/supabase/client";
 import BirthdayPrompt from "@/components/BirthdayPrompt";
-import { UpcomingBirthdaysSidebar } from "@/components/BirthdayAnnouncements";
+import { UpcomingBirthdaysPanel } from "@/components/BirthdayAnnouncements";
 import UpcomingEventCountdown from "@/components/UpcomingEventCountdown";
 
 /**
@@ -65,10 +65,9 @@ interface SidebarContentProps {
     hasMore: boolean;
     isLoadingMore: boolean;
     onLoadMore: () => void;
-    upcomingBirthdays: UpcomingBirthday[];
 }
 
-const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, workerId, initials, department, team, avatarUrl, headDepartmentName, canAccessAdmin, history, hasMore, isLoadingMore, onLoadMore, upcomingBirthdays }: SidebarContentProps) => (
+const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, workerId, initials, department, team, avatarUrl, headDepartmentName, canAccessAdmin, history, hasMore, isLoadingMore, onLoadMore }: SidebarContentProps) => (
     <div className="flex flex-col h-full w-full">
         <div className="flex items-center justify-between mb-12">
             <div className="relative h-12 w-28 -ml-2">
@@ -92,7 +91,7 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, wo
         <div className="flex items-center gap-4 p-4 rounded-2xl bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 mb-10 min-w-0">
             <div className="w-12 h-12 rounded-full bg-[#34A853]/20 border border-[#34A853]/30 flex items-center justify-center text-lg font-bold text-[#34A853] shrink-0 relative overflow-hidden">
                 {avatarUrl ? (
-                    <Image src={avatarUrl} alt={username} fill unoptimized className="object-cover" sizes="48px" />
+                    <Image src={avatarUrl} alt="" fill unoptimized referrerPolicy="no-referrer" className="object-cover" sizes="48px" />
                 ) : (
                     initials
                 )}
@@ -128,8 +127,6 @@ const SidebarContent = ({ setIsMobileMenuOpen, setIsLeaveModalOpen, username, wo
                 Switch to Admin
             </Link>
         )}
-
-        <UpcomingBirthdaysSidebar birthdays={upcomingBirthdays} />
 
         <div className="flex-1 flex flex-col min-h-0">
             <div className="flex items-center justify-between mb-6">
@@ -691,7 +688,7 @@ export default function DashboardClient({
 
             {/* Desktop Sidebar */}
             <aside className="hidden md:flex w-80 h-screen border-r border-neutral-200 dark:border-white/10 bg-neutral-100/40 dark:bg-black/40 backdrop-blur-xl p-8 flex-col relative z-20">
-                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} workerId={workerId} initials={initials} department={department} team={team} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} canAccessAdmin={canAccessAdmin} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} upcomingBirthdays={upcomingBirthdays} />
+                <SidebarContent setIsMobileMenuOpen={setIsMobileMenuOpen} setIsLeaveModalOpen={setIsLeaveModalOpen} username={username} workerId={workerId} initials={initials} department={department} team={team} avatarUrl={avatarUrl} headDepartmentName={headDepartmentName} canAccessAdmin={canAccessAdmin} history={history} hasMore={hasMore} isLoadingMore={isLoadingMore} onLoadMore={handleLoadMore} />
             </aside>
 
             {/* Mobile Drawer */}
@@ -727,7 +724,6 @@ export default function DashboardClient({
                                 hasMore={hasMore}
                                 isLoadingMore={isLoadingMore}
                                 onLoadMore={handleLoadMore}
-                                upcomingBirthdays={upcomingBirthdays}
                             />
                         </motion.aside>
                     </>
@@ -778,12 +774,14 @@ export default function DashboardClient({
                     {/* Contained Dashed Green Border Frame (Desktop Only): begins directly at the sidebar line on the left and extends to the top */}
                     <div className="w-full md:rounded-l-none md:rounded-r-2xl md:border-2 md:border-dashed md:border-[#34A853]/35 md:-ml-[1px] md:bg-neutral-500/[0.02] dark:md:bg-white/[0.015] p-3 sm:p-4 md:pt-8 md:pb-6 md:pl-8 md:pr-6 lg:pl-10 lg:pr-8 transition-all flex flex-col flex-1 relative">
                         {/* Desktop Header: theme toggle inside the top right of the frame */}
-                        <div className="hidden md:flex items-center justify-end h-12 mb-12 relative z-20 shrink-0">
+                        <div className="hidden md:flex items-center justify-end h-10 mb-6 lg:mb-8 relative z-20 shrink-0">
                             <ThemeToggle />
                         </div>
 
-                        {/* Left Column: Action & Welcome */}
-                        <div className="flex-1 flex flex-col">
+                        {/* Two-Column Desktop Layout: Left for Action & Welcome, Right for Upcoming Birthdays */}
+                        <div className="flex-1 flex flex-col lg:flex-row lg:items-start justify-between gap-8 lg:gap-10 xl:gap-12 min-h-0">
+                            {/* Left Column: Action & Welcome */}
+                            <div className="flex-1 min-w-0 max-w-2xl flex flex-col">
                         <div className="mb-3 md:mb-4">
                             <h1 className="text-[22px] md:text-[26px] font-bold tracking-tight text-neutral-800 dark:text-white/90 mb-2 leading-snug flex flex-wrap items-center gap-x-2.5 gap-y-2">
                                 <span suppressHydrationWarning>{getGreeting()}, {username}</span>
@@ -1153,41 +1151,11 @@ export default function DashboardClient({
                         </div>
                     </div>
 
-                    {/* Right Column: Live Feed — COMMENTED OUT per team request
-                    <div className="w-full lg:w-80 flex flex-col border-t lg:border-t-0 lg:border-l border-neutral-200 dark:border-white/10 pt-10 lg:pt-0 lg:pl-10 xl:pl-16">
-                        <div className="flex items-center gap-2 mb-8">
-                            <Users className="w-4 h-4 text-[#34A853]" />
-                            <h3 className="text-[12px] font-bold text-neutral-700 dark:text-white/80 uppercase tracking-[0.2em]">Live Feed</h3>
-                            <div className="ml-auto flex items-center gap-3">
-                                <div className="w-1.5 h-1.5 rounded-full bg-[#34A853] animate-pulse"></div>
-                            </div>
-                        </div>
-
-                        <div className="space-y-6">
-                            {liveFeed.map((feed) => {
-                                const init = `${feed.first_name[0]}${feed.last_name ? feed.last_name[0] : ''}`.toUpperCase();
-                                return (
-                                    <div key={feed.id} className="flex items-start gap-4 group">
-                                        <div className="w-10 h-10 rounded-full bg-neutral-200/50 dark:bg-white/5 border border-neutral-300 dark:border-white/10 flex items-center justify-center text-xs font-bold text-neutral-600 dark:text-white/70 group-hover:bg-[#34A853]/10 group-hover:text-[#34A853] group-hover:border-[#34A853]/30 transition-colors shrink-0 relative overflow-hidden">
-                                            {feed.avatar_url ? (
-                                                <Image src={feed.avatar_url} alt={feed.first_name} fill unoptimized className="object-cover" sizes="40px" />
-                                            ) : (
-                                                init
-                                            )}
-                                        </div>
-                                        <div className="flex-1">
-                                            <div className="flex items-baseline justify-between mb-0.5">
-                                                <p className="text-[14px] font-medium text-neutral-800 dark:text-white/90">{feed.first_name} {feed.last_name}</p>
-                                                <span className="text-[11px] text-[#34A853] font-medium">{formatTimeAgo(feed.created_at)}</span>
-                                            </div>
-                                            <p className="text-[12px] text-neutral-500 dark:text-white/40">{feed.department} • {feed.event_type}</p>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                    {/* Right Column: Upcoming Birthdays Panel */}
+                    <div className="w-full lg:w-[350px] xl:w-[390px] shrink-0 flex flex-col">
+                        <UpcomingBirthdaysPanel birthdays={upcomingBirthdays} />
                     </div>
-                    */}
+                </div>
 
                     </div>
                 </div>

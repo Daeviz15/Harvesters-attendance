@@ -18,7 +18,6 @@ type EmailConfig = {
     provider: "gmail" | "google_workspace_relay" | "resend" | "generic";
     authenticatedUser: string;
     authMode: "oauth2" | "password";
-    isResendSmtp: boolean;
 };
 
 let emailConfig: EmailConfig | null = null;
@@ -110,10 +109,9 @@ function getEmailConfig(): EmailConfig {
     const user = process.env.SMTP_USER
         || (isResendSmtp ? "resend" : process.env.GOOGLE_EMAIL_ADDRESS?.trim());
     const googleAppPassword = normalizeGoogleAppPassword(process.env.GOOGLE_APP_PASSWORD);
-    const password = process.env.SMTP_PASSWORD
-        || (isResendSmtp
-            ? process.env.RESEND_API_KEY
-            : googleAppPassword);
+    const password = isResendSmtp
+        ? process.env.EMAIL_AUTOMATION_RESEND_API_KEY?.trim()
+        : process.env.SMTP_PASSWORD || googleAppPassword;
     const oauthValues = [
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET,
@@ -131,7 +129,13 @@ function getEmailConfig(): EmailConfig {
 
     const usesGoogleOauth = googleSmtp && oauthValueCount === oauthValues.length;
     if (!usesGoogleOauth && !password) {
-        throw new Error("SMTP credentials are not configured.");
+        throw new Error(isResendSmtp
+            ? "EMAIL_AUTOMATION_RESEND_API_KEY is required for attendance mail over Resend SMTP."
+            : "SMTP credentials are not configured.");
+    }
+
+    if (isResendSmtp && password === process.env.RESEND_API_KEY?.trim()) {
+        throw new Error("Attendance email must use a different Resend API key from password recovery.");
     }
 
     if (googleSmtp && !EMAIL_PATTERN.test(user)) {
@@ -232,7 +236,6 @@ function getEmailConfig(): EmailConfig {
         provider,
         authenticatedUser: user,
         authMode: usesGoogleOauth ? "oauth2" : "password",
-        isResendSmtp,
         from: {
             name: process.env.EMAIL_FROM_NAME || "Harvesters Globe Attendance",
             address: fromAddress,
@@ -390,9 +393,6 @@ async function sendEmail(
     try {
         const config = getEmailConfig();
         const logoContent = await getLogoContent();
-        const idempotencyHeaders = notificationId && config.isResendSmtp
-            ? { "Resend-Idempotency-Key": notificationId }
-            : undefined;
         const messageIdDomain = getMessageIdDomain();
 
         // Real delivery to actual worker recipients
@@ -410,10 +410,6 @@ async function sendEmail(
                 || process.env.GOOGLE_EMAIL_ADDRESS
                 || options.replyTo,
             messageId: notificationId ? `<${notificationId}@${messageIdDomain}>` : options.messageId,
-            headers: {
-                ...options.headers,
-                ...idempotencyHeaders,
-            },
             attachments: [
                 ...(options.attachments || []),
                 {
@@ -424,6 +420,15 @@ async function sendEmail(
                 },
             ],
         });
+
+        const recipient = typeof finalTo === "string" ? finalTo.trim().toLowerCase() : null;
+        if (
+            !recipient
+            || !info.accepted?.some((address: string) => address.trim().toLowerCase() === recipient)
+            || info.rejected?.some((address: string) => address.trim().toLowerCase() === recipient)
+        ) {
+            throw new Error("SMTP provider did not accept the intended recipient.");
+        }
 
         console.info("[Email] Message accepted by SMTP provider.", { messageId: info.messageId });
         return { success: true, emailId: info.messageId };
