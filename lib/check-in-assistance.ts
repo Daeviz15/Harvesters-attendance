@@ -2,7 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/server";
-import type { CheckInAssistanceRequest } from "@/lib/types";
+import type { AssistanceHistoryFilter, AssistanceHistoryPage } from "@/lib/types";
 
 const assistanceRequestSchema = z.object({
   id: z.string().uuid(),
@@ -23,15 +23,41 @@ const assistanceRequestSchema = z.object({
   acknowledged_at: z.string().nullable(),
   resolved_at: z.string().nullable(),
   resolution_note: z.string().nullable(),
+  activity: z.array(z.object({
+    id: z.string().uuid(),
+    actor_name: z.string(),
+    status: z.enum(["open", "acknowledged", "resolved", "dismissed", "expired"]),
+    note: z.string().nullable(),
+    is_baseline: z.boolean(),
+    created_at: z.string(),
+  })),
 });
 
-export async function getCheckInAssistanceRequests(
-  limit = 50,
-): Promise<CheckInAssistanceRequest[]> {
-  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 100);
+const pageSchema = z.object({
+  requests: z.array(assistanceRequestSchema),
+  counts: z.object({
+    all: z.number().int().nonnegative(),
+    unresolved: z.number().int().nonnegative(),
+    active: z.number().int().nonnegative(),
+    resolved: z.number().int().nonnegative(),
+    closed: z.number().int().nonnegative(),
+  }),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().positive(),
+  pageSize: z.number().int().positive(),
+});
+
+export async function getAssistanceHistoryPage(
+  status: AssistanceHistoryFilter,
+  page: number,
+  requestId: string | null,
+): Promise<AssistanceHistoryPage> {
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_my_check_in_assistance_requests", {
-    p_limit: safeLimit,
+  const { data, error } = await supabase.rpc("get_check_in_assistance_page", {
+    p_status: status,
+    p_page: page,
+    p_limit: 25,
+    p_request_id: requestId,
   });
 
   if (error) {
@@ -39,15 +65,10 @@ export async function getCheckInAssistanceRequests(
       code: error.code,
       message: error.message,
     });
-    return [];
+    throw new Error("Could not load complaint history. Please refresh and try again.");
   }
 
-  return (data ?? []).flatMap((row: unknown) => {
-    const parsed = assistanceRequestSchema.safeParse(row);
-    if (!parsed.success) {
-      console.error("[CheckInAssistance] Ignored an invalid request row");
-      return [];
-    }
-    return [parsed.data as CheckInAssistanceRequest];
-  });
+  const parsed = pageSchema.safeParse(data);
+  if (!parsed.success) throw new Error("The complaint history response could not be loaded.");
+  return parsed.data;
 }

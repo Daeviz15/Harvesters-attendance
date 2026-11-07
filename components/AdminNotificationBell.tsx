@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
@@ -13,6 +14,7 @@ import {
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import type { AdminNotification } from "@/lib/types";
+import { ADMIN_NOTIFICATIONS_CHANGED } from "@/lib/notification-events";
 
 interface AdminNotificationBellProps {
   userId: string;
@@ -65,30 +67,33 @@ export default function AdminNotificationBell({
   initialUnreadCount,
 }: AdminNotificationBellProps) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
-  const fetchInFlight = useRef(false);
+  const fetchSequence = useRef(0);
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState(initialNotifications);
   const [unreadCount, setUnreadCount] = useState(initialUnreadCount);
+  const [readError, setReadError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    if (fetchInFlight.current) return;
-    fetchInFlight.current = true;
+    const sequence = ++fetchSequence.current;
 
     const [rowsResult, countResult] = await Promise.all([
       supabase
         .from("admin_notifications")
         .select(notificationSelect)
+        .eq("recipient_user_id", userId)
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(20),
       supabase
         .from("admin_notifications")
         .select("id", { count: "exact", head: true })
+        .eq("recipient_user_id", userId)
         .is("read_at", null),
     ]);
 
-    fetchInFlight.current = false;
+    if (sequence !== fetchSequence.current) return;
 
     if (rowsResult.error || countResult.error) {
       console.error("[AdminNotifications] Refresh failed", {
@@ -100,28 +105,25 @@ export default function AdminNotificationBell({
 
     setNotifications((rowsResult.data ?? []).filter(isAdminNotification));
     setUnreadCount(Math.max(countResult.count ?? 0, 0));
-  }, [supabase]);
+  }, [supabase, userId]);
 
   useEffect(() => {
+    let refreshTimer: number | undefined;
+    const scheduleRefresh = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => { void refresh(); }, 150);
+    };
     const channel = supabase
       .channel(`admin-notifications:${userId}`)
       .on(
         "postgres_changes",
         {
-          event: "INSERT",
+          event: "*",
           schema: "public",
           table: "admin_notifications",
           filter: `recipient_user_id=eq.${userId}`,
         },
-        (payload) => {
-          if (!isAdminNotification(payload.new)) return;
-          const incomingNotification = payload.new as AdminNotification;
-          setNotifications((current) => [
-            incomingNotification,
-            ...current.filter((item) => item.id !== incomingNotification.id),
-          ].slice(0, 20));
-          setUnreadCount((current) => current + 1);
-        },
+        scheduleRefresh,
       )
       .subscribe((status) => {
         if (status === "SUBSCRIBED") void refresh();
@@ -137,11 +139,14 @@ export default function AdminNotificationBell({
     const handleFocus = () => void refresh();
     document.addEventListener("visibilitychange", handleVisibility);
     window.addEventListener("focus", handleFocus);
+    window.addEventListener(ADMIN_NOTIFICATIONS_CHANGED, handleFocus);
 
     return () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibility);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener(ADMIN_NOTIFICATIONS_CHANGED, handleFocus);
       void supabase.removeChannel(channel);
     };
   }, [refresh, supabase, userId]);
@@ -162,33 +167,33 @@ export default function AdminNotificationBell({
   }, []);
 
   const markRead = useCallback(async (ids: string[] | null) => {
-    const affectedIds = ids ? new Set(ids) : null;
-    const previouslyUnread = notifications.filter(
-      (item) => !item.read_at && (!affectedIds || affectedIds.has(item.id)),
-    ).length;
-    const readAt = new Date().toISOString();
-
-    setNotifications((current) =>
-      current.map((item) =>
-        !item.read_at && (!affectedIds || affectedIds.has(item.id))
-          ? { ...item, read_at: readAt }
-          : item,
-      ),
-    );
-    setUnreadCount((current) =>
-      affectedIds ? Math.max(0, current - previouslyUnread) : 0,
-    );
-
-    const { error } = await supabase.rpc("mark_my_admin_notifications_read", {
-      p_notification_ids: ids,
-    });
-    if (error) {
-      console.error("[AdminNotifications] Could not update read state", error.message);
+    // Do not let an older count request restore a badge after this mutation.
+    fetchSequence.current += 1;
+    try {
+      const { error } = await supabase.rpc("mark_my_admin_notifications_read", {
+        p_notification_ids: ids,
+      });
+      if (error) {
+        console.error("[AdminNotifications] Could not update read state", error.message);
+        setReadError("Could not mark notifications read. Use Mark all read to try again.");
+        return;
+      }
+      setReadError(null);
       await refresh();
-      return;
+    } catch (error: unknown) {
+      console.error("[AdminNotifications] Read state request failed", error);
+      setReadError("Could not mark notifications read. Use Mark all read to try again.");
     }
-    await refresh();
-  }, [notifications, refresh, supabase]);
+  }, [refresh, supabase]);
+
+  useEffect(() => {
+    if (!isOpen || readError) return;
+    const visibleUnreadIds = notifications.filter((item) => !item.read_at).map((item) => item.id);
+    if (visibleUnreadIds.length === 0) return;
+    // Wait until the dropdown has rendered; closing it immediately cancels this.
+    const timer = window.setTimeout(() => { void markRead(visibleUnreadIds); }, 150);
+    return () => window.clearTimeout(timer);
+  }, [isOpen, markRead, notifications, readError]);
 
   return (
     <div ref={containerRef} className="relative">
@@ -233,6 +238,8 @@ export default function AdminNotificationBell({
             )}
           </div>
 
+          {readError && <p role="alert" className="px-4 py-2 text-xs text-red-600 dark:text-red-400">{readError}</p>}
+
           <div className="max-h-[min(28rem,calc(100vh-10rem))] overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="px-6 py-12 text-center">
@@ -249,9 +256,15 @@ export default function AdminNotificationBell({
                 <Link
                   key={notification.id}
                   href={notification.action_url}
-                  onClick={() => {
+                  onClick={async (event) => {
                     setIsOpen(false);
-                    if (!notification.read_at) void markRead([notification.id]);
+                    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+                      if (!notification.read_at) void markRead([notification.id]);
+                      return;
+                    }
+                    event.preventDefault();
+                    if (!notification.read_at) await markRead([notification.id]);
+                    router.push(notification.action_url);
                   }}
                   className={`flex gap-3 border-b border-neutral-100 px-4 py-3.5 transition-colors last:border-b-0 hover:bg-neutral-50 dark:border-white/5 dark:hover:bg-white/5 ${
                     notification.read_at ? "" : "bg-[#34A853]/5"

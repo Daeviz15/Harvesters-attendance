@@ -118,4 +118,24 @@ export interface CheckInAssistanceRequest {
   acknowledged_at: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
+  activity?: CheckInAssistanceActivity[];
+}
+
+export interface CheckInAssistanceActivity {
+  id: string;
+  actor_name: string;
+  status: CheckInAssistanceStatus;
+  note: string | null;
+  is_baseline: boolean;
+  created_at: string;
+}
+
+export type AssistanceHistoryFilter = "unresolved" | "resolved" | "closed" | "all";
+
+export interface AssistanceHistoryPage {
+  requests: CheckInAssistanceRequest[];
+  counts: Record<AssistanceHistoryFilter | "active", number>;
+  total: number;
+  page: number;
+  pageSize: number;
 }

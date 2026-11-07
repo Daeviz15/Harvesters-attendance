@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import {
   CheckCircle2,
   CircleHelp,
@@ -13,7 +13,6 @@ import {
   ShieldAlert,
   XCircle,
   Navigation,
-  Trash2,
   Info,
   Calendar,
   AlertTriangle,
@@ -21,18 +20,20 @@ import {
   Send,
   Check,
 } from "lucide-react";
-import type { CheckInAssistanceRequest } from "@/lib/types";
+import type { AssistanceHistoryFilter, AssistanceHistoryPage, CheckInAssistanceRequest } from "@/lib/types";
+import { createClient } from "@/utils/supabase/client";
+import { ADMIN_NOTIFICATIONS_CHANGED } from "@/lib/notification-events";
 import {
   acknowledgeCheckInAssistance,
   closeCheckInAssistance,
   verifyAndProxyCheckIn,
-  clearFinishedCheckInAssistance,
   sendLeaderNote,
 } from "./actions";
 import { getVicinityName } from "@/lib/reverse-geocoding";
 
 interface Props {
-  initialRequests: CheckInAssistanceRequest[];
+  history: AssistanceHistoryPage;
+  statusFilter: AssistanceHistoryFilter;
   highlightedRequestId: string | null;
 }
 
@@ -105,10 +106,13 @@ const DISMISS_PRESETS = [
 ];
 
 export default function CheckInAssistanceClient({
-  initialRequests,
+  history,
+  statusFilter,
   highlightedRequestId,
 }: Props) {
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
+  const initialRequests = history.requests;
   const [isPending, startTransition] = useTransition();
   const [pendingAction, setPendingAction] = useState<{
     id: string;
@@ -117,10 +121,44 @@ export default function CheckInAssistanceClient({
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [noteSentId, setNoteSentId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
-  const [isClearing, setIsClearing] = useState(false);
   const [vicinities, setVicinities] = useState<Record<string, string>>({});
+  const vicinityCache = useRef<Record<string, string>>({});
   const [resolvingVicinities, setResolvingVicinities] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    if (initialRequests.length === 0) return;
+    let cancelled = false;
+    const markViewed = async () => {
+      const { error } = await supabase.rpc("mark_my_assistance_notifications_read", {
+        p_request_ids: initialRequests.map((request) => request.id),
+      });
+      if (cancelled) return;
+      if (error) {
+        console.error("[CheckInAssistance] Could not mark viewed reports read", error.message);
+      } else {
+        window.dispatchEvent(new Event(ADMIN_NOTIFICATIONS_CHANGED));
+      }
+    };
+    void markViewed();
+    return () => { cancelled = true; };
+  }, [initialRequests, supabase]);
+
+  useEffect(() => {
+    const refreshVisiblePage = () => {
+      if (document.visibilityState === "visible") router.refresh();
+    };
+    const interval = window.setInterval(refreshVisiblePage, 30_000);
+    window.addEventListener("focus", refreshVisiblePage);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", refreshVisiblePage);
+    };
+  }, [router]);
+
+  const refreshAfterAction = () => {
+    window.dispatchEvent(new Event(ADMIN_NOTIFICATIONS_CHANGED));
+    router.refresh();
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -128,10 +166,11 @@ export default function CheckInAssistanceClient({
       for (const req of initialRequests) {
         if (!isMounted) break;
         const { lat, lng } = extractCoordsAndMessage(req.worker_message);
-        if (lat !== null && lng !== null && !vicinities[req.id]) {
+        if (lat !== null && lng !== null && !vicinityCache.current[req.id]) {
           setResolvingVicinities((prev) => ({ ...prev, [req.id]: true }));
           try {
             const name = await getVicinityName(lat, lng);
+            if (name) vicinityCache.current[req.id] = name;
             if (isMounted && name) {
               setVicinities((prev) => ({ ...prev, [req.id]: name }));
             }
@@ -150,17 +189,14 @@ export default function CheckInAssistanceClient({
     };
   }, [initialRequests]);
 
-  const activeCount = initialRequests.filter(
-    (item) => item.status === "open" || item.status === "acknowledged"
-  ).length;
-
-  const finishedCount = initialRequests.filter(
-    (item) => item.status === "resolved" || item.status === "dismissed" || item.status === "expired"
-  ).length;
-
-  const filteredRequests = statusFilter === "active"
-    ? initialRequests.filter((item) => item.status === "open" || item.status === "acknowledged")
-    : initialRequests;
+  const activeCount = history.counts.active;
+  const filteredRequests = initialRequests;
+  const pageCount = Math.max(1, Math.ceil(history.total / history.pageSize));
+  const pageHref = (page: number) => {
+    const params = new URLSearchParams({ status: statusFilter, page: String(page) });
+    if (highlightedRequestId) params.set("request", highlightedRequestId);
+    return `/admin/check-in-assistance?${params}`;
+  };
 
   const acknowledge = (requestId: string) => {
     setPendingAction({ id: requestId, action: "acknowledge" });
@@ -173,7 +209,7 @@ export default function CheckInAssistanceClient({
           setErrors((current) => ({ ...current, [requestId]: result.error ?? "Request failed." }));
           return;
         }
-        router.refresh();
+        refreshAfterAction();
       } finally {
         setPendingAction(null);
       }
@@ -191,7 +227,7 @@ export default function CheckInAssistanceClient({
           setErrors((current) => ({ ...current, [requestId]: result.error ?? "Failed to check in worker." }));
           return;
         }
-        router.refresh();
+        refreshAfterAction();
       } finally {
         setPendingAction(null);
       }
@@ -215,7 +251,7 @@ export default function CheckInAssistanceClient({
         setTimeout(() => {
           setNoteSentId((prev) => (prev === requestId ? null : prev));
         }, 3500);
-        router.refresh();
+        refreshAfterAction();
       } finally {
         setPendingAction(null);
       }
@@ -242,29 +278,9 @@ export default function CheckInAssistanceClient({
           setErrors((current) => ({ ...current, [requestId]: result.error ?? "Request failed." }));
           return;
         }
-        router.refresh();
+        refreshAfterAction();
       } finally {
         setPendingAction(null);
-      }
-    });
-  };
-
-  const handleClearFinished = () => {
-    if (!confirm("Clear all finished (resolved, dismissed, expired) assistance requests from the database?")) {
-      return;
-    }
-
-    setIsClearing(true);
-    startTransition(async () => {
-      try {
-        const res = await clearFinishedCheckInAssistance();
-        if (res.error) {
-          alert(res.error);
-        } else {
-          router.refresh();
-        }
-      } finally {
-        setIsClearing(false);
       }
     });
   };
@@ -296,18 +312,6 @@ export default function CheckInAssistanceClient({
           </div>
 
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-            {finishedCount > 0 && (
-              <button
-                type="button"
-                onClick={handleClearFinished}
-                disabled={isClearing}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-neutral-200 dark:border-white/10 bg-white dark:bg-white/5 px-3 py-1.5 text-xs font-semibold text-neutral-600 dark:text-neutral-300 transition hover:bg-red-500/10 hover:border-red-500/20 hover:text-red-600 dark:hover:text-red-400 disabled:opacity-50"
-              >
-                {isClearing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                Clear Finished ({finishedCount})
-              </button>
-            )}
-
             <div className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 dark:border-white/10 bg-white dark:bg-white/5 px-3.5 py-1.5 text-xs font-semibold text-neutral-700 dark:text-neutral-200 shadow-sm">
               <span className={`h-2 w-2 rounded-full ${activeCount > 0 ? "bg-amber-500 animate-pulse" : "bg-[#34A853]"}`} />
               <span className="font-bold text-neutral-900 dark:text-white">{activeCount}</span>
@@ -318,36 +322,35 @@ export default function CheckInAssistanceClient({
 
         {/* Filter Pills and Helper Strip */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("active")}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
-                statusFilter === "active"
-                  ? "bg-[#34A853] text-white shadow-sm"
-                  : "border border-neutral-200 dark:border-white/10 bg-white dark:bg-white/5 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/10"
-              }`}
-            >
-              Active Requests ({activeCount})
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter("all")}
-              className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
-                statusFilter === "all"
-                  ? "bg-[#34A853] text-white shadow-sm"
-                  : "border border-neutral-200 dark:border-white/10 bg-white dark:bg-white/5 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/10"
-              }`}
-            >
-              All Requests ({initialRequests.length})
-            </button>
-          </div>
+          <nav aria-label="Complaint history filters" className="flex flex-wrap items-center gap-2">
+            {([
+              ["unresolved", "Unresolved"], ["resolved", "Resolved"],
+              ["closed", "Dismissed"], ["all", "All"],
+            ] as const).map(([value, label]) => (
+              <Link
+                key={value}
+                href={`/admin/check-in-assistance?status=${value}`}
+                aria-current={statusFilter === value && !highlightedRequestId ? "page" : undefined}
+                className={`rounded-xl px-3.5 py-1.5 text-xs font-bold transition ${
+                  statusFilter === value && !highlightedRequestId
+                    ? "bg-[#34A853] text-white shadow-sm"
+                    : "border border-neutral-200 dark:border-white/10 bg-white dark:bg-white/5 text-neutral-600 dark:text-neutral-300 hover:bg-neutral-100 dark:hover:bg-white/10"
+                }`}
+              >
+                {label} ({history.counts[value]})
+              </Link>
+            ))}
+          </nav>
 
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-[11px] sm:text-xs text-amber-700 dark:text-amber-200/90 flex items-center gap-1.5">
             <Info className="h-3.5 w-3.5 shrink-0 text-amber-500" />
             <span>Clicking <strong>Verify &amp; Check In</strong> automatically marks attendance for the worker.</span>
           </div>
         </div>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          Reports and previous leader notes are retained. Unresolved includes requests that expired when a session ended.
+          {highlightedRequestId && " Showing the report selected from your notification."}
+        </p>
       </div>
 
       {/* Scrollable Requests Cards Queue */}
@@ -356,10 +359,10 @@ export default function CheckInAssistanceClient({
           <div className="rounded-2xl sm:rounded-3xl border border-dashed border-neutral-300 dark:border-white/10 px-6 py-12 text-center bg-white/40 dark:bg-white/[0.01]">
             <CircleHelp className="mx-auto h-9 w-9 text-neutral-400" />
             <p className="mt-3 text-sm sm:text-base font-semibold text-neutral-800 dark:text-neutral-200">
-              {statusFilter === "active" ? "No active check-in requests" : "No check-in requests found"}
+              {statusFilter === "unresolved" ? "No unresolved check-in requests" : "No check-in requests found"}
             </p>
             <p className="mt-1 text-xs sm:text-sm text-neutral-500 dark:text-neutral-400 max-w-md mx-auto">
-              {statusFilter === "active"
+              {statusFilter === "unresolved"
                 ? "All worker check-in trouble requests have been resolved or dismissed."
                 : "New requests will appear here when workers notify leaders during check-in."}
             </p>
@@ -548,7 +551,7 @@ export default function CheckInAssistanceClient({
                     }`}
                   >
                     <span className="font-semibold">
-                      {request.status === "resolved" ? "Resolution Note:" : "Dismissal Note Sent to Worker:"}
+                      {request.status === "resolved" ? "Resolution Note:" : request.status === "dismissed" ? "Dismissal Note:" : "Leader Note:"}
                     </span>{" "}
                     {request.resolution_note}
                     {request.resolved_at && (
@@ -557,6 +560,24 @@ export default function CheckInAssistanceClient({
                       </span>
                     )}
                   </div>
+                )}
+
+                {!!request.activity?.length && (
+                  <details className="mt-3 rounded-xl border border-neutral-200 p-3 text-xs dark:border-white/10">
+                    <summary className="cursor-pointer font-semibold">Activity history ({request.activity.length})</summary>
+                    <ol className="mt-3 space-y-3">
+                      {request.activity.map((activity) => (
+                        <li key={activity.id} className="border-l-2 border-neutral-200 pl-3 dark:border-white/10">
+                          <p className="font-semibold">
+                            {activity.is_baseline ? "Existing record at history activation" : statusConfig[activity.status].label}
+                            {" · "}{activity.actor_name}
+                          </p>
+                          <time className="text-neutral-500" dateTime={activity.created_at}>{formatDate(activity.created_at)}</time>
+                          {activity.note && <p className="mt-1 whitespace-pre-wrap break-words">{extractCoordsAndMessage(activity.note).cleanMessage}</p>}
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
                 )}
 
                 {errors[request.id] && (
@@ -696,6 +717,13 @@ export default function CheckInAssistanceClient({
           })
         )}
       </div>
+      <nav aria-label="Complaint history pages" className="mt-4 flex shrink-0 items-center justify-between gap-3 text-sm">
+        <span className="text-neutral-500">Page {history.page} of {pageCount} · {history.total} reports</span>
+        <div className="flex gap-3">
+          {history.page > 1 && <Link className="font-semibold text-[#34A853] hover:underline" href={pageHref(history.page - 1)}>Previous</Link>}
+          {history.page < pageCount && <Link className="font-semibold text-[#34A853] hover:underline" href={pageHref(history.page + 1)}>Next</Link>}
+        </div>
+      </nav>
     </div>
   );
 }

@@ -3,127 +3,63 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdminManagementAuth } from "@/lib/rbac";
+import { createClient } from "@/utils/supabase/server";
 import { createAdminClient } from "@/utils/supabase/admin";
 import { manualWorkerCheckIn } from "@/app/admin/sessions/actions";
 
 const requestIdSchema = z.string().uuid("Invalid assistance request.");
+const noteSchema = z.string().trim().max(500, "Note must be 500 characters or less.");
 const resolutionSchema = z.object({
-  requestId: z.string().uuid("Invalid assistance request."),
+  requestId: requestIdSchema,
   status: z.enum(["resolved", "dismissed"]),
-  resolutionNote: z.string().trim().max(500).optional().nullable(),
+  resolutionNote: noteSchema.optional().nullable(),
 });
 
-type AdminScope = Awaited<ReturnType<typeof requireAdminManagementAuth>>;
+function invalidateAssistanceViews() {
+  revalidatePath("/admin/check-in-assistance");
+  revalidatePath("/dashboard");
+}
 
-/**
- * Validates existence and verifies that the actor has permission over the target worker's department or team.
- */
-async function checkWorkerAssistanceScope(
-  adminSupabase: ReturnType<typeof createAdminClient>,
-  scope: AdminScope,
-  requestId: string
-): Promise<{ error?: string; request?: { id: string; user_id: string; session_id: string; status: string } }> {
-  const { data: request, error: fetchErr } = await adminSupabase
-    .from("check_in_assistance_requests")
-    .select("id, user_id, session_id, status")
-    .eq("id", requestId)
-    .single();
-
-  if (fetchErr || !request) {
-    return { error: "Assistance request not found." };
+async function updateRequest(
+  requestId: string,
+  status: "acknowledged" | "resolved" | "dismissed" | "note",
+  note?: string | null,
+) {
+  await requireAdminManagementAuth();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("update_check_in_assistance_request", {
+    p_request_id: requestId,
+    p_status: status,
+    p_resolution_note: note?.trim() || null,
+  });
+  if (error) {
+    console.error("[CheckInAssistance] Update failed", { code: error.code, message: error.message });
+    return { error: error.code === "42501"
+      ? "You do not have permission to update this request."
+      : "Could not update this request. Please refresh and try again." };
   }
-
-  if (scope.isSuperAdmin) {
-    return { request };
-  }
-
-  const { data: profile } = await adminSupabase
-    .from("profiles")
-    .select("department_id, team_id")
-    .eq("id", request.user_id)
-    .single();
-
-  const hasDeptAccess = profile?.department_id && scope.managedDepartmentIds.includes(profile.department_id);
-  const hasTeamAccess = profile?.team_id && scope.managedTeamIds.includes(profile.team_id);
-
-  if (!hasDeptAccess && !hasTeamAccess) {
-    return { error: "This request is outside your administrative scope." };
-  }
-
-  return { request };
+  invalidateAssistanceViews();
+  return { success: true, status: String(data) };
 }
 
 export async function acknowledgeCheckInAssistance(requestId: string, leaderNote?: string) {
-  const parsedId = requestIdSchema.safeParse(requestId);
-  if (!parsedId.success) return { error: parsedId.error.issues[0]?.message };
-
-  const scope = await requireAdminManagementAuth();
-  const adminSupabase = createAdminClient();
-
-  const authCheck = await checkWorkerAssistanceScope(adminSupabase, scope, parsedId.data);
-  if (authCheck.error) return { error: authCheck.error };
-
-  const updatePayload: Record<string, unknown> = {
-    status: "acknowledged",
-    acknowledged_by: scope.user.id,
-    acknowledged_at: new Date().toISOString(),
-  };
-
-  const cleanNote = leaderNote?.trim();
-  if (cleanNote) {
-    updatePayload.resolution_note = cleanNote;
+  const parsed = z.object({ requestId: requestIdSchema, note: noteSchema.optional() })
+    .safeParse({ requestId, note: leaderNote });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  const result = await updateRequest(parsed.data.requestId, "acknowledged", parsed.data.note);
+  if (result.success && result.status !== "acknowledged") {
+    return { error: "This request has already been closed. Refresh to see its outcome." };
   }
-
-  const { error } = await adminSupabase
-    .from("check_in_assistance_requests")
-    .update(updatePayload)
-    .eq("id", parsedId.data);
-
-  if (error) {
-    console.error("[CheckInAssistance] Acknowledge failed", error);
-    return { error: "Could not acknowledge this request. Please try again." };
-  }
-
-  revalidatePath("/admin/check-in-assistance");
-  revalidatePath("/dashboard");
-  return { success: true };
+  return result;
 }
 
 export async function sendLeaderNote(requestId: string, note: string) {
-  const parsedId = requestIdSchema.safeParse(requestId);
-  if (!parsedId.success) return { error: parsedId.error.issues[0]?.message };
-
-  const cleanNote = note?.trim();
-  if (!cleanNote || cleanNote.length < 2) {
-    return { error: "Please enter a valid note to send to the worker." };
-  }
-  if (cleanNote.length > 500) {
-    return { error: "Note must be 500 characters or less." };
-  }
-
-  const scope = await requireAdminManagementAuth();
-  const adminSupabase = createAdminClient();
-
-  const authCheck = await checkWorkerAssistanceScope(adminSupabase, scope, parsedId.data);
-  if (authCheck.error) return { error: authCheck.error };
-
-  const { error } = await adminSupabase
-    .from("check_in_assistance_requests")
-    .update({
-      resolution_note: cleanNote,
-      acknowledged_by: scope.user.id,
-      acknowledged_at: new Date().toISOString(),
-    })
-    .eq("id", parsedId.data);
-
-  if (error) {
-    console.error("[CheckInAssistance] Send note failed", error);
-    return { error: "Could not send note to worker. Please try again." };
-  }
-
-  revalidatePath("/admin/check-in-assistance");
-  revalidatePath("/dashboard");
-  return { success: true };
+  const parsed = z.object({
+    requestId: requestIdSchema,
+    note: noteSchema.min(2, "Please enter a note of at least two characters."),
+  }).safeParse({ requestId, note });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
+  return updateRequest(parsed.data.requestId, "note", parsed.data.note);
 }
 
 export async function closeCheckInAssistance(formData: FormData) {
@@ -132,119 +68,62 @@ export async function closeCheckInAssistance(formData: FormData) {
     status: formData.get("status"),
     resolutionNote: formData.get("resolutionNote"),
   });
-
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message || "Check the resolution details." };
   }
-
-  const scope = await requireAdminManagementAuth();
-  const adminSupabase = createAdminClient();
-
-  const authCheck = await checkWorkerAssistanceScope(adminSupabase, scope, parsed.data.requestId);
-  if (authCheck.error) return { error: authCheck.error };
-
-  const defaultNote = parsed.data.status === "dismissed"
-    ? "Request reviewed & dismissed by leader"
-    : "Verified and resolved by Leader";
-  const note = parsed.data.resolutionNote?.trim() || defaultNote;
-
-  const { error } = await adminSupabase
-    .from("check_in_assistance_requests")
-    .update({
-      status: parsed.data.status,
-      resolved_by: scope.user.id,
-      resolved_at: new Date().toISOString(),
-      resolution_note: note,
-    })
-    .eq("id", parsed.data.requestId);
-
-  if (error) {
-    console.error("[CheckInAssistance] Close failed", error);
-    return { error: "Could not update this request. Please try again." };
+  const note = parsed.data.resolutionNote || (parsed.data.status === "dismissed"
+    ? "Request reviewed and dismissed by leader."
+    : "Verified and resolved by leader.");
+  const result = await updateRequest(parsed.data.requestId, parsed.data.status, note);
+  if (result.success && result.status !== parsed.data.status) {
+    return { error: "Another update has already closed this request. Refresh to see its outcome." };
   }
-
-  revalidatePath("/admin/check-in-assistance");
-  revalidatePath("/dashboard");
-  return { success: true, status: parsed.data.status };
+  return result;
 }
 
-/**
- * Verifies a worker's physical presence at church, proxy checks them into the session,
- * and marks the assistance request as resolved with an audited leader note.
- */
+/** A support request does not itself prove presence or authorize check-in. */
 export async function verifyAndProxyCheckIn(requestId: string, resolutionNote?: string) {
-  const parsedId = requestIdSchema.safeParse(requestId);
-  if (!parsedId.success) return { error: parsedId.error.issues[0]?.message };
-
+  const parsed = z.object({ requestId: requestIdSchema, note: noteSchema.optional() })
+    .safeParse({ requestId, note: resolutionNote });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message };
   const scope = await requireAdminManagementAuth();
   const adminSupabase = createAdminClient();
+  const { data: request, error } = await adminSupabase
+    .from("check_in_assistance_requests")
+    .select("id, user_id, session_id, status")
+    .eq("id", parsed.data.requestId)
+    .maybeSingle();
+  if (error || !request) return { error: "Assistance request not found." };
 
-  const authCheck = await checkWorkerAssistanceScope(adminSupabase, scope, parsedId.data);
-  if (authCheck.error || !authCheck.request) return { error: authCheck.error || "Assistance request not found." };
-  const request = authCheck.request;
-
-  const note = resolutionNote?.trim() || "Verified physical presence at venue & checked in by Leader";
-
-  // Perform manual proxy check-in
+  if (!scope.isSuperAdmin) {
+    const { data: profile } = await adminSupabase.from("profiles")
+      .select("department_id, team_id").eq("id", request.user_id).maybeSingle();
+    const hasDepartmentAccess = profile?.department_id
+      && scope.managedDepartmentIds.includes(profile.department_id);
+    const hasTeamAccess = profile?.team_id && scope.managedTeamIds.includes(profile.team_id);
+    if (!hasDepartmentAccess && !hasTeamAccess) {
+      return { error: "This request is outside your administrative scope." };
+    }
+  }
+  if (request.status !== "open" && request.status !== "acknowledged") {
+    return { error: "This request has already been closed. Refresh to see its outcome." };
+  }
+  const note = parsed.data.note || "Verified physical presence at venue and checked in by leader.";
   const checkInResult = await manualWorkerCheckIn({
     workerId: request.user_id,
     sessionId: request.session_id,
     note,
   });
-
   if (checkInResult.error && !checkInResult.error.toLowerCase().includes("already checked in")) {
     return { error: checkInResult.error };
   }
 
-  // Mark assistance request as resolved with the note
-  const { error: updateError } = await adminSupabase
-    .from("check_in_assistance_requests")
-    .update({
-      status: "resolved",
-      resolved_by: scope.user.id,
-      resolved_at: new Date().toISOString(),
-      resolution_note: note,
-    })
-    .eq("id", parsedId.data);
-
-  if (updateError) {
-    console.error("[CheckInAssistance] Resolve update error:", updateError);
-  }
-
-  revalidatePath("/admin/check-in-assistance");
+  // Attendance's database trigger resolves the request and clears its alerts.
+  // Append the leader's note without replacing a concurrently changed status.
+  const result = await updateRequest(parsed.data.requestId, "note", note);
   revalidatePath("/admin/sessions");
-  revalidatePath("/dashboard");
-  return { success: true };
-}
-
-/**
- * Removes completed (resolved, dismissed, expired) assistance requests from the database
- * to prevent clutter.
- */
-export async function clearFinishedCheckInAssistance() {
-  const scope = await requireAdminManagementAuth();
-
-  if (!scope.isSuperAdmin) {
-    return { error: "Only Super Admins can clear finished assistance requests." };
+  if (result.success && result.status !== "resolved") {
+    return { error: "Attendance was recorded, but this request has a different outcome. Refresh to review it." };
   }
-
-  try {
-    const adminSupabase = createAdminClient();
-    const { data, error } = await adminSupabase
-      .from("check_in_assistance_requests")
-      .delete()
-      .in("status", ["resolved", "dismissed", "expired"])
-      .select("id");
-
-    if (error) {
-      console.error("[CheckInAssistance] Clear finished requests error:", error);
-      return { error: "Failed to clear finished requests." };
-    }
-
-    revalidatePath("/admin/check-in-assistance");
-    return { success: true, count: data?.length ?? 0 };
-  } catch (err: unknown) {
-    console.error("[CheckInAssistance] Clear finished requests exception:", err);
-    return { error: "Failed to clear finished requests." };
-  }
+  return result;
 }

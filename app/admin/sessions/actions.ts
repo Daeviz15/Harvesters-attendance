@@ -172,18 +172,11 @@ export async function endSession(sessionId: string) {
             return { error: "Failed to end session. It may have already ended." };
         }
 
-        // Clean up assistance requests for the completed session so the database does not fill up
-        try {
-            const adminSupabase = createAdminClient();
-            await adminSupabase
-                .from('check_in_assistance_requests')
-                .delete()
-                .eq('session_id', sessionId);
-        } catch (cleanupErr) {
-            console.warn('[Sessions] Failed to auto-clear assistance requests for ended session:', cleanupErr);
-        }
+        // The session-end trigger expires outstanding support requests. Preserve
+        // every report and its outcome for the complaint history.
 
         revalidatePath("/admin/sessions");
+        revalidatePath("/admin/check-in-assistance");
         revalidatePath("/admin");
         revalidatePath("/dashboard");
         return { success: true };

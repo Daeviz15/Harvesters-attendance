@@ -81,6 +81,11 @@ function isNextRedirectError(error: unknown) {
 function getMutationErrorMessage(action: "create" | "update" | "delete", error: { code?: string; message?: string }) {
     const message = error.message?.toLowerCase() || "";
 
+    if (action === "delete" && (error.code === "23503" || error.code === "23001")
+        && message.includes("check_in_assistance")) {
+        return "This event has worker complaint history and must be retained. Disable the event instead of deleting it.";
+    }
+
     if (
         error.code === "42703" ||
         error.code === "PGRST204" ||
