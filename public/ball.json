@@ -1,0 +1,235 @@
+{
+  "_instructions_for_claude": "Build a responsive, elegant event website for the Harvesters Globe Ologolo Workers Ball 2026 using this theme specification. Match the mood of the event flyer: a dark, cinematic gala night lit by a single warm golden spotlight. Use the colors, typography, imagery direction, components and content below. Keep it mobile-first, since most guests will open it from WhatsApp or Instagram links.",
+
+  "event": {
+    "name": "Workers Ball 2026",
+    "theme_title": "Light of Globe",
+    "theme_title_parts": { "kicker": "LIGHT OF", "headline": "GLOBE" },
+    "background_watermark_word": "LUMINA",
+    "tagline_suggestions": [
+      "An evening of light, elegance and celebration",
+      "Celebrating the workers who light up our Globe"
+    ],
+    "organizer": "Harvesters International Christian Centre",
+    "campus": "Globe Ologolo",
+    "date": "2026-11-22",
+    "date_display": "22ND NOV. 2026",
+    "time": "16:00",
+    "time_display": "4PM",
+    "timezone": "Africa/Lagos",
+    "venue": "Harvesters Globe Ologolo",
+    "venue_display": "HARVESTERS GLOBE OLOGOLO",
+    "audience": "Church workers and volunteers",
+    "dress_code_suggestion": "Black tie / formal gala attire (gold accents encouraged)"
+  },
+
+  "brand_mood": {
+    "keywords": ["cinematic", "luxurious", "gala night", "spotlight", "gold and black", "elegant", "bold", "warm"],
+    "description": "Near-black backgrounds with a warm amber glow falling from a single overhead spotlight. Silhouetted couple in formal wear (tuxedo and satin gown). Huge bold white headline text overlapping the figures, with a faint oversized watermark word behind. Gold and bright yellow accents for dates and highlights. Soft bokeh and blurred banquet tables suggest a ballroom.",
+    "avoid": ["bright white page backgrounds", "cool blues or greens", "playful or cartoonish styling", "thin, light-weight body-only typography for headlines"]
+  },
+
+  "colors": {
+    "background": {
+      "base": "#0A0806",
+      "deep": "#050403",
+      "warm_shadow": "#1A130B",
+      "surface": "#15100A",
+      "surface_elevated": "#211810"
+    },
+    "gold": {
+      "spotlight_core": "#FFE7A3",
+      "light": "#F3D27A",
+      "primary": "#D4A445",
+      "deep": "#A97A2B",
+      "bronze": "#6B4A1E"
+    },
+    "accent_yellow": "#F7D046",
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#E8DCC4",
+      "muted": "#A8987C",
+      "on_gold": "#0A0806"
+    },
+    "watermark": "rgba(212, 164, 69, 0.12)",
+    "border_gold": "rgba(212, 164, 69, 0.55)",
+    "overlay_dark": "rgba(5, 4, 3, 0.75)"
+  },
+
+  "gradients": {
+    "spotlight": "radial-gradient(ellipse 45% 70% at 50% 0%, rgba(255,231,163,0.55) 0%, rgba(212,164,69,0.25) 35%, rgba(10,8,6,0) 75%)",
+    "page_background": "linear-gradient(180deg, #0A0806 0%, #1A130B 55%, #050403 100%)",
+    "gold_text": "linear-gradient(180deg, #FFE7A3 0%, #F3D27A 40%, #D4A445 70%, #A97A2B 100%)",
+    "gold_button": "linear-gradient(135deg, #F3D27A 0%, #D4A445 50%, #A97A2B 100%)",
+    "floor_reflection": "linear-gradient(0deg, rgba(212,164,69,0.18) 0%, rgba(10,8,6,0) 40%)",
+    "kicker_banner": "linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.85) 20%, rgba(0,0,0,0.85) 80%, rgba(0,0,0,0) 100%)"
+  },
+
+  "typography": {
+    "google_fonts_import": "https://fonts.googleapis.com/css2?family=Archivo+Black&family=Bebas+Neue&family=Oswald:wght@500;600;700&family=Playfair+Display:ital,wght@0,600;1,500&family=Inter:wght@400;500;600&display=swap",
+    "display_headline": {
+      "use_for": "The giant 'GLOBE' headline and hero titles",
+      "font_family": "'Archivo Black', 'Montserrat', sans-serif",
+      "weight": 900,
+      "transform": "uppercase",
+      "letter_spacing": "-0.02em",
+      "line_height": 0.9,
+      "size": "clamp(4rem, 16vw, 12rem)",
+      "color": "#FFFFFF"
+    },
+    "kicker": {
+      "use_for": "'LIGHT OF' label above the headline, section eyebrows",
+      "font_family": "'Archivo Black', sans-serif",
+      "transform": "uppercase",
+      "letter_spacing": "0.04em",
+      "size": "clamp(1.25rem, 3.5vw, 2.25rem)",
+      "color": "#FFFFFF",
+      "style_note": "Sits on a dark banner strip that fades to transparent at both ends (see gradients.kicker_banner)"
+    },
+    "condensed_info": {
+      "use_for": "Date, time, venue, countdown numbers, section headings",
+      "font_family": "'Bebas Neue', 'Oswald', sans-serif",
+      "transform": "uppercase",
+      "letter_spacing": "0.02em",
+      "colors": { "large_numbers": "#E8E4F0", "details": "#F7D046" },
+      "note": "On the flyer, '22ND' is large and near-white, while 'NOV. 2026', '4PM' and the venue are in bright yellow"
+    },
+    "badge": {
+      "use_for": "'WORKERS BALL 2026' pill badge",
+      "font_family": "'Oswald', sans-serif",
+      "weight": 700,
+      "transform": "uppercase",
+      "colors": { "line_1": "#FFFFFF", "line_2": "gold_text gradient" }
+    },
+    "elegant_accent": {
+      "use_for": "Optional script-like or serif touches: quotes, 'An evening of elegance', RSVP intro",
+      "font_family": "'Playfair Display', serif",
+      "style": "italic",
+      "color": "#F3D27A"
+    },
+    "body": {
+      "font_family": "'Inter', system-ui, sans-serif",
+      "weight": 400,
+      "size": "1rem",
+      "line_height": 1.65,
+      "color": "#E8DCC4"
+    }
+  },
+
+  "imagery": {
+    "flyer_reference": "Use the original event flyer as the hero/OG image if provided",
+    "hero": "A silhouetted couple in formal wear (man in a three-piece suit, woman in a satin strapless gown) standing under a single warm overhead spotlight on a dark, reflective stage floor",
+    "secondary": "Blurred gala banquet tables with gold chiavari chairs, white linen, candles and glassware in the foreground, shot with shallow depth of field",
+    "treatment": [
+      "Warm amber/gold color grade",
+      "Heavy vignette to near-black at the edges",
+      "Light haze or fog in the spotlight beam",
+      "Subtle halftone or film-grain texture overlay (opacity ~0.06)",
+      "Soft golden bokeh particles"
+    ],
+    "icons": {
+      "style": "Simple line icons in accent yellow (#F7D046)",
+      "needed": ["calendar with clock", "location pin", "dress/tie", "ticket", "music", "camera"]
+    }
+  },
+
+  "layout": {
+    "max_width": "1200px",
+    "section_padding": "clamp(4rem, 10vw, 8rem) 1.5rem",
+    "border_radius": { "small": "6px", "card": "14px", "pill": "999px" },
+    "grid": "Asymmetric editorial layout; event details anchored bottom-left as on the flyer",
+    "hero_composition": [
+      "Organizer logo top-left (white)",
+      "'WORKERS BALL 2026' oval pill badge top-right with a thin gold outline",
+      "Spotlight cone falling from the top centre",
+      "Huge faint 'LUMINA' watermark behind, repeated on two lines",
+      "'LIGHT OF' kicker on a dark banner strip, then giant white 'GLOBE' headline overlapping the silhouettes",
+      "Date, time and venue stacked bottom-left with yellow icons",
+      "Primary RSVP button below the details"
+    ]
+  },
+
+  "components": {
+    "badge_pill": {
+      "shape": "Oval pill",
+      "background": "#0A0806",
+      "border": "2px solid #D4A445",
+      "inner_glow": "0 0 12px rgba(212,164,69,0.35)",
+      "content": "WORKERS (white) / BALL 2026 (gold gradient)"
+    },
+    "button_primary": {
+      "background": "gradients.gold_button",
+      "text_color": "#0A0806",
+      "font": "Oswald 600, uppercase, letter-spacing 0.08em",
+      "radius": "999px",
+      "padding": "0.9rem 2.2rem",
+      "hover": "Brighten and add box-shadow 0 0 24px rgba(243,210,122,0.55)"
+    },
+    "button_secondary": {
+      "background": "transparent",
+      "border": "1.5px solid #D4A445",
+      "text_color": "#F3D27A",
+      "hover": "Fill with rgba(212,164,69,0.12)"
+    },
+    "card": {
+      "background": "#15100A",
+      "border": "1px solid rgba(212,164,69,0.25)",
+      "radius": "14px",
+      "shadow": "0 20px 40px rgba(0,0,0,0.5)",
+      "hover": "Border brightens to #D4A445 and the card lifts slightly"
+    },
+    "divider": "1px gold line fading to transparent at both ends, with a small diamond or star in the centre",
+    "countdown": {
+      "numbers": "Bebas Neue, large, white",
+      "labels": "Oswald, small, uppercase, #F7D046",
+      "boxes": "Card style with a gold top border"
+    }
+  },
+
+  "effects_and_motion": {
+    "spotlight_glow": "Slow pulsing opacity (0.85 to 1) on the spotlight gradient, ~6s ease-in-out infinite",
+    "particles": "Few floating golden dust or bokeh particles drifting slowly upward in the hero",
+    "text_reveal": "Headline fades and scales in from 1.05 to 1, kicker slides down",
+    "scroll": "Sections fade up 24px on enter",
+    "grain": "Fixed SVG noise overlay at ~5% opacity",
+    "respect_reduced_motion": true
+  },
+
+  "suggested_pages_or_sections": [
+    { "id": "hero", "content": "Theme title, badge, date, time, venue, RSVP button, countdown" },
+    { "id": "about", "content": "About the Workers Ball and the 'Light of Globe / Lumina' theme" },
+    { "id": "programme", "content": "Evening schedule: arrival & red carpet, opening prayer, dinner, awards & recognition, entertainment, dance, closing" },
+    { "id": "dress_code", "content": "Formal / black tie with gold accents; style inspiration images" },
+    { "id": "awards", "content": "Worker recognition categories (optional)" },
+    { "id": "rsvp", "content": "RSVP form: full name, department/unit, phone, email, attending with partner (yes/no), dietary needs" },
+    { "id": "venue", "content": "Harvesters Globe Ologolo, embedded map, directions and parking notes" },
+    { "id": "gallery", "content": "Photo gallery placeholder for after the event" },
+    { "id": "footer", "content": "Harvesters International Christian Centre, Globe Ologolo; social links; contact" }
+  ],
+
+  "css_variables": {
+    "--bg": "#0A0806",
+    "--bg-deep": "#050403",
+    "--bg-warm": "#1A130B",
+    "--surface": "#15100A",
+    "--gold-glow": "#FFE7A3",
+    "--gold-light": "#F3D27A",
+    "--gold": "#D4A445",
+    "--gold-deep": "#A97A2B",
+    "--bronze": "#6B4A1E",
+    "--yellow": "#F7D046",
+    "--text": "#FFFFFF",
+    "--text-soft": "#E8DCC4",
+    "--text-muted": "#A8987C",
+    "--font-display": "'Archivo Black', sans-serif",
+    "--font-condensed": "'Bebas Neue', 'Oswald', sans-serif",
+    "--font-accent": "'Playfair Display', serif",
+    "--font-body": "'Inter', system-ui, sans-serif"
+  },
+
+  "accessibility": {
+    "contrast": "Keep body text at #E8DCC4 or brighter on dark surfaces; never put gold body text on bronze",
+    "alt_text": "Describe silhouettes and venue imagery",
+    "focus_states": "2px solid #F7D046 outline with 3px offset"
+  }
+}

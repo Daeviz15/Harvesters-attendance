@@ -2,6 +2,7 @@ import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
 import type SMTPPool from "nodemailer/lib/smtp-pool";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import QRCode from "qrcode";
 
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 587;
@@ -821,6 +822,150 @@ export interface SendCustomBroadcastEmailParams {
     bodyMarkdownOrText: string;
     eventTitle?: string;
     notificationId?: string;
+}
+
+export interface SendWorkersBallGatePassParams {
+    toEmail: string;
+    firstName: string;
+    lastName?: string;
+    registrationId: string;
+    department: string;
+    team?: string | null;
+    attendanceCode?: string | null;
+    qrToken?: string | null;
+    attendingWithPartner?: boolean;
+    notificationId?: string;
+}
+
+export async function sendWorkersBallGatePassEmail({
+    toEmail,
+    firstName,
+    lastName = "",
+    registrationId,
+    department,
+    team,
+    attendanceCode,
+    qrToken,
+    attendingWithPartner = false,
+    notificationId,
+}: SendWorkersBallGatePassParams): Promise<EmailSendResult> {
+    const safeFirstName = escapeHtml(firstName);
+    const safeFullName = escapeHtml(`${firstName} ${lastName}`.trim());
+    const safeRegistrationId = escapeHtml(registrationId);
+    const teamDisplay = escapeHtml(team ? `${team} — ${department}` : department);
+    const subjectFirstName = sanitizeHeaderText(firstName, "there");
+
+    // Build gate pass with QR code — all WAB registrants attend
+    const appUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://www.globeattendance.org";
+    const checkinUrl = `${appUrl}/workers-ball/checkin?token=${qrToken}`;
+
+    // Generate QR code as PNG buffer
+    let qrBuffer: Buffer | null = null;
+    try {
+        qrBuffer = await QRCode.toBuffer(checkinUrl, {
+            type: "png",
+            width: 200,
+            margin: 2,
+            color: { dark: "#000000", light: "#FFFFFF" },
+        });
+    } catch {
+        // QR generation is non-fatal; email sends without it
+    }
+
+    const qrImageHtml = qrBuffer
+        ? `<img src="cid:workers-ball-qr" alt="Gate Pass QR Code" width="160" height="160" style="display:block;width:160px;height:160px;border:0;" />`
+        : `<div style="width:160px;height:160px;background:#1a1a1a;border:1px solid #333;border-radius:4px;display:flex;align-items:center;justify-content:center;"><p style="margin:0;font-size:11px;color:#71717a;text-align:center;">QR unavailable<br/>use code below</p></div>`;
+
+    const html = renderEmailShell({
+        preheader: `Your Workers' Ball 2026 gate pass is ready, ${firstName}. Code: ${attendanceCode}.`,
+        eyebrow: "Workers Ball 2026",
+        content: `
+            <h1 style="margin:0 0 8px;font-size:24px;font-weight:700;color:#ffffff;">Your Gate Pass is Ready, <span style="color:#f59e0b;">${safeFirstName}</span>!</h1>
+            <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#a1a1aa;">You are confirmed for <strong style="color:#ffffff;">Workers Ball 2026</strong> on 22nd November, 4PM at Harvesters Globe Ologolo. Present this gate pass at the entrance on the day of the event.</p>
+
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background:linear-gradient(135deg,#1a0f00,#0f0a00);border-radius:16px;border:1px solid #f59e0b40;padding:24px;margin-bottom:24px;">
+                <tr>
+                    <td align="center" style="padding-bottom:20px;border-bottom:1px solid #f59e0b20;">
+                        <div style="font-size:10px;font-weight:700;color:#f59e0b;text-transform:uppercase;letter-spacing:3px;margin-bottom:4px;">22nd Nov. 2026 &bull; 4PM</div>
+                        <div style="font-size:20px;font-weight:800;color:#ffffff;">Workers&apos; Ball 2026</div>
+                        <div style="font-size:11px;color:#a1a1aa;margin-top:4px;">Harvesters International Christian Centre &bull; Globe Centre</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="center" style="padding:20px 0;">
+                        <table role="presentation" border="0" cellspacing="0" cellpadding="0">
+                            <tr>
+                                <td align="center" style="background:#ffffff;padding:10px;border-radius:8px;border:3px solid #f59e0b;">
+                                    ${qrImageHtml}
+                                </td>
+                            </tr>
+                        </table>
+                        <div style="margin-top:12px;font-size:11px;color:#71717a;">Scan this QR code at the entrance</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="center" style="padding-top:16px;border-top:1px solid #f59e0b20;">
+                        <div style="font-size:10px;font-weight:700;color:#a1a1aa;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">Backup Attendance Code</div>
+                        <div style="font-family:'Courier New',monospace;font-size:36px;font-weight:800;color:#f59e0b;letter-spacing:8px;">${escapeHtml(attendanceCode || "-----")}</div>
+                        <div style="font-size:11px;color:#71717a;margin-top:8px;">Provide this code if the QR code cannot be scanned</div>
+                    </td>
+                </tr>
+            </table>
+
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#141414;border-radius:12px;border:1px solid #262626;padding:20px;margin-bottom:24px;">
+                <tr><td>
+                    <div style="font-size:10px;font-weight:700;color:#71717a;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:12px;">Attendee Details</div>
+                    <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0">
+                        <tr>
+                            <td width="50%" style="padding-bottom:10px;vertical-align:top;">
+                                <div style="font-size:11px;color:#71717a;margin-bottom:3px;">Name</div>
+                                <div style="font-size:14px;font-weight:600;color:#ffffff;">${safeFullName}</div>
+                            </td>
+                            <td width="50%" style="padding-bottom:10px;vertical-align:top;">
+                                <div style="font-size:11px;color:#71717a;margin-bottom:3px;">Team / Department</div>
+                                <div style="font-size:14px;font-weight:600;color:#f59e0b;">${teamDisplay}</div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td colspan="2" style="padding-top:10px;border-top:1px solid #262626;">
+                                <div style="font-size:11px;color:#71717a;margin-bottom:3px;">Registration ID</div>
+                                <div style="font-family:'Courier New',monospace;font-size:14px;font-weight:600;color:#a1a1aa;">${safeRegistrationId}</div>
+                            </td>
+                        </tr>
+                        ${attendingWithPartner ? `<tr><td colspan="2" style="padding-top:10px;"><div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(212,164,69,0.15);border:1px solid rgba(212,164,69,0.4);font-size:11px;font-weight:700;color:#D4A445;">+1 Guest &bull; Partner Attending</div></td></tr>` : ""}
+                    </table>
+                </td></tr>
+            </table>
+
+            <p style="margin:0;font-size:12px;line-height:1.7;color:#71717a;text-align:center;">This gate pass is unique to you. Do not share it with others.<br/>Keep this email accessible on your phone for event-day check-in.</p>`,
+    });
+
+    const text = [
+        `Your Gate Pass — Workers' Ball 2026`,
+        "22nd November 2026, 4PM — Harvesters Globe Ologolo",
+        "Harvesters International Christian Centre — Globe Centre",
+        "",
+        `Name: ${`${firstName} ${lastName}`.trim()}`,
+        `Team / Department: ${team ? `${team} — ${department}` : department}`,
+        `Registration ID: ${registrationId}`,
+        "",
+        `Backup Attendance Code: ${attendanceCode}`,
+        "",
+        "Present your QR code or backup code at the entrance on the day of the event.",
+        "This gate pass is unique to you. Do not share it with others.",
+    ].join("\n");
+
+    const extraAttachments = qrBuffer
+        ? [{ filename: "gate-pass-qr.png", content: qrBuffer, cid: "workers-ball-qr", contentType: "image/png" as const }]
+        : [];
+
+    return sendEmail({
+        to: toEmail,
+        subject: `Your Workers' Ball 2026 Gate Pass — ${subjectFirstName}`,
+        text,
+        html,
+        attachments: extraAttachments,
+    }, notificationId);
 }
 
 export async function sendCustomBroadcastEmail({

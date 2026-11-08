@@ -9,7 +9,7 @@ import { validateDateOfBirth } from "@/lib/date-of-birth";
 import { requireAdminManagementAuth as requireAdminAuth } from "@/lib/rbac";
 import { ADD_WORKER_RESTRICTED_MESSAGE, canManageWorkerAccess } from "@/lib/admin-permissions";
 
-const editableRoles = ["worker", "admin", "team_admin", "reports_admin"] as const;
+const editableRoles = ["worker", "admin", "team_admin", "reports_admin", "front_desk"] as const;
 type EditableRole = (typeof editableRoles)[number];
 
 function isEditableRole(role: string): role is EditableRole {

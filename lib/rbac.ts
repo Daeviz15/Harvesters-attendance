@@ -279,6 +279,41 @@ export async function requireAdminManagementAuth(): Promise<AdminAuthScope> {
 }
 
 /**
+ * Lightweight gatekeeper for the Workers' Ball event-day check-in page.
+ * Accepts: admin, super_admin, team_admin, and front_desk roles.
+ * front_desk is a temporary event-only role; it cannot access the admin panel.
+ */
+export async function requireWabCheckinAccess(): Promise<{ userId: string; name: string; role: string }> {
+  const supabase = await createClient();
+  const { data: { user }, error } = await supabase.auth.getUser();
+
+  if (error || !user) {
+    redirect("/auth/login?redirectTo=/workers-ball/checkin");
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("first_name, last_name, role, is_active")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile || profile.is_active === false) {
+    redirect("/auth/login?reason=login_required");
+  }
+
+  const allowed = ["admin", "super_admin", "team_admin", "front_desk"];
+  if (!allowed.includes(profile.role ?? "")) {
+    redirect("/dashboard?reason=no_checkin_access");
+  }
+
+  return {
+    userId: user.id,
+    name: `${profile.first_name ?? ""} ${profile.last_name ?? ""}`.trim(),
+    role: profile.role ?? "",
+  };
+}
+
+/**
  * Gatekeeper for reports surfaces and report exports.
  */
 export async function requireReportsAuth(): Promise<AdminAuthScope> {

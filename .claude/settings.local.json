@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(psql:*)",
+      "Bash(grep:*)",
+      "Bash(supabase:*)",
+      "Bash(scoop:*)",
+      "Bash(winget install:*)",
+      "Bash(winget search:*)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(powershell -Command \"Invoke-WebRequest -Uri 'https://github.com/supabase/cli/releases/download/v3.0.0/supabase_3.0.0_windows_amd64.zip' -OutFile 'C:\\\\Users\\\\HomePC\\\\AppData\\\\Local\\\\Temp\\\\supabase_cli.zip' -UseBasicParsing; \\(Get-Item 'C:\\\\Users\\\\HomePC\\\\AppData\\\\Local\\\\Temp\\\\supabase_cli.zip'\\).Length\" 2>&1)",
+      "Bash(SRK=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF6YXJlb2t1eXZ2aGlrZGt1dW1xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTUzNjYxOSwiZXhwIjoyMDk3MTEyNjE5fQ.SnJaOXNRyyT-WNIcxB2wTpg6rOe1oLbrorX1QirzjpM\"\ncurl -s -X POST \"https://azareokuyvvhikdkuumq.supabase.co/rest/v1/sql\" \\\\\n  -H \"Authorization: Bearer $SRK\" \\\\\n  -H \"apikey: $SRK\" \\\\\n  -H \"Content-Type: application/sql\" \\\\\n  -d \"SELECT 1 AS check\" 2>&1)",
+      "Bash(powershell -Command \"\n\\\\$url = 'https://github.com/supabase/cli/releases/download/v3.0.0/supabase_3.0.0_windows_amd64.zip'\n\\\\$out = 'C:\\\\Users\\\\HomePC\\\\AppData\\\\Local\\\\Temp\\\\supabase_cli.zip'\n\\\\$client = New-Object System.Net.WebClient\n\\\\$client.DownloadFile\\(\\\\$url, \\\\$out\\)\n\\(Get-Item \\\\$out\\).Length\n\" 2>&1)"
+    ]
+  }
+}
