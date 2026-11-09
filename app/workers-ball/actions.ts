@@ -18,7 +18,8 @@ export type RegisterState = {
     lastName?: string;
     department?: string;
     photoUrl?: string | null;
-    isResend?: boolean; // true when re-sending to an already-registered attendee
+    /** True when this email/phone already has a seat. No registration details are returned. */
+    alreadyRegistered?: boolean;
 } | null;
 
 // ─── Photo upload ─────────────────────────────────────────────────────────────
@@ -90,10 +91,6 @@ const registerSchema = z.object({
         .string().trim()
         .min(10, "Please share your expectations (at least 10 characters).")
         .max(2000),
-    attendingWithPartner: z
-        .string()
-        .refine((v) => v === "yes" || v === "no", "Please answer the partner question.")
-        .transform((v) => v === "yes"),
     wantsToPresent: z
         .string()
         .refine((v) => v === "yes" || v === "no", "Please answer the presentation question.")
@@ -152,7 +149,6 @@ export async function registerForWorkersBall(
         birthdayDay:          formData.get("birthdayDay") ?? "",
         departmentId:         formData.get("departmentId") ?? "",
         expectations:         formData.get("expectations") ?? "",
-        attendingWithPartner: formData.get("attendingWithPartner") ?? "no",
         wantsToPresent:       formData.get("wantsToPresent") ?? "no",
         presentationDetails:  formData.get("presentationDetails") ?? "",
     };
@@ -166,7 +162,6 @@ export async function registerForWorkersBall(
         firstName, lastName, email, phone,
         birthdayMonth, birthdayDay,
         departmentId, expectations,
-        attendingWithPartner,
         wantsToPresent, presentationDetails,
     } = parsed.data;
 
@@ -179,35 +174,34 @@ export async function registerForWorkersBall(
     const supabase = await createClient();
     const { data: { user: loggedInUser } } = await supabase.auth.getUser();
 
-    // ── 1. Already registered? → Re-send gate pass silently ──────────────────
-    const existingCols = "id, user_id, registration_id, attendance_code, qr_token, first_name, last_name, department, team, attending_with_partner, photo_url";
+    // ── 1. Already registered? → No second registration ─────────────────────
+    // The seat is already reserved. We re-send the gate pass to the email ON FILE
+    // (never to whatever was typed) and return no codes, so nobody can pull up
+    // someone else's gate pass by entering their phone number or email.
+    const existingCols = "id, email, registration_id, attendance_code, qr_token, first_name, last_name, department, team";
     const { data: existingByEmail } = await adminClient
         .from("workers_ball_registrations")
         .select(existingCols)
         .eq("email", email)
         .maybeSingle();
 
-    const existing = existingByEmail ?? (await adminClient
+    const existingByPhone = existingByEmail ? null : (await adminClient
         .from("workers_ball_registrations")
         .select(existingCols)
         .eq("phone", fullPhone)
         .maybeSingle()).data;
 
-    if (existing) {
-        // Only let a resend replace the photo if none is set yet, or it's the owner doing it
-        let photoUrl: string | null = existing.photo_url ?? null;
-        const mayChangePhoto = !existing.photo_url || (!!loggedInUser && loggedInUser.id === existing.user_id);
-        if (photo && mayChangePhoto) {
-            const uploaded = await uploadPhoto(adminClient, photo, existing.user_id);
-            if (uploaded) {
-                photoUrl = uploaded;
-                await adminClient.from("workers_ball_registrations").update({ photo_url: uploaded }).eq("id", existing.id);
-            }
-        }
+    // A logged-in worker gets one seat, even if they type a different email/phone
+    const existing = existingByEmail ?? existingByPhone ?? (loggedInUser ? (await adminClient
+        .from("workers_ball_registrations")
+        .select(existingCols)
+        .eq("user_id", loggedInUser.id)
+        .maybeSingle()).data : null);
 
+    if (existing) {
         try {
             await sendWorkersBallGatePassEmail({
-                toEmail: email,
+                toEmail: existing.email,
                 firstName: existing.first_name,
                 lastName: existing.last_name ?? "",
                 registrationId: existing.registration_id,
@@ -215,21 +209,11 @@ export async function registerForWorkersBall(
                 team: existing.team,
                 attendanceCode: existing.attendance_code,
                 qrToken: existing.qr_token,
-                attendingWithPartner: existing.attending_with_partner ?? false,
             });
         } catch (e) {
             console.error("[WAB] Re-send gate pass failed:", e);
         }
-        return {
-            success: true,
-            isResend: true,
-            registrationId: existing.registration_id,
-            attendanceCode: existing.attendance_code ?? undefined,
-            firstName: existing.first_name,
-            lastName: existing.last_name ?? "",
-            department: existing.department,
-            photoUrl,
-        };
+        return { alreadyRegistered: true, firstName };
     }
 
     // ── 2. Department lookup ──────────────────────────────────────────────────
@@ -371,7 +355,6 @@ export async function registerForWorkersBall(
             department_id:          dept.id,
             team:                   dept.team,
             expectations,
-            attending_with_partner: attendingWithPartner,
             wants_to_present:       wantsToPresent,
             presentation_details:   wantsToPresent ? (presentationDetails || null) : null,
             attendance_code:        attendanceCode,
@@ -382,8 +365,12 @@ export async function registerForWorkersBall(
     if (insertError) {
         console.error("[WAB] Insert error:", insertError);
         if (insertError.code === "23505") {
-            // Unique constraint hit — re-query and return existing data
-            return { error: "It looks like you're already registered. Please check your email for your gate pass." };
+            // Lost a race with a simultaneous submit (e.g. double tap) — the seat exists
+            if (insertError.message.includes("wab_one_seat_per_")) {
+                return { alreadyRegistered: true, firstName };
+            }
+            // Rare registration ID / code collision — safe to just try again
+            return { error: "Something went wrong saving your registration. Please submit again." };
         }
         return { error: "Registration could not be saved. Please try again." };
     }
@@ -399,7 +386,6 @@ export async function registerForWorkersBall(
             team: dept.team,
             attendanceCode,
             qrToken,
-            attendingWithPartner,
         });
     } catch (emailErr) {
         console.error("[WAB] Gate pass email failed:", emailErr);

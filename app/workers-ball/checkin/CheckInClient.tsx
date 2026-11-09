@@ -35,11 +35,8 @@ export default function CheckInClient({ preloaded, preloadedToken }: Props) {
     }
 
     function handleReset() {
-        setConfirmState(null);
-        // If this was a QR scan, navigate back to the base check-in page
-        if (preloadedToken) {
-            window.location.href = "/workers-ball/checkin";
-        }
+        // Start fresh so no previous attendee's details can be confirmed by mistake
+        window.location.href = "/workers-ball/checkin";
     }
 
     // ── Determine what time to show for already-checked-in ───────────────────
@@ -83,14 +80,14 @@ export default function CheckInClient({ preloaded, preloadedToken }: Props) {
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
-                            <div className="text-green-400 font-bold text-lg mb-1">Checked In!</div>
+                            <div className="text-green-400 font-bold text-lg mb-1">Admitted — 1 person</div>
                             <div className="text-white font-semibold text-xl mb-1">{attendee?.name}</div>
                             <div className="text-amber-400/80 text-sm font-medium mb-1">
                                 {attendee?.team ? `${attendee.team} — ${attendee?.department}` : attendee?.department}
                             </div>
                             <div className="text-neutral-500 text-xs mb-4">{attendee?.registrationId}</div>
                             {checkedInTime && (
-                                <div className="text-green-400/70 text-xs mb-4">Checked in at {checkedInTime}</div>
+                                <div className="text-green-400/70 text-xs mb-4">Checked in at {checkedInTime}. This ticket is now used and can&apos;t be scanned again.</div>
                             )}
                             <button
                                 onClick={handleReset}
@@ -107,14 +104,16 @@ export default function CheckInClient({ preloaded, preloadedToken }: Props) {
                             key="already"
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="bg-[#1a1500] border border-amber-500/40 rounded-2xl p-6 text-center"
+                            role="alert"
+                            className="bg-[#1a0505] border-2 border-red-500/60 rounded-2xl p-6 text-center"
                         >
-                            <div className="w-14 h-14 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-7 h-7 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            <div className="w-14 h-14 rounded-full bg-red-500/15 border border-red-500/40 flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 5.636l-12.728 12.728M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
                             </div>
-                            <div className="text-amber-400 font-bold text-base mb-1">Already Checked In</div>
+                            <div className="text-red-400 font-black text-xl uppercase tracking-wide mb-1">Ticket already used</div>
+                            <div className="text-red-300/80 text-sm font-semibold mb-3">Do not admit with this ticket</div>
                             {attendee && (
                                 <>
                                     <div className="text-white font-semibold text-lg mb-1">{attendee.name}</div>
@@ -124,7 +123,10 @@ export default function CheckInClient({ preloaded, preloadedToken }: Props) {
                                 </>
                             )}
                             {checkedInTime && (
-                                <div className="text-neutral-400 text-xs mb-4">Previously checked in at {checkedInTime}</div>
+                                <div className="text-neutral-400 text-xs mb-4">
+                                    Admitted at {checkedInTime}{attendee?.checkedInByName ? ` by ${attendee.checkedInByName}` : ""}.
+                                    If this is the person named above, a leader can help confirm who they are.
+                                </div>
                             )}
                             <button
                                 onClick={handleReset}
@@ -156,7 +158,7 @@ export default function CheckInClient({ preloaded, preloadedToken }: Props) {
                                 disabled={isConfirming}
                                 className="w-full py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 disabled:opacity-50 text-black font-black text-sm uppercase tracking-widest transition-all"
                             >
-                                {isConfirming ? "Recording..." : "Confirm Check-in ✓"}
+                                {isConfirming ? "Recording..." : "Admit 1 person ✓"}
                             </button>
                             <button
                                 onClick={handleReset}
@@ -247,7 +249,7 @@ export default function CheckInClient({ preloaded, preloadedToken }: Props) {
             </div>
 
             <div className="mt-10 text-center text-xs text-neutral-700">
-                Workers Ball 2026 &bull; Administrators only
+                Workers Ball 2026 &bull; Front desk staff only &bull; Each ticket admits one person, once
             </div>
         </main>
     );

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck, ClipboardList, ArrowLeftRight, CircleHelp } from "lucide-react";
+import { Calendar, Users, Activity, LogOut, LayoutDashboard, Menu, X, History, MapPin, Building2, Shield, MailCheck, ClipboardList, ArrowLeftRight, CircleHelp, DoorOpen } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
@@ -19,6 +19,7 @@ const allNavLinks = [
     { name: "Check-in Help", href: "/admin/check-in-assistance", icon: CircleHelp, superAdminOnly: false },
     { name: "Workers", href: "/admin/workers", icon: Users, superAdminOnly: false },
     { name: "Leave Requests", href: "/admin/leave-requests", icon: ClipboardList, superAdminOnly: false },
+    { name: "Ball Front Desk", href: "/admin/front-desk", icon: DoorOpen, superAdminOnly: true },
     { name: "Departments", href: "/admin/departments", icon: Building2, superAdminOnly: true },
     { name: "Reports", href: "/admin/reports", icon: History, superAdminOnly: false },
     { name: "Locations", href: "/admin/locations", icon: MapPin, superAdminOnly: true },

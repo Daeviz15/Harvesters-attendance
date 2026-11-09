@@ -280,20 +280,21 @@ export async function requireAdminManagementAuth(): Promise<AdminAuthScope> {
 
 /**
  * Lightweight gatekeeper for the Workers' Ball event-day check-in page.
- * Accepts: admin, super_admin, team_admin, and front_desk roles.
- * front_desk is a temporary event-only role; it cannot access the admin panel.
+ * Accepts admins (admin, super_admin, team_admin) and workers with temporary
+ * front desk access (profiles.wab_front_desk). Front desk access lasts until an
+ * admin removes it, and never opens the admin panel.
  */
 export async function requireWabCheckinAccess(): Promise<{ userId: string; name: string; role: string }> {
   const supabase = await createClient();
   const { data: { user }, error } = await supabase.auth.getUser();
 
   if (error || !user) {
-    redirect("/auth/login?redirectTo=/workers-ball/checkin");
+    redirect(`/auth/login?next=${encodeURIComponent("/workers-ball/checkin")}`);
   }
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("first_name, last_name, role, is_active")
+    .select("first_name, last_name, role, is_active, wab_front_desk")
     .eq("id", user.id)
     .single();
 
@@ -301,9 +302,9 @@ export async function requireWabCheckinAccess(): Promise<{ userId: string; name:
     redirect("/auth/login?reason=login_required");
   }
 
-  const allowed = ["admin", "super_admin", "team_admin", "front_desk"];
-  if (!allowed.includes(profile.role ?? "")) {
-    redirect("/dashboard?reason=no_checkin_access");
+  const isAdmin = ["admin", "super_admin", "team_admin"].includes(profile.role ?? "");
+  if (!isAdmin && profile.wab_front_desk !== true) {
+    redirect("/workers-ball?reason=no_front_desk_access");
   }
 
   return {

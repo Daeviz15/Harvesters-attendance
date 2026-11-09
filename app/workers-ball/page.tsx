@@ -21,7 +21,8 @@ export const metadata: Metadata = {
     },
 };
 
-export default async function WorkersBallPage() {
+export default async function WorkersBallPage({ searchParams }: { searchParams: Promise<{ reason?: string }> }) {
+    const { reason } = await searchParams;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -108,6 +109,7 @@ export default async function WorkersBallPage() {
             }
             isLoggedIn={!!user}
             existingRegistration={existingWabRegistration}
+            noFrontDeskAccess={reason === "no_front_desk_access"}
         />
     );
 }

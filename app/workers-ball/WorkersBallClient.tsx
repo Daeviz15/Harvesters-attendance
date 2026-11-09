@@ -1,11 +1,32 @@
 "use client";
 
-import { useActionState, useState, useEffect, useRef } from "react";
+import { useActionState, useState, useEffect, useRef, useSyncExternalStore } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import Image from "next/image";
 import { registerForWorkersBall, type RegisterState } from "./actions";
 import AttendFlyer from "./AttendFlyer";
 import BirthdayPicker from "./BirthdayPicker";
+import Confetti from "./Confetti";
+
+// ─── "Already reserved on this device" memory ────────────────────────────────
+// The server is what really blocks a second registration. This just hides the
+// form for people who already registered from this phone/computer.
+const RESERVED_KEY = "wab-2026-reserved";
+const reservedListeners = new Set<() => void>();
+function readReserved(): string | null {
+    try { return localStorage.getItem(RESERVED_KEY); } catch { return null; }
+}
+function setReserved(name: string | null) {
+    try {
+        if (name === null) localStorage.removeItem(RESERVED_KEY);
+        else localStorage.setItem(RESERVED_KEY, name || "guest");
+    } catch { /* storage blocked — the server check still applies */ }
+    reservedListeners.forEach(l => l());
+}
+function subscribeReserved(listener: () => void) {
+    reservedListeners.add(listener);
+    return () => { reservedListeners.delete(listener); };
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Department { id: string; name: string; team: string; teamId: string | null }
@@ -27,6 +48,7 @@ interface Props {
     initialData: InitialData | null;
     isLoggedIn: boolean;
     existingRegistration: ExistingRegistration | null;
+    noFrontDeskAccess?: boolean;
 }
 
 // ─── Photo helper ─────────────────────────────────────────────────────────────
@@ -108,13 +130,67 @@ function GoldDivider() {
     );
 }
 
+// ─── Front desk sign in (gate volunteers given temporary access) ─────────────
+function FrontDeskLink({ denied }: { denied?: boolean }) {
+    return (
+        <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
+            <a href="/workers-ball/checkin"
+                style={{ display: "inline-block", marginTop: 18, padding: "8px 18px", borderRadius: 999, border: `1px solid rgba(212,164,69,.35)`, color: C.goldLight, fontFamily: "var(--font-oswald,Oswald,sans-serif)", fontSize: 12, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", textDecoration: "none" }}>
+                Front desk sign in
+            </a>
+            {denied && (
+                <p role="alert" style={{ fontSize: 12, color: "#fca5a5", marginTop: 10 }}>
+                    Your account doesn&apos;t have front desk access. Please ask an admin.
+                </p>
+            )}
+        </div>
+    );
+}
+
+// ─── "Your space is already reserved" (shown instead of the form) ────────────
+function ReservedNotice({ name, onRegisterSomeoneElse }: { name: string | null; onRegisterSomeoneElse?: () => void }) {
+    return (
+        <motion.div initial={{ opacity: 0, scale: .96 }} animate={{ opacity: 1, scale: 1 }} role="status"
+            style={{ background: C.surface, border: `1px solid ${borderGold}`, borderRadius: 14, padding: "clamp(2rem,6vw,3rem) clamp(1.5rem,5vw,2.5rem)", textAlign: "center", boxShadow: "0 20px 40px rgba(0,0,0,.5), 0 0 60px rgba(212,164,69,.12)" }}>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(212,164,69,.1)", border: `2px solid ${C.gold}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1.25rem" }}>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="2.5" aria-hidden="true"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div style={{ fontFamily: "var(--font-oswald,Oswald,sans-serif)", fontSize: 11, fontWeight: 600, color: C.gold, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: ".5rem" }}>
+                {name && name !== "guest" ? `Hi ${name}` : "Already registered"}
+            </div>
+            <h3 style={{ fontFamily: "var(--font-archivo,'Archivo Black',sans-serif)", fontWeight: 900, fontSize: "clamp(1.5rem,5vw,2.1rem)", textTransform: "uppercase", lineHeight: 1.1, margin: "0 0 .6rem", color: C.text }}>
+                Your space is already reserved
+            </h3>
+            <p style={{ fontFamily: "var(--font-playfair,'Playfair Display',serif)", fontStyle: "italic", fontSize: "clamp(1.1rem,3vw,1.35rem)", color: C.goldLight, margin: "0 0 1.25rem" }}>
+                See you at the Dinner!
+            </p>
+            <p style={{ color: C.textMuted, fontSize: 14, lineHeight: 1.6, margin: 0 }}>
+                Your gate pass was sent to the email you registered with. Check your inbox or spam folder.
+            </p>
+            {onRegisterSomeoneElse && (
+                <button type="button" onClick={onRegisterSomeoneElse}
+                    style={{ marginTop: "1.5rem", background: "none", border: "none", color: C.textMuted, fontSize: 12, textDecoration: "underline", textUnderlineOffset: 3, cursor: "pointer" }}>
+                    Registering a different worker on this device?
+                </button>
+            )}
+        </motion.div>
+    );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
-export default function WorkersBallClient({ fontVars, departments, initialData, isLoggedIn, existingRegistration }: Props) {
+export default function WorkersBallClient({ fontVars, departments, initialData, isLoggedIn, existingRegistration, noFrontDeskAccess }: Props) {
     const shouldReduceMotion = useReducedMotion();
     const countdown = useCountdown();
 
     const [state, formAction, isPending] = useActionState<RegisterState, FormData>(registerForWorkersBall, null);
-    const [partner, setPartner] = useState("no");
+
+    // Remember a reserved seat on this device so the form isn't shown again.
+    // Logged-in workers are recognised by the server instead.
+    const reservedOnDevice = useSyncExternalStore(subscribeReserved, readReserved, () => null);
+    useEffect(() => {
+        if (state?.success || state?.alreadyRegistered) setReserved(state.firstName ?? null);
+    }, [state]);
+    const showReserved = !!state?.alreadyRegistered || (!isLoggedIn && !!reservedOnDevice);
     const [presents, setPresents] = useState("no");
     const [selectedTeam, setSelectedTeam] = useState<string | null>(
         initialData?.departmentId ? (departments.find(d => d.id === initialData.departmentId)?.team ?? null) : null
@@ -185,7 +261,8 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={C.gold} strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     </div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 8 }}>Already Registered</div>
-                    <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: "0 0 .75rem" }}>You&apos;re on the guest list!</h2>
+                    <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, margin: "0 0 .35rem" }}>Your space is already reserved</h2>
+                    <p style={{ fontFamily: "var(--font-playfair,'Playfair Display',serif)", fontStyle: "italic", fontSize: 18, color: C.goldLight, margin: "0 0 .75rem" }}>See you at the Dinner, {alreadyReg.first_name}!</p>
                     <p style={{ color: C.textMuted, fontSize: 14, lineHeight: 1.6, marginBottom: "1.5rem" }}>Your gate pass was sent to your email. Check your inbox or spam folder.</p>
                     <div style={{ background: C.bgWarm, border: `1px solid rgba(212,164,69,.2)`, borderRadius: 10, padding: "1rem", textAlign: "left", marginBottom: "1rem" }}>
                         <div style={{ fontSize: 11, color: C.textMuted, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>Registration ID</div>
@@ -200,6 +277,7 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                 <div style={{ position: "relative", zIndex: 1, width: "100%", display: "flex", justifyContent: "center" }}>
                     <AttendFlyer firstName={alreadyReg.first_name} lastName={alreadyReg.last_name ?? ""} department={alreadyReg.department} photoUrl={alreadyReg.photo_url} />
                 </div>
+                <FrontDeskLink denied={noFrontDeskAccess} />
             </main>
         );
     }
@@ -209,7 +287,26 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
         return (
             <main className={fontVars} style={{ position: "relative", minHeight: "100vh", background: C.bg, color: C.text, display: "flex", flexDirection: "column", alignItems: "center", gap: "2.5rem", padding: "2.5rem 1rem 4rem" }}>
                 <FlyerBackdrop />
-                <motion.div initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 440 }}>
+                <Confetti />
+
+                {/* Headline + the shareable "I will be attending" flyer come first */}
+                <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 440 }}>
+                    <div style={{ fontFamily: "var(--font-oswald,Oswald,sans-serif)", fontSize: 11, fontWeight: 600, color: C.gold, letterSpacing: ".14em", textTransform: "uppercase", marginBottom: 8 }}>Registration Confirmed 🎉</div>
+                    <h1 style={{ fontFamily: "var(--font-archivo,'Archivo Black',sans-serif)", fontWeight: 900, fontSize: "clamp(1.8rem,7vw,2.6rem)", textTransform: "uppercase", lineHeight: 1.05, margin: 0 }}>
+                        You&apos;re going to the Ball, {state.firstName}!
+                    </h1>
+                </motion.div>
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .15 }}
+                    style={{ position: "relative", zIndex: 1, width: "100%", display: "flex", justifyContent: "center" }}>
+                    <AttendFlyer
+                        firstName={state.firstName ?? ""}
+                        lastName={state.lastName ?? ""}
+                        department={state.department}
+                        photoUrl={photoPreview ?? state.photoUrl ?? null}
+                    />
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, scale: .95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: .3 }} style={{ position: "relative", zIndex: 1, width: "100%", maxWidth: 440 }}>
                     <div style={{ background: C.surface, border: `1px solid ${borderGold}`, borderRadius: 16, padding: "2.5rem 2rem", textAlign: "center", boxShadow: `0 0 60px rgba(212,164,69,.12)` }}>
                         {/* Pulsing ring */}
                         <div style={{ position: "relative", width: 72, height: 72, margin: "0 auto 1.5rem" }}>
@@ -220,15 +317,13 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                             </div>
                         </div>
                         <div style={{ fontSize: 10, fontWeight: 700, color: C.gold, letterSpacing: "0.14em", textTransform: "uppercase", marginBottom: 8 }}>
-                            {state.isResend ? "Gate Pass Resent" : "Registration Confirmed"}
+                            Your Gate Pass
                         </div>
                         <h2 style={{ fontSize: 26, fontWeight: 800, color: C.text, margin: "0 0 .5rem" }}>
-                            {state.isResend ? `Welcome back, ${state.firstName}!` : `See you on the night, ${state.firstName}!`}
+                            See you on the night, {state.firstName}!
                         </h2>
                         <p style={{ color: C.textMuted, fontSize: 14, lineHeight: 1.6, marginBottom: "1.5rem" }}>
-                            {state.isResend
-                                ? "Your gate pass has been re-sent to your email."
-                                : "Your gate pass with QR code is on its way to your inbox!"}
+                            Your gate pass with QR code is on its way to your inbox!
                         </p>
                         <div style={{ background: C.bgWarm, border: `1px solid rgba(212,164,69,.2)`, borderRadius: 12, padding: "1.25rem", textAlign: "left" }}>
                             <div style={{ marginBottom: 12 }}>
@@ -247,15 +342,6 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                             Dress code: <strong style={{ color: C.textSoft }}>Black tie / formal gala — gold accents encouraged</strong>
                         </p>
                     </div>
-                </motion.div>
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .3 }}
-                    style={{ position: "relative", zIndex: 1, width: "100%", display: "flex", justifyContent: "center" }}>
-                    <AttendFlyer
-                        firstName={state.firstName ?? ""}
-                        lastName={state.lastName ?? ""}
-                        department={state.department}
-                        photoUrl={photoPreview ?? state.photoUrl ?? null}
-                    />
                 </motion.div>
             </main>
         );
@@ -398,6 +484,12 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                         </p>
                     </div>
 
+                            {showReserved ? (
+                                <ReservedNotice
+                                    name={state?.alreadyRegistered ? (state.firstName ?? null) : reservedOnDevice}
+                                    onRegisterSomeoneElse={state?.alreadyRegistered ? undefined : () => setReserved(null)}
+                                />
+                            ) : (
                             <div>
                                 <form action={submitRegistration} style={{ background: C.surface, border: `1px solid rgba(212,164,69,.25)`, borderRadius: 14, padding: "clamp(1.5rem,5vw,2.5rem)", boxShadow: "0 20px 40px rgba(0,0,0,.5)" }}>
 
@@ -509,19 +601,6 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                             style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
                                     </div>
 
-                                    {/* Partner */}
-                                    <div style={fieldStyle}>
-                                        <label style={labelStyle}>Attending with a partner? <span style={{ color: "#f87171" }}>*</span></label>
-                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                                            {(["yes","no"] as const).map(val => (
-                                                <label key={val} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, border: `1px solid ${partner === val ? C.gold : "rgba(212,164,69,.2)"}`, background: partner === val ? "rgba(212,164,69,.08)" : "transparent", cursor: "pointer", transition: "all .2s" }}>
-                                                    <input type="radio" name="attendingWithPartner" value={val} checked={partner === val} onChange={() => setPartner(val)} style={{ accentColor: C.gold }} />
-                                                    <span style={{ fontSize: 14, fontWeight: 600, color: partner === val ? C.goldLight : C.textSoft }}>{val === "yes" ? "Yes, +1 guest" : "No, solo"}</span>
-                                                </label>
-                                            ))}
-                                        </div>
-                                    </div>
-
                                     {/* Presentation */}
                                     <div style={fieldStyle}>
                                         <label style={labelStyle}>Would you like to make a presentation? <span style={{ color: "#f87171" }}>*</span></label>
@@ -563,10 +642,11 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                     )}
 
                                     <p style={{ textAlign: "center", fontSize: 11, color: C.textMuted, marginTop: 12 }}>
-                                        Your gate pass is personal and non-transferable.
+                                        Your gate pass admits one person only and can be used once. Everyone attending must register personally.
                                     </p>
                                 </form>
                             </div>
+                            )}
                 </motion.section>
             </div>
 
@@ -678,6 +758,7 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                 <p style={{ fontSize: 11, color: C.bronze, marginTop: 6 }}>
                     Workers Ball 2026 &bull; 22nd November 2026 &bull; 4PM
                 </p>
+                <FrontDeskLink denied={noFrontDeskAccess} />
             </footer>
             </div>
         </main>

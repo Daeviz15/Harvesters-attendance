@@ -833,7 +833,6 @@ export interface SendWorkersBallGatePassParams {
     team?: string | null;
     attendanceCode?: string | null;
     qrToken?: string | null;
-    attendingWithPartner?: boolean;
     notificationId?: string;
 }
 
@@ -846,7 +845,6 @@ export async function sendWorkersBallGatePassEmail({
     team,
     attendanceCode,
     qrToken,
-    attendingWithPartner = false,
     notificationId,
 }: SendWorkersBallGatePassParams): Promise<EmailSendResult> {
     const safeFirstName = escapeHtml(firstName);
@@ -932,12 +930,12 @@ export async function sendWorkersBallGatePassEmail({
                                 <div style="font-family:'Courier New',monospace;font-size:14px;font-weight:600;color:#a1a1aa;">${safeRegistrationId}</div>
                             </td>
                         </tr>
-                        ${attendingWithPartner ? `<tr><td colspan="2" style="padding-top:10px;"><div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:rgba(212,164,69,0.15);border:1px solid rgba(212,164,69,0.4);font-size:11px;font-weight:700;color:#D4A445;">+1 Guest &bull; Partner Attending</div></td></tr>` : ""}
+                        <tr><td colspan="2" style="padding-top:10px;"><div style="display:inline-block;padding:4px 10px;border-radius:999px;background:rgba(212,164,69,0.15);border:1px solid rgba(212,164,69,0.4);font-size:11px;font-weight:700;color:#D4A445;">Admits 1 person &bull; Valid for one entry</div></td></tr>
                     </table>
                 </td></tr>
             </table>
 
-            <p style="margin:0;font-size:12px;line-height:1.7;color:#71717a;text-align:center;">This gate pass is unique to you. Do not share it with others.<br/>Keep this email accessible on your phone for event-day check-in.</p>`,
+            <p style="margin:0;font-size:12px;line-height:1.7;color:#71717a;text-align:center;">This gate pass is unique to you and admits one person, once. Once it is scanned at the door it cannot be used again, so do not share it.<br/>Keep this email accessible on your phone for event-day check-in.</p>`,
     });
 
     const text = [
@@ -952,7 +950,7 @@ export async function sendWorkersBallGatePassEmail({
         `Backup Attendance Code: ${attendanceCode}`,
         "",
         "Present your QR code or backup code at the entrance on the day of the event.",
-        "This gate pass is unique to you. Do not share it with others.",
+        "This gate pass is unique to you and admits one person, once. Once scanned at the door it cannot be used again, so do not share it.",
     ].join("\n");
 
     const extraAttachments = qrBuffer
@@ -1013,6 +1011,73 @@ export async function sendCustomBroadcastEmail({
     return sendEmail({
         to: toEmail,
         subject: `${sanitizedSubject} | Harvesters Globe Attendance`,
+        text,
+        html,
+    }, notificationId);
+}
+
+const DEFAULT_BIRTHDAY_EMAIL_CC = "johnwellacademy@gmail.com";
+
+function getBirthdayEmailCc() {
+    const configured = parseEmailList(process.env.BIRTHDAY_EMAIL_CC, "BIRTHDAY_EMAIL_CC");
+    return configured.length > 0 ? configured : [DEFAULT_BIRTHDAY_EMAIL_CC];
+}
+
+export interface SendBirthdayEmailParams {
+    toEmail: string;
+    firstName: string;
+    lastName?: string;
+    notificationId?: string;
+    isTest?: boolean;
+}
+
+export async function sendBirthdayEmail({
+    toEmail,
+    firstName,
+    lastName = "",
+    notificationId,
+    isTest = false,
+}: SendBirthdayEmailParams): Promise<EmailSendResult> {
+    const safeFirstName = escapeHtml(firstName);
+    const fullName = `${firstName} ${lastName}`.trim();
+    const subjectFirstName = sanitizeHeaderText(firstName, "Friend");
+    const testPrefix = isTest ? "[TEST] " : "";
+    const cc = getBirthdayEmailCc().filter((address) => address !== toEmail.trim().toLowerCase());
+
+    const html = renderEmailShell({
+        preheader: `Happy Birthday, ${firstName}! Wishing you a wonderful year ahead from Harvesters Globe.`,
+        eyebrow: "Happy Birthday",
+        content: `
+            <div style="text-align:center;font-size:44px;line-height:1;margin:0 0 18px;">🎉🎂🎉</div>
+            <h1 style="margin:0 0 18px;font-size:26px;font-weight:700;color:#ffffff;text-align:center;">Happy Birthday, <span style="color:#34A853;">${safeFirstName}</span>!</h1>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#a1a1aa;text-align:center;">On behalf of everyone at <strong style="color:#ffffff;">Harvesters Globe</strong>, we celebrate you today and thank God for your life.</p>
+            <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#a1a1aa;text-align:center;">Thank you for your faithfulness and the excellence you bring to the workforce. May this new year of your life be filled with joy, good health, divine favour and great testimonies.</p>
+            <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color:#141414;border-radius:12px;border:1px solid #262626;margin:24px 0 8px;">
+                <tr><td style="padding:20px;text-align:center;">
+                    <div style="font-size:14px;line-height:1.7;color:#d4d4d8;font-style:italic;">&ldquo;The LORD bless you and keep you; the LORD make His face shine on you and be gracious to you.&rdquo;</div>
+                    <div style="font-size:12px;font-weight:700;color:#34A853;margin-top:8px;letter-spacing:1px;">NUMBERS 6:24&ndash;25</div>
+                </td></tr>
+            </table>
+            <p style="margin:24px 0 0;font-size:15px;line-height:1.6;color:#ffffff;text-align:center;font-weight:600;">Have a blessed birthday!<br/><span style="color:#34A853;">&mdash; Harvesters Globe</span></p>`,
+    });
+
+    const text = [
+        `Happy Birthday, ${firstName}!`,
+        "",
+        "On behalf of everyone at Harvesters Globe, we celebrate you today and thank God for your life.",
+        "",
+        "Thank you for your faithfulness and the excellence you bring to the workforce. May this new year of your life be filled with joy, good health, divine favour and great testimonies.",
+        "",
+        "\"The LORD bless you and keep you; the LORD make His face shine on you and be gracious to you.\" (Numbers 6:24-25)",
+        "",
+        "Have a blessed birthday!",
+        "Harvesters Globe",
+    ].join("\n");
+
+    return sendEmail({
+        to: fullName ? { name: sanitizeHeaderText(fullName, "Friend"), address: toEmail } : toEmail,
+        cc: cc.length > 0 ? cc : undefined,
+        subject: `${testPrefix}Happy Birthday, ${subjectFirstName}! 🎉 | Harvesters Globe`,
         text,
         html,
     }, notificationId);

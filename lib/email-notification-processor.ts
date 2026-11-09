@@ -3,6 +3,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import {
     assertAutomaticEmailDeliveryIsProductionSafe,
     sendAttendanceSummaryEmail,
+    sendBirthdayEmail,
     sendEventReminderEmail,
     sendMissedAttendanceEmail,
     sendWelcomeEmail,
@@ -53,10 +54,19 @@ export type EmailProcessorSummary = {
     summariesQueued: number;
     summariesClaimed: number;
     summariesSent: number;
+    birthdaysClaimed: number;
+    birthdaysSent: number;
     claimed: number;
     sent: number;
     cancelled: number;
     deferred: number;
+};
+
+type BirthdayEmailJob = {
+    job_id: string;
+    recipient_email: string;
+    first_name: string;
+    last_name: string;
 };
 
 type EmailProcessorConfig = {
@@ -71,6 +81,8 @@ type EmailProcessorConfig = {
     testMode: boolean;
     testRecipients: string[];
     processWelcomeJobs: boolean;
+    birthdayEmailsEnabled: boolean;
+    birthdaySendFromHour: number;
 };
 
 type DeliveryOutcome =
@@ -179,6 +191,9 @@ function getProcessorConfig(): EmailProcessorConfig {
         testMode,
         testRecipients,
         processWelcomeJobs: parseBooleanFlag(process.env.EMAIL_PROCESS_WELCOME_JOBS, false),
+        birthdayEmailsEnabled: parseBooleanFlag(process.env.EMAIL_BIRTHDAY_EMAILS_ENABLED, true),
+        // Hour of the day (Africa/Lagos) from which birthday greetings go out.
+        birthdaySendFromHour: parseBoundedInteger(process.env.EMAIL_BIRTHDAY_SEND_FROM_HOUR, 7, 0, 23),
     };
 }
 
@@ -352,6 +367,88 @@ async function sendAttendanceSummaryJob(
     return { status: "sent", emailId: result.emailId };
 }
 
+async function processDueBirthdayEmails(
+    supabase: ReturnType<typeof createAdminClient>,
+    processorId: string,
+    config: EmailProcessorConfig,
+) {
+    const outcome = { claimed: 0, sent: 0, cancelled: 0, deferred: 0 };
+
+    const { data, error } = await supabase.rpc("claim_due_birthday_emails", {
+        p_worker_id: processorId,
+        p_batch_size: config.batchSize,
+        p_lock_timeout_minutes: config.lockTimeoutMinutes,
+        p_send_from_hour: config.birthdaySendFromHour,
+    });
+
+    if (error) {
+        // Birthday greetings must never block event reminders or summaries.
+        console.error("[EmailProcessor] Unable to claim birthday emails.", { message: error.message });
+        return outcome;
+    }
+
+    const jobs = (data || []) as BirthdayEmailJob[];
+    outcome.claimed = jobs.length;
+
+    await Promise.all(jobs.map(async (job) => {
+        try {
+            // Test mode only lets allowlisted recipients through, like other automatic mail.
+            const delivery = prepareSummaryDelivery(job.recipient_email, config);
+            if (typeof delivery.cancelReason === "string") {
+                await supabase.rpc("cancel_birthday_email", {
+                    p_job_id: job.job_id,
+                    p_worker_id: processorId,
+                    p_reason: "Automatic email test mode skipped a non-allowlisted birthday recipient",
+                });
+                outcome.cancelled += 1;
+                return;
+            }
+
+            const result = await sendBirthdayEmail({
+                toEmail: delivery.toEmail,
+                firstName: job.first_name,
+                lastName: job.last_name,
+                notificationId: job.job_id,
+                isTest: delivery.isTest,
+            });
+
+            if (!result.success) {
+                throw new Error(result.error);
+            }
+
+            const { error: markSentError } = await supabase.rpc("mark_birthday_email_sent", {
+                p_job_id: job.job_id,
+                p_worker_id: processorId,
+                p_provider_message_id: result.emailId,
+            });
+
+            if (markSentError) {
+                // The email already went out; log it instead of retrying and sending a duplicate.
+                console.error("[EmailProcessor] Birthday email sent but could not be recorded.", {
+                    jobId: job.job_id,
+                    message: markSentError.message,
+                });
+            }
+
+            outcome.sent += 1;
+        } catch (error: unknown) {
+            const failureMessage = getFailureMessage(error);
+            await supabase.rpc("mark_birthday_email_failed", {
+                p_job_id: job.job_id,
+                p_worker_id: processorId,
+                p_error: failureMessage,
+            });
+            console.error("[EmailProcessor] Birthday email delivery deferred.", {
+                jobId: job.job_id,
+                message: failureMessage,
+            });
+            outcome.deferred += 1;
+        }
+    }));
+
+    return outcome;
+}
+
 export async function processDueEmailNotifications(): Promise<EmailProcessorSummary> {
     const runStartedAt = Date.now();
     // Leave enough headroom inside the 60-second route limit for the final SMTP
@@ -520,6 +617,18 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
         }));
     }
 
+    let birthdaysClaimed = 0;
+    let birthdaysSent = 0;
+
+    if (config.birthdayEmailsEnabled && Date.now() - runStartedAt < processingBudgetMs) {
+        const birthdayOutcome = await processDueBirthdayEmails(supabase, processorId, config);
+        birthdaysClaimed = birthdayOutcome.claimed;
+        birthdaysSent = birthdayOutcome.sent;
+        sent += birthdayOutcome.sent;
+        cancelled += birthdayOutcome.cancelled;
+        deferred += birthdayOutcome.deferred;
+    }
+
     const claimableNotificationTypes = getClaimableNotificationTypes(config);
 
     if (claimableNotificationTypes?.length === 0) {
@@ -533,6 +642,8 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
             summariesQueued,
             summariesClaimed,
             summariesSent,
+            birthdaysClaimed,
+            birthdaysSent,
             claimed,
             sent,
             cancelled,
@@ -642,6 +753,8 @@ export async function processDueEmailNotifications(): Promise<EmailProcessorSumm
         summariesQueued,
         summariesClaimed,
         summariesSent,
+        birthdaysClaimed,
+        birthdaysSent,
         claimed,
         sent,
         cancelled,

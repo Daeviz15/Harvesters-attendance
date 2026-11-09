@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { requireWabCheckinAccess } from "@/lib/rbac";
+import { createClient } from "@/utils/supabase/server";
 import { lookupByToken } from "./actions";
 import CheckInClient from "./CheckInClient";
 
@@ -14,15 +15,18 @@ interface Props {
 }
 
 export default async function WorkersBallCheckinPage({ searchParams }: Props) {
-    // Accepts: admin, super_admin, team_admin, front_desk
-    try {
-        await requireWabCheckinAccess();
-    } catch {
-        redirect("/auth/login?redirectTo=/workers-ball/checkin");
-    }
-
     const params = await searchParams;
     const token = typeof params.token === "string" ? params.token.trim() : null;
+
+    // Admins, or workers with front desk access that hasn't expired.
+    // Not logged in → login, then straight back here (keeping a scanned QR token).
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+        const back = token ? `/workers-ball/checkin?token=${encodeURIComponent(token)}` : "/workers-ball/checkin";
+        redirect(`/auth/login?next=${encodeURIComponent(back)}`);
+    }
+    await requireWabCheckinAccess();
 
     let preloaded = null;
     if (token) {
