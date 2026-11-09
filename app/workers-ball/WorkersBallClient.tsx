@@ -7,6 +7,8 @@ import { registerForWorkersBall, type RegisterState } from "./actions";
 import AttendFlyer from "./AttendFlyer";
 import BirthdayPicker from "./BirthdayPicker";
 import Confetti from "./Confetti";
+import WhatYouDo from "./WhatYouDo";
+import { EMPTY_OCCUPATION, occupationProblem, type Occupation } from "./occupation";
 
 // ─── "Already reserved on this device" memory ────────────────────────────────
 // The server is what really blocks a second registration. This just hides the
@@ -205,7 +207,9 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
     const [photoBusy, setPhotoBusy] = useState(false);
     const shownPhoto = photoPreview ?? initialData?.avatarUrl ?? null;
     const [birthdaySet, setBirthdaySet] = useState(!!(initialData?.birthdayMonth && initialData?.birthdayDay));
-    const canSubmit = !isPending && !!deptId && !photoBusy && birthdaySet;
+    const [occupation, setOccupation] = useState<Occupation>(EMPTY_OCCUPATION);
+    const occupationHint = occupationProblem(occupation);
+    const canSubmit = !isPending && !!deptId && !photoBusy && birthdaySet && !occupationHint;
 
     async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0];
@@ -591,15 +595,15 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                         </div>
                                     </div>
 
+                                    {/* ── Getting to know you ── */}
+                                    <div style={{ ...sectionHeadStyle, marginTop: 28 }}>Getting to Know You</div>
+                                    <div style={fieldStyle}>
+                                        <WhatYouDo value={occupation} onChange={setOccupation} inputStyle={inputStyle} labelStyle={labelStyle} />
+                                        <input type="hidden" name="occupation" value={JSON.stringify(occupation)} />
+                                    </div>
+
                                     {/* ── Event Details ── */}
                                     <div style={{ ...sectionHeadStyle, marginTop: 28 }}>For the Evening</div>
-
-                                    <div style={fieldStyle}>
-                                        <label style={labelStyle}>What are your expectations for the night? <span style={{ color: "#f87171" }}>*</span></label>
-                                        <textarea name="expectations" required minLength={10} maxLength={2000} rows={4}
-                                            placeholder="Tell us what you're looking forward to..."
-                                            style={{ ...inputStyle, resize: "vertical", lineHeight: 1.6 }} />
-                                    </div>
 
                                     {/* Presentation */}
                                     <div style={fieldStyle}>
@@ -635,9 +639,11 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                         style={{ width: "100%", background: !canSubmit ? "rgba(212,164,69,.3)" : goldButton, border: "none", borderRadius: 999, padding: "1rem", fontFamily: "var(--font-oswald,Oswald,sans-serif)", fontWeight: 700, fontSize: 16, letterSpacing: ".1em", textTransform: "uppercase", color: !canSubmit ? C.textMuted : C.bg, cursor: !canSubmit ? "not-allowed" : "pointer", transition: "all .3s", boxShadow: !canSubmit ? "none" : "0 0 20px rgba(212,164,69,.2)" }}>
                                         {isPending ? "Registering..." : "Register & Get Gate Pass"}
                                     </button>
-                                    {!isPending && (!birthdaySet || !deptId) && (
+                                    {!isPending && (!birthdaySet || !deptId || occupationHint) && (
                                         <p style={{ textAlign: "center", fontSize: 12, color: C.textMuted, marginTop: 10 }}>
-                                            {!birthdaySet ? "Choose your birthday above to continue." : "Select your department above to continue."}
+                                            {!birthdaySet ? "Choose your birthday above to continue."
+                                                : !deptId ? "Select your department above to continue."
+                                                : `${occupationHint} (in “Getting to Know You”)`}
                                         </p>
                                     )}
 

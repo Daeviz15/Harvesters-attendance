@@ -5,6 +5,7 @@ import { createAdminClient } from "@/utils/supabase/admin";
 import { createClient } from "@/utils/supabase/server";
 import { generateTeamWorkerId } from "@/lib/workerId";
 import { sendWorkersBallGatePassEmail } from "@/lib/email";
+import { parseOccupation } from "./occupation";
 import crypto from "node:crypto";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -87,10 +88,6 @@ const registerSchema = z.object({
     birthdayMonth: z.coerce.number().int().min(1, "Invalid month.").max(12, "Invalid month."),
     birthdayDay:   z.coerce.number().int().min(1, "Invalid day.").max(31, "Invalid day."),
     departmentId: z.string().uuid("Please select a valid department."),
-    expectations: z
-        .string().trim()
-        .min(10, "Please share your expectations (at least 10 characters).")
-        .max(2000),
     wantsToPresent: z
         .string()
         .refine((v) => v === "yes" || v === "no", "Please answer the presentation question.")
@@ -148,7 +145,6 @@ export async function registerForWorkersBall(
         birthdayMonth:        formData.get("birthdayMonth") ?? "",
         birthdayDay:          formData.get("birthdayDay") ?? "",
         departmentId:         formData.get("departmentId") ?? "",
-        expectations:         formData.get("expectations") ?? "",
         wantsToPresent:       formData.get("wantsToPresent") ?? "no",
         presentationDetails:  formData.get("presentationDetails") ?? "",
     };
@@ -161,9 +157,14 @@ export async function registerForWorkersBall(
     const {
         firstName, lastName, email, phone,
         birthdayMonth, birthdayDay,
-        departmentId, expectations,
+        departmentId,
         wantsToPresent, presentationDetails,
     } = parsed.data;
+
+    // "What do you do currently?" answers
+    const occupationResult = parseOccupation(formData.get("occupation"));
+    if ("error" in occupationResult) return { error: occupationResult.error };
+    const occ = occupationResult.data;
 
     const fullPhone = `+234${phone}`;
     const adminClient = createAdminClient();
@@ -354,7 +355,11 @@ export async function registerForWorkersBall(
             department:             dept.name,
             department_id:          dept.id,
             team:                   dept.team,
-            expectations,
+            occupation:             occ.occupation,
+            occupation_stages:      occ.stages,
+            wants_to_connect:       occ.wantsToConnect,
+            wants_job_offers:       occ.wantsJobOffers,
+            open_to_mentoring:      occ.openToMentoring,
             wants_to_present:       wantsToPresent,
             presentation_details:   wantsToPresent ? (presentationDetails || null) : null,
             attendance_code:        attendanceCode,
