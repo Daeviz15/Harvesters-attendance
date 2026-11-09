@@ -282,12 +282,12 @@ export default function OnboardingClient({
                             <div className="flex-1 w-full">
                                 <label className="cursor-pointer inline-block bg-neutral-100 dark:bg-white/5 hover:bg-neutral-200 dark:hover:bg-white/10 text-neutral-700 dark:text-white/80 px-5 py-2.5 rounded-xl text-[13px] font-semibold transition-colors border border-neutral-200 dark:border-white/10">
                                     Choose Image
-                                    <input 
-                                        type="file" 
-                                        accept="image/png, image/jpeg, image/jpg, image/webp" 
-                                        onChange={handleFileUpload} 
+                                    <input
+                                        type="file"
+                                        accept="image/png, image/jpeg, image/jpg, image/webp"
+                                        onChange={handleFileUpload}
                                         disabled={isUploading}
-                                        className="hidden" 
+                                        className="hidden"
                                     />
                                 </label>
                                 <p className="text-[12px] text-neutral-500 dark:text-white/40 mt-2 font-medium">JPEG, PNG, or WebP. Max 5MB.</p>
@@ -318,7 +318,7 @@ export default function OnboardingClient({
                                 {/* Step 1: Ministry Team Dropdown */}
                                 <div>
                                     <label className="block text-[12px] font-medium text-neutral-500 dark:text-white/50 mb-1.5">
-                                        Ministry Team <span className="text-red-500">*</span>
+                                        Team <span className="text-red-500">*</span>
                                     </label>
                                     <div className="relative">
                                         <select
@@ -337,7 +337,7 @@ export default function OnboardingClient({
                                             className="w-full bg-neutral-100/70 dark:bg-white/5 border border-neutral-300 dark:border-white/10 rounded-xl px-4 py-3 text-neutral-800 dark:text-white text-[14px] font-medium focus:outline-none focus:border-[#34A853] transition-colors appearance-none cursor-pointer pr-10"
                                         >
                                             <option value="" disabled className="dark:bg-[#121212] text-neutral-400">
-                                                -- Select Ministry Team --
+                                                -- Select Team --
                                             </option>
                                             {sortedTeams.map((teamName) => {
                                                 const count = normalizedDepts.filter(d => d.teamNormalized === teamName).length;

@@ -595,13 +595,6 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                         </div>
                                     </div>
 
-                                    {/* ── Getting to know you ── */}
-                                    <div style={{ ...sectionHeadStyle, marginTop: 28 }}>Getting to Know You</div>
-                                    <div style={fieldStyle}>
-                                        <WhatYouDo value={occupation} onChange={setOccupation} inputStyle={inputStyle} labelStyle={labelStyle} />
-                                        <input type="hidden" name="occupation" value={JSON.stringify(occupation)} />
-                                    </div>
-
                                     {/* ── Event Details ── */}
                                     <div style={{ ...sectionHeadStyle, marginTop: 28 }}>For the Evening</div>
 
@@ -629,6 +622,13 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                         )}
                                     </AnimatePresence>
 
+                                    {/* ── Stay connected (optional, asked last) ── */}
+                                    <div style={{ ...sectionHeadStyle, marginTop: 28 }}>Stay Connected</div>
+                                    <div style={fieldStyle}>
+                                        <WhatYouDo value={occupation} onChange={setOccupation} inputStyle={inputStyle} labelStyle={labelStyle} />
+                                        <input type="hidden" name="occupation" value={JSON.stringify(occupation)} />
+                                    </div>
+
                                     {/* Info banner */}
                                     <div style={{ background: "rgba(212,164,69,.06)", border: `1px solid rgba(212,164,69,.2)`, borderRadius: 8, padding: "12px 16px", marginBottom: 24, fontSize: 13, color: C.textSoft, lineHeight: 1.6 }}>
                                         <strong style={{ color: C.goldLight }}>Your gate pass</strong> — a unique QR code and 5-digit backup code — will be sent to your email immediately after registering.
@@ -643,7 +643,7 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
                                         <p style={{ textAlign: "center", fontSize: 12, color: C.textMuted, marginTop: 10 }}>
                                             {!birthdaySet ? "Choose your birthday above to continue."
                                                 : !deptId ? "Select your department above to continue."
-                                                : `${occupationHint} (in “Getting to Know You”)`}
+                                                : `${occupationHint} (in “Stay Connected”)`}
                                         </p>
                                     )}
 

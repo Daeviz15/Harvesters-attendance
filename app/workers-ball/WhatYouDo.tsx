@@ -1,12 +1,14 @@
 "use client";
 
-// "What do you do currently?" — a friendly, get-to-know-you section of the
-// Workers Ball form. People pick every stage that describes them (e.g. employed
-// AND running a side business) and each choice opens a few short questions.
+// "Stay Connected" — an optional section at the end of the Workers Ball form.
+// We first ask if the person would like to connect and hear about opportunities.
+// Only if they say yes do we ask what they do (they can pick several, e.g. working
+// AND running a side business) and what they enjoy.
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import {
-    OCCUPATION_STAGES, SCHOOL_LEVELS, type Occupation, type OccupationStage, type SchoolLevel,
+    INTERESTS, OCCUPATION_STAGES, SCHOOL_LEVELS,
+    type Interest, type Occupation, type OccupationStage, type SchoolLevel,
 } from "./occupation";
 
 const C = {
@@ -30,6 +32,14 @@ const SCHOOL_LEVEL_INFO: Record<SchoolLevel, { label: string; placeholder: strin
     vocational:    { label: "Vocational / professional",     placeholder: "e.g. ICAN exams, Fashion design school" },
 };
 
+const INTEREST_INFO: Record<Interest, string> = {
+    football: "⚽ Football", basketball: "🏀 Basketball", fitness: "💪 Fitness & gym", music: "🎵 Music",
+    singing: "🎤 Singing", dancing: "💃 Dancing", reading: "📚 Reading", writing: "✍️ Writing",
+    cooking: "🍳 Cooking & baking", gaming: "🎮 Gaming", movies: "🎬 Movies & series", travel: "✈️ Travel",
+    photography: "📸 Photography", tech: "💻 Tech & gadgets", fashion: "👗 Fashion & style", art: "🎨 Art & design",
+    chess: "♟️ Chess & board games", volunteering: "🤝 Volunteering", business: "📈 Business & investing",
+};
+
 interface Props {
     value: Occupation;
     onChange: (next: Occupation) => void;
@@ -45,6 +55,11 @@ export default function WhatYouDo({ value, onChange, inputStyle, labelStyle }: P
         onChange({ ...value, stages });
     }
 
+    function toggleInterest(i: Interest) {
+        const interests = value.interests.includes(i) ? value.interests.filter(x => x !== i) : [...value.interests, i];
+        onChange({ ...value, interests });
+    }
+
     /** Updates one field inside a stage's answers. */
     function set<S extends OccupationStage>(stage: S, patch: Partial<NonNullable<Occupation[S]>>) {
         onChange({ ...value, [stage]: { ...(value[stage] ?? {}), ...patch } });
@@ -53,197 +68,225 @@ export default function WhatYouDo({ value, onChange, inputStyle, labelStyle }: P
     const field: CSSProperties = { marginBottom: 14 };
     const optional = <span style={{ color: C.textMuted, textTransform: "none", letterSpacing: 0, fontWeight: 400 }}> (optional)</span>;
     const required = <span style={{ color: "#f87171" }}> *</span>;
+    const chipGrid: CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8 };
 
     return (
         <div>
-            {/* Friendly intro */}
-            <div style={{ background: "rgba(212,164,69,.06)", border: "1px solid rgba(212,164,69,.18)", borderRadius: 10, padding: "14px 16px", marginBottom: 18 }}>
+            {/* The opt-in question */}
+            <div style={{ background: "rgba(212,164,69,.06)", border: "1px solid rgba(212,164,69,.18)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
                 <p style={{ margin: 0, fontSize: 14, lineHeight: 1.6, color: C.textSoft }}>
-                    <strong style={{ color: C.goldLight }}>Let&apos;s get to know you 💛</strong><br />
-                    You&apos;re more than your department! This helps us know what you do outside church so we can connect you with
-                    other workers, mentors and opportunities that can help you grow. Pick <strong>everything</strong> that describes you right now.
+                    <strong style={{ color: C.goldLight }}>Find your people 💛</strong><br />
+                    Our workers include business owners, professionals, students, corpers and retirees.
+                    If you&apos;d like, we can help you connect with others, share job openings and mentoring, and invite you to hangouts
+                    around things you enjoy. It&apos;s completely up to you.
                 </p>
             </div>
+            <YesNo label="Would you like to connect with other workers and hear about opportunities?"
+                yes="Yes, count me in" no="Not now"
+                value={value.optIn} onChange={v => onChange({ ...value, optIn: v })} labelStyle={labelStyle} />
 
-            <label style={labelStyle}>What do you do currently?{required}</label>
-            <div role="group" aria-label="What do you do currently?" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8, marginBottom: 16 }}>
-                {OCCUPATION_STAGES.map(s => {
-                    const on = has(s);
-                    const info = STAGE_INFO[s];
-                    return (
-                        <button key={s} type="button" onClick={() => toggleStage(s)} aria-pressed={on}
-                            style={{
-                                position: "relative", textAlign: "left", padding: "10px 26px 10px 12px", borderRadius: 10, cursor: "pointer", transition: "all .2s",
-                                border: `1px solid ${on ? C.gold : "rgba(212,164,69,.2)"}`,
-                                background: on ? "rgba(212,164,69,.12)" : "rgba(255,255,255,.02)",
-                            }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: on ? C.goldLight : C.textSoft }}>
-                                <span aria-hidden>{info.emoji}</span> {info.label}
-                                {on && <span aria-hidden style={{ position: "absolute", top: 8, right: 10, color: C.gold }}>✓</span>}
+            {value.optIn === false && (
+                <p style={{ fontSize: 13, color: C.textMuted, margin: "-4px 0 14px" }}>
+                    No problem! You can always reach out to us later. Enjoy the night ✨
+                </p>
+            )}
+
+            {value.optIn && (
+                <>
+                    <p style={{ fontSize: 13, color: C.textSoft, margin: "0 0 14px", lineHeight: 1.6 }}>
+                        Lovely! 🎉 Tell us a little about yourself so we know who to connect you with.
+                    </p>
+
+                    <label style={labelStyle}>What do you do currently?{required}</label>
+                    <p style={{ fontSize: 12, color: C.textMuted, margin: "-2px 0 8px" }}>Pick everything that fits you right now.</p>
+                    <div role="group" aria-label="What do you do currently?" style={{ ...chipGrid, marginBottom: 16 }}>
+                        {OCCUPATION_STAGES.map(s => {
+                            const on = has(s);
+                            const info = STAGE_INFO[s];
+                            return (
+                                <button key={s} type="button" onClick={() => toggleStage(s)} aria-pressed={on}
+                                    style={{
+                                        position: "relative", textAlign: "left", padding: "10px 26px 10px 12px", borderRadius: 10, cursor: "pointer", transition: "all .2s",
+                                        border: `1px solid ${on ? C.gold : "rgba(212,164,69,.2)"}`,
+                                        background: on ? "rgba(212,164,69,.12)" : "rgba(255,255,255,.02)",
+                                    }}>
+                                    <div style={{ fontSize: 14, fontWeight: 700, color: on ? C.goldLight : C.textSoft }}>
+                                        <span aria-hidden>{info.emoji}</span> {info.label}
+                                        {on && <span aria-hidden style={{ position: "absolute", top: 8, right: 10, color: C.gold }}>✓</span>}
+                                    </div>
+                                    <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{info.hint}</div>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* ── Working ── */}
+                    {has("employed") && (
+                        <StageCard emoji="💼" title="Nice! Tell us about your work">
+                            <div style={field}>
+                                <label style={labelStyle}>What do you do?{required}</label>
+                                <input type="text" maxLength={100} style={inputStyle} value={value.employed?.role ?? ""}
+                                    onChange={e => set("employed", { role: e.target.value })}
+                                    placeholder="e.g. Accountant, Lawyer, Software Engineer, Nurse" />
                             </div>
-                            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 2 }}>{info.hint}</div>
-                        </button>
-                    );
-                })}
-            </div>
+                        </StageCard>
+                    )}
 
-            {/* ── Working ── */}
-            {has("employed") && (
-                <StageCard emoji="💼" title="Nice! Tell us about your work">
-                    <div style={field}>
-                        <label style={labelStyle}>What do you do?{required}</label>
-                        <input type="text" maxLength={100} style={inputStyle} value={value.employed?.role ?? ""}
-                            onChange={e => set("employed", { role: e.target.value })}
-                            placeholder="e.g. Accountant, Lawyer, Software Engineer, Nurse" />
-                    </div>
-                    <div style={field}>
-                        <label style={labelStyle}>Industry or organisation{optional}</label>
-                        <input type="text" maxLength={100} style={inputStyle} value={value.employed?.industry ?? ""}
-                            onChange={e => set("employed", { industry: e.target.value })}
-                            placeholder="e.g. Banking, Tech, Healthcare, Oil & Gas" />
-                    </div>
-                    <YesNo label="Would you like to connect with other workers in your field?"
-                        value={value.employed?.connect} onChange={v => set("employed", { connect: v })} labelStyle={labelStyle} />
-                </StageCard>
-            )}
+                    {/* ── Business ── */}
+                    {has("business") && (
+                        <StageCard emoji="🚀" title="We love a builder! Tell us about your business">
+                            <div style={field}>
+                                <label style={labelStyle}>What does your business do?{required}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.business?.about ?? ""}
+                                    onChange={e => set("business", { about: e.target.value })}
+                                    placeholder="e.g. Cakes & small chops, Interior design, Logistics" />
+                            </div>
+                            <div style={field}>
+                                <label style={labelStyle}>Business name{optional}</label>
+                                <input type="text" maxLength={100} style={inputStyle} value={value.business?.name ?? ""}
+                                    onChange={e => set("business", { name: e.target.value })} placeholder="e.g. Grace Bakes" />
+                            </div>
+                            <div style={field}>
+                                <label style={labelStyle}>Where can people find you?{optional}</label>
+                                <div style={{ display: "grid", gap: 8 }}>
+                                    <input type="text" maxLength={31} style={inputStyle} value={value.business?.instagram ?? ""}
+                                        onChange={e => set("business", { instagram: e.target.value })}
+                                        placeholder="Instagram, e.g. @gracebakes" aria-label="Instagram handle" autoCapitalize="none" />
+                                    <input type="text" maxLength={60} style={inputStyle} value={value.business?.otherSocial ?? ""}
+                                        onChange={e => set("business", { otherSocial: e.target.value })}
+                                        placeholder="TikTok, X, Facebook or WhatsApp business" aria-label="Other social handle" autoCapitalize="none" />
+                                    <input type="url" maxLength={200} style={inputStyle} value={value.business?.website ?? ""}
+                                        onChange={e => set("business", { website: e.target.value })}
+                                        placeholder="Website, e.g. gracebakes.com" aria-label="Website" autoCapitalize="none" inputMode="url" />
+                                </div>
+                            </div>
+                        </StageCard>
+                    )}
 
-            {/* ── Business ── */}
-            {has("business") && (
-                <StageCard emoji="🚀" title="We love a builder! Tell us about your business">
-                    <div style={field}>
-                        <label style={labelStyle}>Business name{optional}</label>
-                        <input type="text" maxLength={100} style={inputStyle} value={value.business?.name ?? ""}
-                            onChange={e => set("business", { name: e.target.value })} placeholder="e.g. Grace Bakes" />
-                    </div>
-                    <div style={field}>
-                        <label style={labelStyle}>What does your business do?{required}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.business?.about ?? ""}
-                            onChange={e => set("business", { about: e.target.value })}
-                            placeholder="e.g. Cakes & small chops, Interior design, Logistics" />
-                    </div>
-                    <div style={field}>
-                        <label style={labelStyle}>Where can people find you?{optional}</label>
-                        <div style={{ display: "grid", gap: 8 }}>
-                            <input type="text" maxLength={31} style={inputStyle} value={value.business?.instagram ?? ""}
-                                onChange={e => set("business", { instagram: e.target.value })}
-                                placeholder="Instagram, e.g. @gracebakes" aria-label="Instagram handle" autoCapitalize="none" />
-                            <input type="text" maxLength={60} style={inputStyle} value={value.business?.otherSocial ?? ""}
-                                onChange={e => set("business", { otherSocial: e.target.value })}
-                                placeholder="TikTok, X, Facebook or WhatsApp business" aria-label="Other social handle" autoCapitalize="none" />
-                            <input type="url" maxLength={200} style={inputStyle} value={value.business?.website ?? ""}
-                                onChange={e => set("business", { website: e.target.value })}
-                                placeholder="Website, e.g. gracebakes.com" aria-label="Website" autoCapitalize="none" inputMode="url" />
-                        </div>
-                    </div>
-                    <YesNo label="Would you like to connect with other business owners and workers who may need your services?"
-                        value={value.business?.connect} onChange={v => set("business", { connect: v })} labelStyle={labelStyle} />
-                </StageCard>
-            )}
+                    {/* ── Job seeking ── */}
+                    {has("job_seeking") && (
+                        <StageCard emoji="🔍" title="We're rooting for you 🙏 What are you looking for?">
+                            <div style={field}>
+                                <label style={labelStyle}>What kind of job are you looking for?{required}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.job_seeking?.lookingFor ?? ""}
+                                    onChange={e => set("job_seeking", { lookingFor: e.target.value })}
+                                    placeholder="e.g. Entry-level accounting, Frontend developer, Admin officer" />
+                            </div>
+                            <div style={field}>
+                                <label style={labelStyle}>Your field, skills or qualification{optional}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.job_seeking?.background ?? ""}
+                                    onChange={e => set("job_seeking", { background: e.target.value })}
+                                    placeholder="e.g. B.Sc Economics, 2 years in customer service" />
+                            </div>
+                            <YesNo label="Would you like us to send you job openings we come across?"
+                                value={value.job_seeking?.jobOffers} onChange={v => set("job_seeking", { jobOffers: v })} labelStyle={labelStyle} />
+                        </StageCard>
+                    )}
 
-            {/* ── Job seeking ── */}
-            {has("job_seeking") && (
-                <StageCard emoji="🔍" title="We're rooting for you 🙏 What are you looking for?">
-                    <div style={field}>
-                        <label style={labelStyle}>What kind of job are you looking for?{required}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.job_seeking?.lookingFor ?? ""}
-                            onChange={e => set("job_seeking", { lookingFor: e.target.value })}
-                            placeholder="e.g. Entry-level accounting, Frontend developer, Admin officer" />
-                    </div>
-                    <div style={field}>
-                        <label style={labelStyle}>Your field, skills or qualification{optional}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.job_seeking?.background ?? ""}
-                            onChange={e => set("job_seeking", { background: e.target.value })}
-                            placeholder="e.g. B.Sc Economics, 2 years in customer service" />
-                    </div>
-                    <YesNo label="Would you like us to send you job openings we come across?"
-                        value={value.job_seeking?.jobOffers} onChange={v => set("job_seeking", { jobOffers: v })} labelStyle={labelStyle} />
-                    <YesNo label="Would you like to connect with workers already in this field?"
-                        value={value.job_seeking?.connect} onChange={v => set("job_seeking", { connect: v })} labelStyle={labelStyle} />
-                </StageCard>
-            )}
+                    {/* ── Schooling ── */}
+                    {has("schooling") && (
+                        <StageCard emoji="🎓" title="Keep learning! Tell us about your studies">
+                            <div style={field}>
+                                <label style={labelStyle}>What level are you in?{required}</label>
+                                <div style={chipGrid}>
+                                    {SCHOOL_LEVELS.map(l => {
+                                        const on = value.schooling?.level === l;
+                                        return (
+                                            <button key={l} type="button" aria-pressed={on} onClick={() => set("schooling", { level: l })}
+                                                style={{ padding: "9px 12px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, textAlign: "left",
+                                                    border: `1px solid ${on ? C.gold : "rgba(212,164,69,.2)"}`, background: on ? "rgba(212,164,69,.12)" : "transparent",
+                                                    color: on ? C.goldLight : C.textSoft }}>
+                                                {SCHOOL_LEVEL_INFO[l].label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            <div style={field}>
+                                <label style={labelStyle}>Which class or year, and what are you studying?{required}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.schooling?.detail ?? ""}
+                                    onChange={e => set("schooling", { detail: e.target.value })}
+                                    placeholder={value.schooling?.level ? SCHOOL_LEVEL_INFO[value.schooling.level].placeholder : "e.g. 200 Level, Computer Science"} />
+                            </div>
+                        </StageCard>
+                    )}
 
-            {/* ── Schooling ── */}
-            {has("schooling") && (
-                <StageCard emoji="🎓" title="Keep learning! Tell us about your studies">
-                    <div style={field}>
-                        <label style={labelStyle}>What level are you in?{required}</label>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8 }}>
-                            {SCHOOL_LEVELS.map(l => {
-                                const on = value.schooling?.level === l;
-                                return (
-                                    <button key={l} type="button" aria-pressed={on} onClick={() => set("schooling", { level: l })}
-                                        style={{ padding: "9px 12px", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, textAlign: "left",
-                                            border: `1px solid ${on ? C.gold : "rgba(212,164,69,.2)"}`, background: on ? "rgba(212,164,69,.12)" : "transparent",
-                                            color: on ? C.goldLight : C.textSoft }}>
-                                        {SCHOOL_LEVEL_INFO[l].label}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </div>
-                    <div style={field}>
-                        <label style={labelStyle}>Which class or year, and what are you studying?{required}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.schooling?.detail ?? ""}
-                            onChange={e => set("schooling", { detail: e.target.value })}
-                            placeholder={value.schooling?.level ? SCHOOL_LEVEL_INFO[value.schooling.level].placeholder : "e.g. 200 Level, Computer Science"} />
-                    </div>
-                    <YesNo label="Would you like to connect with mentors or workers in the field you're studying?"
-                        value={value.schooling?.connect} onChange={v => set("schooling", { connect: v })} labelStyle={labelStyle} />
-                </StageCard>
-            )}
+                    {/* ── NYSC ── */}
+                    {has("serving") && (
+                        <StageCard emoji="🎖️" title="Corper, we see you! Tell us about your service year">
+                            <div style={field}>
+                                <label style={labelStyle}>What do you do at your place of primary assignment (PPA)?{required}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.serving?.ppa ?? ""}
+                                    onChange={e => set("serving", { ppa: e.target.value })}
+                                    placeholder="e.g. Teaching maths at a secondary school, Admin at a bank" />
+                            </div>
+                            <div style={field}>
+                                <label style={labelStyle}>What would you like to do after service?{optional}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.serving?.afterService ?? ""}
+                                    onChange={e => set("serving", { afterService: e.target.value })}
+                                    placeholder="e.g. Work in tech, Further studies, Start a business" />
+                            </div>
+                            <YesNo label="Would you like us to send you job openings for after your service year?"
+                                value={value.serving?.jobOffers} onChange={v => set("serving", { jobOffers: v })} labelStyle={labelStyle} />
+                        </StageCard>
+                    )}
 
-            {/* ── NYSC ── */}
-            {has("serving") && (
-                <StageCard emoji="🎖️" title="Corper, we see you! Tell us about your service year">
-                    <div style={field}>
-                        <label style={labelStyle}>What do you do at your place of primary assignment (PPA)?{required}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.serving?.ppa ?? ""}
-                            onChange={e => set("serving", { ppa: e.target.value })}
-                            placeholder="e.g. Teaching maths at a secondary school, Admin at a bank" />
-                    </div>
-                    <div style={field}>
-                        <label style={labelStyle}>What would you like to do after service?{optional}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.serving?.afterService ?? ""}
-                            onChange={e => set("serving", { afterService: e.target.value })}
-                            placeholder="e.g. Work in tech, Further studies, Start a business" />
-                    </div>
-                    <YesNo label="Would you like us to send you job openings for after your service year?"
-                        value={value.serving?.jobOffers} onChange={v => set("serving", { jobOffers: v })} labelStyle={labelStyle} />
-                </StageCard>
-            )}
+                    {/* ── Retired ── */}
+                    {has("retired") && (
+                        <StageCard emoji="🌅" title="Thank you for your years of service!">
+                            <div style={field}>
+                                <label style={labelStyle}>What did you retire from?{required}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.retired?.formerCareer ?? ""}
+                                    onChange={e => set("retired", { formerCareer: e.target.value })}
+                                    placeholder="e.g. 30 years in banking, Civil service, Teaching" />
+                            </div>
+                            <YesNo label="Would you be open to mentoring younger workers with your experience?"
+                                value={value.retired?.mentor} onChange={v => set("retired", { mentor: v })} labelStyle={labelStyle} />
+                        </StageCard>
+                    )}
 
-            {/* ── Retired ── */}
-            {has("retired") && (
-                <StageCard emoji="🌅" title="Thank you for your years of service!">
-                    <div style={field}>
-                        <label style={labelStyle}>What did you retire from?{required}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.retired?.formerCareer ?? ""}
-                            onChange={e => set("retired", { formerCareer: e.target.value })}
-                            placeholder="e.g. 30 years in banking, Civil service, Teaching" />
-                    </div>
-                    <YesNo label="Would you be open to mentoring younger workers with your experience?"
-                        value={value.retired?.mentor} onChange={v => set("retired", { mentor: v })} labelStyle={labelStyle} />
-                </StageCard>
-            )}
+                    {/* ── Something else ── */}
+                    {has("other") && (
+                        <StageCard emoji="✨" title="Tell us what you're up to">
+                            <div style={field}>
+                                <label style={labelStyle}>What are you doing currently?{required}</label>
+                                <input type="text" maxLength={150} style={inputStyle} value={value.other?.description ?? ""}
+                                    onChange={e => set("other", { description: e.target.value })}
+                                    placeholder="e.g. Full-time parent, Gap year, Full-time ministry" />
+                            </div>
+                        </StageCard>
+                    )}
 
-            {/* ── Something else ── */}
-            {has("other") && (
-                <StageCard emoji="✨" title="Tell us what you're up to">
-                    <div style={field}>
-                        <label style={labelStyle}>What are you doing currently?{required}</label>
-                        <input type="text" maxLength={150} style={inputStyle} value={value.other?.description ?? ""}
-                            onChange={e => set("other", { description: e.target.value })}
-                            placeholder="e.g. Full-time parent, Gap year, Full-time ministry" />
+                    {/* ── Interests ── */}
+                    <label style={{ ...labelStyle, marginTop: 6 }}>What do you enjoy?{optional}</label>
+                    <p style={{ fontSize: 12, color: C.textMuted, margin: "-2px 0 8px" }}>
+                        Tap any that you love. We&apos;ll use this to plan hangouts and link you up with others who enjoy the same things.
+                    </p>
+                    <div role="group" aria-label="What do you enjoy?" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
+                        {INTERESTS.map(i => {
+                            const on = value.interests.includes(i);
+                            return (
+                                <button key={i} type="button" aria-pressed={on} onClick={() => toggleInterest(i)}
+                                    style={{ padding: "7px 12px", borderRadius: 999, cursor: "pointer", fontSize: 13, fontWeight: 600, transition: "all .2s",
+                                        border: `1px solid ${on ? C.gold : "rgba(212,164,69,.2)"}`, background: on ? "rgba(212,164,69,.15)" : "transparent",
+                                        color: on ? C.goldLight : C.textSoft }}>
+                                    {INTEREST_INFO[i]}
+                                </button>
+                            );
+                        })}
                     </div>
-                    <YesNo label="Would you like to connect with other workers doing the same?"
-                        value={value.other?.connect} onChange={v => set("other", { connect: v })} labelStyle={labelStyle} />
-                </StageCard>
+                    <div style={field}>
+                        <input type="text" maxLength={150} style={inputStyle} value={value.otherInterests ?? ""}
+                            onChange={e => onChange({ ...value, otherInterests: e.target.value })}
+                            placeholder="Anything else? e.g. Swimming, Gardening, Comedy" aria-label="Other things you enjoy" />
+                    </div>
+                </>
             )}
         </div>
     );
 }
 
-function StageCard({ emoji, title, children }: { emoji: string; title: string; children: React.ReactNode }) {
+function StageCard({ emoji, title, children }: { emoji: string; title: string; children: ReactNode }) {
     return (
         <div style={{ border: "1px solid rgba(212,164,69,.22)", borderLeft: `3px solid ${C.gold}`, borderRadius: 10, padding: "14px 16px 4px", marginBottom: 14, background: "rgba(255,255,255,.015)" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: C.goldLight, marginBottom: 12 }}><span aria-hidden>{emoji}</span> {title}</div>
@@ -252,7 +295,9 @@ function StageCard({ emoji, title, children }: { emoji: string; title: string; c
     );
 }
 
-function YesNo({ label, value, onChange, labelStyle }: { label: string; value: boolean | undefined; onChange: (v: boolean) => void; labelStyle: CSSProperties }) {
+function YesNo({ label, value, onChange, labelStyle, yes = "Yes, please", no = "Not now" }: {
+    label: string; value: boolean | undefined; onChange: (v: boolean) => void; labelStyle: CSSProperties; yes?: string; no?: string;
+}) {
     return (
         <div style={{ marginBottom: 14 }}>
             <div style={{ ...labelStyle, textTransform: "none", letterSpacing: 0, fontSize: 13, color: C.textSoft }}>{label} <span style={{ color: "#f87171" }}>*</span></div>
@@ -264,7 +309,7 @@ function YesNo({ label, value, onChange, labelStyle }: { label: string; value: b
                             style={{ padding: "9px 12px", borderRadius: 8, cursor: "pointer", fontSize: 14, fontWeight: 600,
                                 border: `1px solid ${on ? C.gold : "rgba(212,164,69,.2)"}`, background: on ? "rgba(212,164,69,.12)" : "transparent",
                                 color: on ? C.goldLight : C.textSoft }}>
-                            {v ? "Yes, please" : "Not now"}
+                            {v ? yes : no}
                         </button>
                     );
                 })}

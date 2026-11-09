@@ -357,6 +357,7 @@ export async function registerForWorkersBall(
             team:                   dept.team,
             occupation:             occ.occupation,
             occupation_stages:      occ.stages,
+            interests:              occ.interests,
             wants_to_connect:       occ.wantsToConnect,
             wants_job_offers:       occ.wantsJobOffers,
             open_to_mentoring:      occ.openToMentoring,
