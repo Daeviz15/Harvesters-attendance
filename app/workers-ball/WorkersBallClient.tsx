@@ -195,7 +195,7 @@ export default function WorkersBallClient({ fontVars, departments, initialData, 
     const showReserved = !!state?.alreadyRegistered || (!isLoggedIn && !!reservedOnDevice);
     const [presents, setPresents] = useState("no");
     const [selectedTeam, setSelectedTeam] = useState<string | null>(
-        initialData?.departmentId ? (departments.find(d => d.id === initialData.departmentId)?.team ?? null) : null
+        initialData?.departmentId ? (departments.find(d => d.id === initialData.departmentId)?.team.trim().toUpperCase() ?? null) : null
     );
     const [deptId, setDeptId] = useState(initialData?.departmentId ?? "");
     const formRef = useRef<HTMLDivElement>(null);

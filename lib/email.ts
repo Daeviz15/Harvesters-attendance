@@ -422,7 +422,13 @@ async function sendEmail(
             ],
         });
 
-        const recipient = typeof finalTo === "string" ? finalTo.trim().toLowerCase() : null;
+        // `to` may be a plain address or { name, address } (e.g. birthday emails).
+        // Treating the object form as "not accepted" caused delivered emails to be retried.
+        const recipient = typeof finalTo === "string"
+            ? finalTo.trim().toLowerCase()
+            : finalTo && !Array.isArray(finalTo) && typeof finalTo === "object" && "address" in finalTo
+                ? String(finalTo.address).trim().toLowerCase()
+                : null;
         if (
             !recipient
             || !info.accepted?.some((address: string) => address.trim().toLowerCase() === recipient)
@@ -1029,6 +1035,10 @@ export interface SendBirthdayEmailParams {
     lastName?: string;
     notificationId?: string;
     isTest?: boolean;
+    /** Public https URL of the worker's profile photo, shown at the top of the email. */
+    photoUrl?: string | null;
+    /** Team head and department head addresses, copied so they can send their wishes too. */
+    leaderEmails?: string[];
 }
 
 export async function sendBirthdayEmail({
@@ -1037,18 +1047,36 @@ export async function sendBirthdayEmail({
     lastName = "",
     notificationId,
     isTest = false,
+    photoUrl = null,
+    leaderEmails = [],
 }: SendBirthdayEmailParams): Promise<EmailSendResult> {
     const safeFirstName = escapeHtml(firstName);
     const fullName = `${firstName} ${lastName}`.trim();
     const subjectFirstName = sanitizeHeaderText(firstName, "Friend");
     const testPrefix = isTest ? "[TEST] " : "";
-    const cc = getBirthdayEmailCc().filter((address) => address !== toEmail.trim().toLowerCase());
+    const recipient = toEmail.trim().toLowerCase();
+    const leaders = Array.from(new Set(leaderEmails.map((address) => address.trim().toLowerCase())))
+        .filter((address) => address && address !== recipient);
+    const cc = Array.from(new Set([...getBirthdayEmailCc(), ...leaders]))
+        .filter((address) => address !== recipient);
+
+    // Only real https image links are put in the email
+    const safePhotoUrl = photoUrl && /^https:\/\/[^\s"'<>]+$/i.test(photoUrl) ? escapeHtml(photoUrl) : null;
+    const topVisual = safePhotoUrl
+        ? `<div style="text-align:center;margin:0 0 18px;">
+                <img src="${safePhotoUrl}" width="120" height="120" alt="${safeFirstName}" style="display:inline-block;width:120px;height:120px;border-radius:50%;object-fit:cover;border:3px solid #34A853;" />
+                <div style="font-size:28px;line-height:1;margin-top:10px;">🎉🎂🎉</div>
+            </div>`
+        : `<div style="text-align:center;font-size:44px;line-height:1;margin:0 0 18px;">🎉🎂🎉</div>`;
+    const leaderNote = leaders.length > 0
+        ? `<p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#71717a;text-align:center;">Your team and department leaders are copied on this email so they can celebrate with you. Leaders, reply all to send ${safeFirstName} your wishes!</p>`
+        : "";
 
     const html = renderEmailShell({
         preheader: `Happy Birthday, ${firstName}! Wishing you a wonderful year ahead from Harvesters Globe.`,
         eyebrow: "Happy Birthday",
         content: `
-            <div style="text-align:center;font-size:44px;line-height:1;margin:0 0 18px;">🎉🎂🎉</div>
+            ${topVisual}
             <h1 style="margin:0 0 18px;font-size:26px;font-weight:700;color:#ffffff;text-align:center;">Happy Birthday, <span style="color:#34A853;">${safeFirstName}</span>!</h1>
             <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#a1a1aa;text-align:center;">On behalf of everyone at <strong style="color:#ffffff;">Harvesters Globe</strong>, we celebrate you today and thank God for your life.</p>
             <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#a1a1aa;text-align:center;">Thank you for your faithfulness and the excellence you bring to the workforce. May this new year of your life be filled with joy, good health, divine favour and great testimonies.</p>
@@ -1058,7 +1086,8 @@ export async function sendBirthdayEmail({
                     <div style="font-size:12px;font-weight:700;color:#34A853;margin-top:8px;letter-spacing:1px;">NUMBERS 6:24&ndash;25</div>
                 </td></tr>
             </table>
-            <p style="margin:24px 0 0;font-size:15px;line-height:1.6;color:#ffffff;text-align:center;font-weight:600;">Have a blessed birthday!<br/><span style="color:#34A853;">&mdash; Harvesters Globe</span></p>`,
+            <p style="margin:24px 0 0;font-size:15px;line-height:1.6;color:#ffffff;text-align:center;font-weight:600;">Have a blessed birthday!<br/><span style="color:#34A853;">&mdash; Harvesters Globe</span></p>
+            ${leaderNote}`,
     });
 
     const text = [
@@ -1072,6 +1101,9 @@ export async function sendBirthdayEmail({
         "",
         "Have a blessed birthday!",
         "Harvesters Globe",
+        ...(leaders.length > 0
+            ? ["", `Your team and department leaders are copied so they can celebrate with you. Leaders, reply all to send ${firstName} your wishes!`]
+            : []),
     ].join("\n");
 
     return sendEmail({

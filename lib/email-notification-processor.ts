@@ -367,6 +367,76 @@ async function sendAttendanceSummaryJob(
     return { status: "sent", emailId: result.emailId };
 }
 
+/**
+ * Finds the birthday worker's photo plus their department head and team head(s),
+ * so the leaders can be copied and wish them too. Never throws: if anything fails,
+ * the greeting still goes out without the extras.
+ */
+async function getBirthdayExtras(
+    supabase: ReturnType<typeof createAdminClient>,
+    jobId: string,
+): Promise<{ photoUrl: string | null; leaderEmails: string[] }> {
+    const empty = { photoUrl: null, leaderEmails: [] };
+    try {
+        const { data: job } = await supabase
+            .from("birthday_email_jobs")
+            .select("user_id")
+            .eq("id", jobId)
+            .maybeSingle();
+        if (!job?.user_id) return empty;
+
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("avatar_url, department_id, team_id")
+            .eq("id", job.user_id)
+            .maybeSingle();
+        if (!profile) return empty;
+
+        const leaderIds = new Set<string>();
+
+        // Department head
+        if (profile.department_id) {
+            const { data: dept } = await supabase
+                .from("departments")
+                .select("head_user_id")
+                .eq("id", profile.department_id)
+                .maybeSingle();
+            if (dept?.head_user_id) leaderIds.add(dept.head_user_id);
+        }
+
+        // Team head(s): team admins assigned to this team (same rule as admin access)
+        if (profile.team_id) {
+            const { data: assignments } = await supabase
+                .from("team_admin_assignments")
+                .select("user_id")
+                .eq("team_id", profile.team_id);
+            const assignedIds = (assignments || []).map((a) => a.user_id as string);
+
+            const { data: teamAdmins } = await supabase
+                .from("profiles")
+                .select("id, team_id, is_active")
+                .eq("role", "team_admin")
+                .or(`team_id.eq.${profile.team_id}${assignedIds.length ? `,id.in.(${assignedIds.join(",")})` : ""}`);
+            for (const admin of teamAdmins || []) {
+                if (admin.is_active !== false) leaderIds.add(admin.id);
+            }
+        }
+
+        leaderIds.delete(job.user_id);
+
+        const leaderEmails: string[] = [];
+        for (const id of leaderIds) {
+            const { data } = await supabase.auth.admin.getUserById(id);
+            if (data?.user?.email && data.user.email_confirmed_at) leaderEmails.push(data.user.email.toLowerCase());
+        }
+
+        return { photoUrl: profile.avatar_url ?? null, leaderEmails };
+    } catch (error: unknown) {
+        console.error("[EmailProcessor] Could not look up birthday photo/leaders.", { jobId, message: getFailureMessage(error) });
+        return empty;
+    }
+}
+
 async function processDueBirthdayEmails(
     supabase: ReturnType<typeof createAdminClient>,
     processorId: string,
@@ -404,12 +474,20 @@ async function processDueBirthdayEmails(
                 return;
             }
 
+            const extras = await getBirthdayExtras(supabase, job.job_id);
+            // Test mode never copies real leaders, only allowlisted addresses.
+            const leaderEmails = config.testMode
+                ? extras.leaderEmails.filter((email) => config.testRecipients.includes(email))
+                : extras.leaderEmails;
+
             const result = await sendBirthdayEmail({
                 toEmail: delivery.toEmail,
                 firstName: job.first_name,
                 lastName: job.last_name,
                 notificationId: job.job_id,
                 isTest: delivery.isTest,
+                photoUrl: extras.photoUrl,
+                leaderEmails,
             });
 
             if (!result.success) {

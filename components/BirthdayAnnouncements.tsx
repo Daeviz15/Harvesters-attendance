@@ -27,7 +27,7 @@ function relativeBirthdayLabel(daysUntil: number) {
  * Resilient avatar that supports Google OAuth CDN URLs (via referrerPolicy="no-referrer")
  * and smoothly falls back to styled initials if an image fails to load or 404s.
  */
-function BirthdayAvatar({
+export function BirthdayAvatar({
     avatarUrl,
     initials,
     isToday,

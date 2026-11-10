@@ -26,8 +26,9 @@ export default async function WorkersBallPage({ searchParams }: { searchParams: 
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Fetch active departments for form dropdown
-    const { data: departments } = await supabase
+    // Fetch active departments for the form dropdown. Uses the admin client because
+    // database rules block logged-out visitors from reading departments.
+    const { data: departments } = await createAdminClient()
         .from("departments")
         .select("id, name, team, team_id")
         .eq("is_active", true)
